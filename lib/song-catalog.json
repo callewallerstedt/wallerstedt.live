@@ -174,6 +174,63 @@
     }
   },
   {
+    "slug": "dusk",
+    "spotifyId": "after-dark-dusk",
+    "title": "dusk",
+    "subtitle": "after dark - EP",
+    "releaseDate": "July 4, 2025",
+    "art": "/media/after-dark.jpg",
+    "blurb": "dusk by Wallerstedt.",
+    "note": "",
+    "embed": "https://open.spotify.com/embed/album/0AV6mX1ZhHoeooni3auEWn?utm_source=generator&theme=0",
+    "allPlatforms": "https://album.link/s/0AV6mX1ZhHoeooni3auEWn",
+    "platforms": {
+      "spotify": "https://open.spotify.com/album/0AV6mX1ZhHoeooni3auEWn",
+      "appleMusic": "https://music.apple.com/us/album/after-dark-ep/1815563776?uo=4",
+      "amazonMusic": "https://music.amazon.com/albums/B0F99VQ47Y",
+      "deezer": "https://www.deezer.com/album/757555161",
+      "soundcloud": "https://soundcloud.com/wallerstedt/sets/after-dark-288672401?utm_medium=api&utm_campaign=social_sharing&utm_source=id_314547"
+    }
+  },
+  {
+    "slug": "moonlight",
+    "spotifyId": "after-dark-moonlight",
+    "title": "moonlight",
+    "subtitle": "after dark - EP",
+    "releaseDate": "July 4, 2025",
+    "art": "/media/after-dark.jpg",
+    "blurb": "moonlight by Wallerstedt.",
+    "note": "",
+    "embed": "https://open.spotify.com/embed/album/0AV6mX1ZhHoeooni3auEWn?utm_source=generator&theme=0",
+    "allPlatforms": "https://album.link/s/0AV6mX1ZhHoeooni3auEWn",
+    "platforms": {
+      "spotify": "https://open.spotify.com/album/0AV6mX1ZhHoeooni3auEWn",
+      "appleMusic": "https://music.apple.com/us/album/after-dark-ep/1815563776?uo=4",
+      "amazonMusic": "https://music.amazon.com/albums/B0F99VQ47Y",
+      "deezer": "https://www.deezer.com/album/757555161",
+      "soundcloud": "https://soundcloud.com/wallerstedt/sets/after-dark-288672401?utm_medium=api&utm_campaign=social_sharing&utm_source=id_314547"
+    }
+  },
+  {
+    "slug": "twilight",
+    "spotifyId": "after-dark-twilight",
+    "title": "twilight",
+    "subtitle": "after dark - EP",
+    "releaseDate": "July 4, 2025",
+    "art": "/media/after-dark.jpg",
+    "blurb": "twilight by Wallerstedt.",
+    "note": "",
+    "embed": "https://open.spotify.com/embed/album/0AV6mX1ZhHoeooni3auEWn?utm_source=generator&theme=0",
+    "allPlatforms": "https://album.link/s/0AV6mX1ZhHoeooni3auEWn",
+    "platforms": {
+      "spotify": "https://open.spotify.com/album/0AV6mX1ZhHoeooni3auEWn",
+      "appleMusic": "https://music.apple.com/us/album/after-dark-ep/1815563776?uo=4",
+      "amazonMusic": "https://music.amazon.com/albums/B0F99VQ47Y",
+      "deezer": "https://www.deezer.com/album/757555161",
+      "soundcloud": "https://soundcloud.com/wallerstedt/sets/after-dark-288672401?utm_medium=api&utm_campaign=social_sharing&utm_source=id_314547"
+    }
+  },
+  {
     "slug": "coalescence",
     "spotifyId": "0bLNEENwNt1CbFmMeEGPev",
     "title": "Coalescence",
@@ -190,6 +247,44 @@
       "amazonMusic": "https://music.amazon.com/albums/B0CYF1JB8H?trackAsin=B0CYDSVBDS",
       "deezer": "https://www.deezer.com/track/2710904232",
       "tidal": "https://listen.tidal.com/track/352823316"
+    }
+  },
+  {
+    "slug": "divergence",
+    "spotifyId": "coalescence-divergence",
+    "title": "Divergence",
+    "subtitle": "Coalescence - EP",
+    "releaseDate": "March 30, 2024",
+    "art": "/media/songs/coalescence.jpg",
+    "blurb": "Divergence by Wallerstedt.",
+    "note": "",
+    "embed": "https://open.spotify.com/embed/album/5LQGX0l55k1w8Jf0l2wJmC?utm_source=generator&theme=0",
+    "allPlatforms": "https://song.link/s/0bLNEENwNt1CbFmMeEGPev",
+    "platforms": {
+      "spotify": "https://open.spotify.com/album/5LQGX0l55k1w8Jf0l2wJmC",
+      "appleMusic": "https://geo.music.apple.com/us/album/_/1736632575?i=1736632817&mt=1&app=music",
+      "amazonMusic": "https://music.amazon.com/albums/B0CYF1JB8H",
+      "deezer": "https://www.deezer.com/album/561870622",
+      "tidal": "https://listen.tidal.com/album/352823311"
+    }
+  },
+  {
+    "slug": "resilience",
+    "spotifyId": "coalescence-resilience",
+    "title": "Resilience",
+    "subtitle": "Coalescence - EP",
+    "releaseDate": "March 30, 2024",
+    "art": "/media/songs/coalescence.jpg",
+    "blurb": "Resilience by Wallerstedt.",
+    "note": "",
+    "embed": "https://open.spotify.com/embed/album/5LQGX0l55k1w8Jf0l2wJmC?utm_source=generator&theme=0",
+    "allPlatforms": "https://song.link/s/0bLNEENwNt1CbFmMeEGPev",
+    "platforms": {
+      "spotify": "https://open.spotify.com/album/5LQGX0l55k1w8Jf0l2wJmC",
+      "appleMusic": "https://geo.music.apple.com/us/album/_/1736632575?i=1736632818&mt=1&app=music",
+      "amazonMusic": "https://music.amazon.com/albums/B0CYF1JB8H",
+      "deezer": "https://www.deezer.com/album/561870622",
+      "tidal": "https://listen.tidal.com/album/352823311"
     }
   },
   {

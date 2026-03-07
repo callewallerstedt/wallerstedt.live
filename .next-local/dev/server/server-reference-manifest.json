@@ -1,0 +1,111 @@
+{
+  "node": {
+    "002d4ef60f4c48056e04abb9cac68e1e096ff24588": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": "[project]/.next-internal/server/app/admin/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/admin/page.tsx [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/app/admin/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "app/admin/page.tsx"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "40d7633c7bb295e2381dc2f5d26ff518800a2e63cd": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": "[project]/.next-internal/server/app/admin/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/admin/page.tsx [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/app/admin/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "app/admin/page.tsx"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
+    },
+    "40da2acb07c2bff793504f8062a5427bb294e8b7e7": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": "[project]/.next-internal/server/app/admin/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/admin/page.tsx [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/app/admin/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "app/admin/page.tsx"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
+    },
+    "00f7189024d38ae7a1ca554f7729f325535b12aeda": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": "[project]/.next-internal/server/app/admin/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/admin/page.tsx [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/app/admin/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "logoutAction",
+          "filename": "app/admin/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/actions.ts",
+      "exportedName": "logoutAction"
+    },
+    "4028a8a081ee74be204a701027feb8c65f3cf1d924": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": "[project]/.next-internal/server/app/admin/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/admin/page.tsx [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/app/admin/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "loginAction",
+          "filename": "app/admin/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/actions.ts",
+      "exportedName": "loginAction"
+    },
+    "40b063731e8c4964584b748bc113c35b6e29e5c2a9": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": "[project]/.next-internal/server/app/admin/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/admin/page.tsx [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/app/admin/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "saveSettingsAction",
+          "filename": "app/admin/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/actions.ts",
+      "exportedName": "saveSettingsAction"
+    },
+    "402518c21622a2e3c576fdacbca59b806c7ff7c079": {
+      "workers": {
+        "app/updates/page": {
+          "moduleId": "[project]/.next-internal/server/app/updates/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/updates/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "subscribeAction",
+          "filename": "app/updates/actions.ts"
+        }
+      },
+      "layer": {
+        "app/updates/page": "rsc"
+      },
+      "filename": "app/updates/actions.ts",
+      "exportedName": "subscribeAction"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "5ku6E/+VqsV1mS2FhdkoJ+Yj23yfcXGrlmPWpfIyRcU="
+}

@@ -1,0 +1,111 @@
+{
+  "node": {
+    "0043aaff3f13fcc7f304f9ae79f72748de528ced5a": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 96049,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "app/admin/page.tsx"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "40a67b530eea23232823c00aabea6d5e06dbfcfafb": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 96049,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "app/admin/page.tsx"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
+    },
+    "40fc3bc145844ca366f691635a289b221aa8f476af": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 96049,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "app/admin/page.tsx"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
+    },
+    "00907fa66025db407122f4e4096c92c073989115c8": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 96049,
+          "async": false,
+          "exportedName": "logoutAction",
+          "filename": "app/admin/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/actions.ts",
+      "exportedName": "logoutAction"
+    },
+    "4060b441990e55a23beb65bf74167954936b73e0fa": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 96049,
+          "async": false,
+          "exportedName": "loginAction",
+          "filename": "app/admin/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/actions.ts",
+      "exportedName": "loginAction"
+    },
+    "4086b6c15ecde1e3d0431171ac11b90f020c54703f": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 96049,
+          "async": false,
+          "exportedName": "saveSettingsAction",
+          "filename": "app/admin/actions.ts"
+        }
+      },
+      "layer": {
+        "app/admin/page": "rsc"
+      },
+      "filename": "app/admin/actions.ts",
+      "exportedName": "saveSettingsAction"
+    },
+    "60ec0b7eb94bd4cf8c4e8cdf418d262e00a794eb67": {
+      "workers": {
+        "app/updates/page": {
+          "moduleId": 86884,
+          "async": false,
+          "exportedName": "subscribeAction",
+          "filename": "app/updates/actions.ts"
+        }
+      },
+      "layer": {
+        "app/updates/page": "action-browser"
+      },
+      "filename": "app/updates/actions.ts",
+      "exportedName": "subscribeAction"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "T6pbVyFPS9PPmKO5Qjoq/GwZCSji1cEPLAkZf0aKoFk="
+}

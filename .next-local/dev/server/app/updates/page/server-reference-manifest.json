@@ -1,0 +1,20 @@
+{
+  "node": {
+    "402518c21622a2e3c576fdacbca59b806c7ff7c079": {
+      "workers": {
+        "app/updates/page": {
+          "moduleId": "[project]/.next-internal/server/app/updates/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/updates/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "subscribeAction",
+          "filename": "app/updates/actions.ts"
+        }
+      },
+      "layer": {
+        "app/updates/page": "rsc"
+      },
+      "exportedName": "subscribeAction",
+      "filename": "app/updates/actions.ts"
+    }
+  },
+  "edge": {}
+}

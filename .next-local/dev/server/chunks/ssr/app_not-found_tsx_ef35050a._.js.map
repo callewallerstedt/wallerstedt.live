@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///home/calle/.openclaw/workspace/wallerstedt.live/app/not-found.tsx"],"sourcesContent":["import Link from \"next/link\";\n\nexport default function NotFound() {\n  return (\n    <main className=\"song-main\">\n      <div className=\"container section-heading\" data-reveal>\n        <p className=\"eyebrow\">Not found</p>\n        <h2>That piece is not here.</h2>\n        <p>Try the homepage or jump to a random song.</p>\n        <div className=\"button-row\">\n          <Link className=\"button button--primary\" href=\"/\">\n            Back home\n          </Link>\n          <Link className=\"button button--secondary\" href=\"/random\">\n            Random song\n          </Link>\n        </div>\n      </div>\n    </main>\n  );\n}\n"],"names":[],"mappings":";;;;;AAAA;;;AAEe,SAAS;IACtB,qBACE,8OAAC;QAAK,WAAU;kBACd,cAAA,8OAAC;YAAI,WAAU;YAA4B,aAAW;;8BACpD,8OAAC;oBAAE,WAAU;8BAAU;;;;;;8BACvB,8OAAC;8BAAG;;;;;;8BACJ,8OAAC;8BAAE;;;;;;8BACH,8OAAC;oBAAI,WAAU;;sCACb,8OAAC,0LAAI;4BAAC,WAAU;4BAAyB,MAAK;sCAAI;;;;;;sCAGlD,8OAAC,0LAAI;4BAAC,WAAU;4BAA2B,MAAK;sCAAU;;;;;;;;;;;;;;;;;;;;;;;AAOpE"}}]
+}

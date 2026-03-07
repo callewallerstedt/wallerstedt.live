@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/music/layout,_N_T_/music/[release]/layout,_N_T_/music/[release]/page,_N_T_/music/bon-voyage"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/music/$d$release/__PAGE__",
+    "/music/$d$release",
+    "/music",
+    "/_index",
+    "/_head"
+  ]
+}

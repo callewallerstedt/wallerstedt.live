@@ -116,7 +116,7 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
             <iframe
               src={song.embed}
               loading="lazy"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              allow="autoplay; clipboard-write; fullscreen; picture-in-picture"
             ></iframe>
           </div>
           <section className="song-more">

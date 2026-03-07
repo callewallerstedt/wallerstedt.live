@@ -1,0 +1,15 @@
+{
+  "/[song]/page": "app/[song]/page.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/manifest.webmanifest/route": "app/manifest.webmanifest/route.js",
+  "/music/[release]/page": "app/music/[release]/page.js",
+  "/music/page": "app/music/page.js",
+  "/page": "app/page.js",
+  "/playlists/page": "app/playlists/page.js",
+  "/random/page": "app/random/page.js",
+  "/robots.txt/route": "app/robots.txt/route.js",
+  "/sitemap.xml/route": "app/sitemap.xml/route.js",
+  "/updates/page": "app/updates/page.js"
+}

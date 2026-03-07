@@ -21,7 +21,7 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   metadataBase: new URL("https://wallerstedt.live"),
   title: {
-    default: `${artist.shortName} | Emotional piano music`,
+    default: artist.shortName,
     template: `%s | ${artist.shortName}`,
   },
   description: "hi! I make piano music :)",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
   },
   openGraph: {
-    title: `${artist.shortName} | Emotional piano music`,
+    title: artist.shortName,
     description: "hi! I make piano music :)",
     url: "https://wallerstedt.live",
     siteName: artist.shortName,
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${artist.shortName} | Emotional piano music`,
+    title: artist.shortName,
     description: "hi! I make piano music :)",
     images: ["/media/after-dark.jpg"],
   },

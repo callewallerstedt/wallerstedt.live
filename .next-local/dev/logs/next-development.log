@@ -1,0 +1,511 @@
+[00:00:01.724] Server  LOG     ✓ Ready in 1278ms
+[00:00:03.018] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:17.276] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:14:56.403] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:15:14.697] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:15:14.697] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:15:14.774] Server  LOG     ✓ Compiled in 0ms
+[00:15:15.578] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:15:16.115] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:16:37.611] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:16:44.778] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[00:18:20.191] Server  LOG       Reload env: .env
+[00:18:20.402] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:18:20.473] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:18:21.952] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:18:22.078] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:18:29.310] Server  LOG       Reload env: .env
+[00:18:29.545] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:18:29.546] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:18:30.462] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:18:30.481] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:18:37.508] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:19:04.674] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[00:22:59.182] Server  LOG     ✓ Compiled in 92ms
+[00:23:32.757] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:25:36.340] Server  LOG     ✓ Compiled in 41ms
+[00:26:05.304] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[00:28:37.850] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:30:15.188] Server  LOG     ✓ Compiled in 42ms
+[00:30:51.452] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[00:36:40.257] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:37:03.058] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[00:43:34.958] Server  LOG     ✓ Compiled in 86ms
+[00:43:35.063] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:43:35.990] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:43:36.106] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:44:16.291] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[00:46:42.949] Server  LOG     ✓ Compiled in 119ms
+[00:46:43.228] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:46:43.229] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:46:44.327] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:46:44.650] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:48:21.868] Server  ERROR   ⨯ ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/music/page.tsx
+
+
+[00:48:21.898] Server  ERROR   ⨯ ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+
+
+[00:48:21.915] Server  LOG     ✓ Compiled in 59ms
+[00:48:22.627] Server  LOG     ✓ Compiled in 695ms
+[00:48:22.846] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:22.847] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:22.847] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:22.933] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:22.933] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:22.933] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:23.200] Server  ERROR   ⨯ ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+
+
+[00:48:23.219] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:23.219] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:23.245] Server  ERROR   ⨯ ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/music/page.tsx
+
+
+[00:48:23.257] Server  ERROR   ⨯ ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+
+
+[00:48:23.291] Server  ERROR   ⨯ ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+
+
+[00:48:23.695] Browser ERROR   uncaughtError: Error: ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+
+
+[00:48:24.846] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:24.846] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:24.846] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/music/page.tsx
+[00:48:24.846] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/playlists/page.tsx
+[00:48:24.846] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:25.624] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:25.625] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/music/page.tsx
+[00:48:25.625] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/playlists/page.tsx
+[00:48:25.625] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:25.625] Browser ERROR   ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+[00:48:25.625] Browser ERROR   uncaughtError: Error: ./components/sections.tsx:279:21
+Parsing ecmascript source code failed
+  277 |                       Listen everywhere
+  278 |                     </a>
+> 279 |                   ) : null}
+      |                     ^
+  280 |                 </div>
+  281 |               </div>
+  282 |             </article>
+
+Expected '</', got ':'
+
+Import trace:
+  Server Component:
+    ./components/sections.tsx
+    ./app/page.tsx
+
+
+[00:48:34.312] Server  LOG     ✓ Compiled in 30ms
+[00:48:35.345] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:48:35.761] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:50:26.574] Browser WARN    Image with src "/media/songs/emergence.jpg" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[00:57:15.495] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:57:15.558] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./node_modules/next/dist/client/image-component.js changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:57:16.562] Server  ERROR   ⨯ Error: Module [project]/node_modules/next/dist/client/image-component.js [app-ssr] (ecmascript) was instantiated because it was required from module [project]/node_modules/next/dist/esm/build/templates/app-page.js?page=/music/page { GLOBAL_ERROR_MODULE => "[project]/node_modules/next/dist/client/components/builtin/global-error.js [app-rsc] (ecmascript, Next.js Server Component)", MODULE_0 => "[project]/app/layout.tsx [app-rsc] (ecmascript, Next.js Server Component)", MODULE_1 => "[project]/app/not-found.tsx [app-rsc] (ecmascript, Next.js Server Component)", MODULE_2 => "[project]/node_modules/next/dist/client/components/builtin/forbidden.js [app-rsc] (ecmascript, Next.js Server Component)", MODULE_3 => "[project]/node_modules/next/dist/client/components/builtin/unauthorized.js [app-rsc] (ecmascript, Next.js Server Component)", MODULE_4 => "[project]/node_modules/next/dist/client/components/builtin/global-error.js [app-rsc] (ecmascript, Next.js Server Component)", MODULE_5 => "[project]/app/music/page.tsx [app-rsc] (ecmascript, Next.js Server Component)" } [app-rsc] (ecmascript) <locals>, but the module factory is not available.
+[00:57:17.470] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:57:17.583] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:57:23.848] Browser ERROR   uncaughtError: ChunkLoadError: Failed to load chunk /_next/static/chunks/app_layout_tsx_1cf6b850._.js from module [project]/node_modules/next/dist/compiled/react-server-dom-turbopack/cjs/react-server-dom-turbopack-client.browser.development.js [app-client] (ecmascript)
+[00:57:40.047] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:07:47.884] Browser WARN    Image with src "/media/songs/emergence.jpg" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[01:08:35.652] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:09:21.934] Server  LOG     ✓ Compiled in 50ms
+[01:09:28.036] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[01:12:21.508] Browser ERROR   Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. after-dark
+[01:12:28.593] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:12:33.246] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[01:13:02.321] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:13:02.453] Browser WARN    Image with src "/media/after-dark.jpg" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[01:13:07.262] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:13:18.169] Browser ERROR   Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. after-dark
+[01:13:18.169] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[01:13:29.066] Server  LOG     ✓ Compiled in 61ms
+[01:13:30.326] Browser ERROR   Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. after-dark
+[01:14:00.539] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:14:00.668] Browser ERROR   Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. after-dark
+[01:14:38.035] Browser WARN    Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[01:15:17.601] Server  LOG     ✓ Compiled in 68ms
+[01:21:03.622] Server  LOG     ✓ Compiled in 401ms
+[01:45:25.635] Server  LOG     ✓ Compiled in 85ms
+[01:45:52.980] Server  LOG     ✓ Compiled in 82ms
