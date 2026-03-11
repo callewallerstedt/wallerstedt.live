@@ -3,6 +3,8 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { saveSiteContent, type SiteContent } from "@/lib/site-content";
+import { addSong } from "@/lib/site-data";
 import {
   getAdminCookieName,
   getAdminSessionValue,
@@ -57,4 +59,57 @@ export async function saveSettingsAction(formData: FormData) {
   revalidatePath("/admin");
 
   return { ok: true, message: "Homepage settings saved." };
+}
+
+function normalizePlaylists(formData: FormData): SiteContent["playlists"] {
+  return [1, 2, 3].map((index) => ({
+    title: String(formData.get(`playlist${index}Title`) ?? ""),
+    description: String(formData.get(`playlist${index}Description`) ?? ""),
+    href: String(formData.get(`playlist${index}Href`) ?? ""),
+    label: String(formData.get(`playlist${index}Label`) ?? ""),
+  }));
+}
+
+export async function saveSiteContentAction(formData: FormData) {
+  await saveSiteContent({
+    heroHeading: String(formData.get("heroHeading") ?? ""),
+    bio: String(formData.get("bio") ?? ""),
+    tagline: String(formData.get("tagline") ?? ""),
+    contactEmail: String(formData.get("contactEmail") ?? ""),
+    links: {
+      spotify: String(formData.get("linkSpotify") ?? ""),
+      appleMusic: String(formData.get("linkAppleMusic") ?? ""),
+      patreon: String(formData.get("linkPatreon") ?? ""),
+      instagram: String(formData.get("linkInstagram") ?? ""),
+      youtube: String(formData.get("linkYouTube") ?? ""),
+      tiktok: String(formData.get("linkTikTok") ?? ""),
+    },
+    playlists: normalizePlaylists(formData),
+  });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/");
+  revalidatePath("/music");
+  revalidatePath("/playlists");
+  revalidatePath("/updates");
+  revalidatePath("/admin");
+
+  return { ok: true, message: "Site content saved." };
+}
+
+export async function addSongAction(formData: FormData) {
+  const result = await addSong(formData);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/");
+  revalidatePath("/music");
+  revalidatePath("/random");
+  revalidatePath("/admin");
+  revalidatePath(`/${result.song.slug}`);
+
+  return result;
 }

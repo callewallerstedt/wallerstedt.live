@@ -4,17 +4,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PlatformIcon } from "@/components/icons";
-import { catalogReleases, getRelease } from "@/lib/site-data";
-
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return catalogReleases.map((release) => ({ release: release.slug }));
-}
+import { ReleaseCountdown } from "@/components/ReleaseCountdown";
+import { getReleaseBySlug } from "@/lib/site-data";
 
 export async function generateMetadata({ params }: { params: Promise<{ release: string }> }): Promise<Metadata> {
   const { release: slug } = await params;
-  const release = getRelease(slug);
+  const release = await getReleaseBySlug(slug);
   if (!release) {
     return {};
   }
@@ -38,12 +33,50 @@ export async function generateMetadata({ params }: { params: Promise<{ release: 
   };
 }
 
+function getSpotifyEmbedFromLink(spotifyLink?: string) {
+  if (!spotifyLink) {
+    return null;
+  }
+
+  const trackId = spotifyLink.match(/open\.spotify\.com\/track\/([A-Za-z0-9]+)/)?.[1];
+  if (trackId) {
+    return `https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`;
+  }
+
+  const albumId = spotifyLink.match(/open\.spotify\.com\/album\/([A-Za-z0-9]+)/)?.[1];
+  if (albumId) {
+    return `https://open.spotify.com/embed/album/${albumId}?utm_source=generator&theme=0`;
+  }
+
+  return null;
+}
+
+function getReleaseLabel(releaseDate: string) {
+  const parsed = new Date(releaseDate);
+  if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+    return "Releases";
+  }
+
+  return "Released";
+}
+
+function getFallbackActionLabel(releaseDate: string) {
+  const parsed = new Date(releaseDate);
+  if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+    return "Pre-save now";
+  }
+
+  return "Listen everywhere";
+}
+
 export default async function ReleasePage({ params }: { params: Promise<{ release: string }> }) {
   const { release: slug } = await params;
-  const release = getRelease(slug);
+  const release = await getReleaseBySlug(slug);
   if (!release) {
     notFound();
   }
+  const hasSingleTrack = release.tracks.length === 1;
+  const spotifyEmbed = getSpotifyEmbedFromLink(release.platforms.spotify) ?? (hasSingleTrack ? release.tracks[0].embed : null);
 
   const listenButtons: Array<{
     key: "spotify" | "appleMusic" | "amazonMusic" | "deezer" | "tidal";
@@ -80,7 +113,7 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
               <strong>{release.subtitle}</strong>
             </div>
             <div>
-              <p className="eyebrow">Released</p>
+              <p className="eyebrow">{getReleaseLabel(release.releaseDate)}</p>
               <strong>{release.releaseDate}</strong>
             </div>
             <div>
@@ -91,59 +124,80 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
           <div className="song-listen-panel">
             <div className="platform-grid platform-grid--song">
               {listenButtons.map((platform) => (
-                <a key={platform.key} className="platform-button platform-button--song" href={platform.href} target="_blank" rel="noreferrer">
-                  <span className="platform-icon"><PlatformIcon platform={platform.key} /></span>
-                  <span>{platform.label}</span>
-                </a>
-              ))}
+                  <a key={platform.key} className="platform-button platform-button--song" href={platform.href} target="_blank" rel="noreferrer">
+                    <span className="platform-icon"><PlatformIcon platform={platform.key} /></span>
+                    <span>{platform.label}</span>
+                  </a>
+                ))}
               {!listenButtons.length ? (
-                <a className="platform-button platform-button--song" href={release.allPlatforms} target="_blank" rel="noreferrer">
-                  <span>Listen everywhere</span>
+                <a
+                  className={getFallbackActionLabel(release.releaseDate) === "Pre-save now"
+                    ? "platform-button platform-button--song platform-button--highlight"
+                    : "platform-button platform-button--song"}
+                  href={release.allPlatforms}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>{getFallbackActionLabel(release.releaseDate)}</span>
                 </a>
               ) : null}
             </div>
           </div>
-          <section className="release-track-panel">
-            <div className="section-heading section-heading--sub release-track-panel__heading">
-              <h2>Tracks</h2>
+          {release.slug === "miracle" ? (
+            <ReleaseCountdown targetIso="2026-03-12T00:00:00+01:00" label="Countdown" />
+          ) : null}
+          {spotifyEmbed ? (
+            <div className="embed-frame">
+              <iframe
+                src={spotifyEmbed}
+                loading="lazy"
+                allow="autoplay; clipboard-write; fullscreen; picture-in-picture"
+              ></iframe>
             </div>
-            <ul className="track-list">
-              {release.tracks.map((track, index) => (
-                <li key={track.slug}>
-                  <div className="release-track-row">
-                    <Link className="track-link" href={`/${track.slug}`}>
-                      <span>{`${index + 1}`.padStart(2, "0")}</span>
-                      <strong>{track.title}</strong>
-                    </Link>
-                    <div className="release-track-row__actions">
-                      {track.platforms.spotify ? (
-                        <a
-                          className="button button--platform button--platform-icon release-track-row__icon"
-                          href={track.platforms.spotify}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`Open ${track.title} on Spotify`}
-                        >
-                          <span className="button__icon"><PlatformIcon platform="spotify" /></span>
-                        </a>
-                      ) : null}
-                      {track.platforms.appleMusic ? (
-                        <a
-                          className="button button--platform button--platform-icon release-track-row__icon"
-                          href={track.platforms.appleMusic}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`Open ${track.title} on Apple Music`}
-                        >
-                          <span className="button__icon"><PlatformIcon platform="appleMusic" /></span>
-                        </a>
-                      ) : null}
+          ) : null}
+          {!hasSingleTrack ? (
+            <section className="release-track-panel">
+              <div className="section-heading section-heading--sub release-track-panel__heading">
+                <h2>Tracks</h2>
+              </div>
+              <ul className="track-list">
+                {release.tracks.map((track, index) => (
+                  <li key={track.slug}>
+                    <div className="release-track-row">
+                      <Link className="track-link" href={`/${track.slug}`}>
+                        <span>{`${index + 1}`.padStart(2, "0")}</span>
+                        <strong>{track.title}</strong>
+                      </Link>
+                      <div className="release-track-row__actions">
+                        {track.platforms.spotify ? (
+                          <a
+                            className="button button--platform button--platform-icon release-track-row__icon"
+                            href={track.platforms.spotify}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open ${track.title} on Spotify`}
+                          >
+                            <span className="button__icon"><PlatformIcon platform="spotify" /></span>
+                          </a>
+                        ) : null}
+                        {track.platforms.appleMusic ? (
+                          <a
+                            className="button button--platform button--platform-icon release-track-row__icon"
+                            href={track.platforms.appleMusic}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open ${track.title} on Apple Music`}
+                          >
+                            <span className="button__icon"><PlatformIcon platform="appleMusic" /></span>
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </section>
       </div>
     </main>

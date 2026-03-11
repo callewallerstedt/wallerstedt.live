@@ -5,7 +5,8 @@ import path from "node:path";
 import { cookies } from "next/headers";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { artist, catalogSongs, type SongSlug } from "./site-data";
+import { artist } from "./artist";
+import { getCatalogSongs, type SongSlug } from "./site-data";
 
 const settingsPath = path.join(process.cwd(), "data", "site-settings.json");
 const adminCookieName = "wallerstedt_admin";
@@ -20,9 +21,8 @@ export const defaultSiteSettings: SiteSettings = {
   heroFeaturedSlug: "midnight",
 };
 
-const availableSongSlugs = new Set(catalogSongs.map((song) => song.slug));
-
-function normalizeSettings(input: Partial<SiteSettings>): SiteSettings {
+async function normalizeSettings(input: Partial<SiteSettings>): Promise<SiteSettings> {
+  const availableSongSlugs = new Set((await getCatalogSongs()).map((song) => song.slug));
   const featuredSongOrder = Array.from(
     new Set((input.featuredSongOrder ?? []).filter((slug): slug is SongSlug => availableSongSlugs.has(slug))),
   ).slice(0, 4);
@@ -98,14 +98,14 @@ export async function getSiteSettings() {
 
   try {
     const raw = await readFile(settingsPath, "utf8");
-    return normalizeSettings(JSON.parse(raw) as Partial<SiteSettings>);
+    return await normalizeSettings(JSON.parse(raw) as Partial<SiteSettings>);
   } catch {
-    return defaultSiteSettings;
+    return await normalizeSettings(defaultSiteSettings);
   }
 }
 
 export async function saveSiteSettings(input: Partial<SiteSettings>) {
-  const nextSettings = normalizeSettings(input);
+  const nextSettings = await normalizeSettings(input);
   await mkdir(path.dirname(settingsPath), { recursive: true });
   await writeFile(settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, "utf8");
   return nextSettings;

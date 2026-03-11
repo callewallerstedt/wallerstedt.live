@@ -1,10 +1,13 @@
 import { FollowSection, PlaylistsSection } from "@/components/sections";
+import { getSiteContent, getSocialLinks } from "@/lib/site-content";
 
-export default function PlaylistsPage() {
+export default async function PlaylistsPage() {
+  const siteContent = await getSiteContent();
+
   return (
     <main>
-      <PlaylistsSection />
-      <FollowSection />
+      <PlaylistsSection playlists={siteContent.playlists} />
+      <FollowSection links={getSocialLinks(siteContent)} />
     </main>
   );
 }

@@ -30,9 +30,28 @@ export function PlatformIcon({ platform }: { platform: PlatformKey }) {
     case "amazonMusic":
       return (
         <svg {...baseProps}>
-          <path d="M17.87 15.07a.78.78 0 0 0-.81-.13 12.27 12.27 0 0 1-9.65-.28.78.78 0 1 0-.64 1.42 13.8 13.8 0 0 0 10.87.32.78.78 0 0 0 .23-1.33Z" />
-          <path d="M17.54 18.07a.56.56 0 0 0-.61-.11 10.74 10.74 0 0 1-8.33-.19.56.56 0 1 0-.49 1.01 11.86 11.86 0 0 0 9.19.23.56.56 0 0 0 .24-.94Z" />
-          <path d="M12.28 3.02a3.8 3.8 0 0 0-3.18 1.65 4.37 4.37 0 0 0-3.44-1.38 4.77 4.77 0 0 0-2.38.54l.73 1.56A3 3 0 0 1 5.51 5c1.52 0 2.42 1.1 2.42 2.83v6.04h1.85V8.28c0-2.12 1.02-3.45 2.67-3.45 1.47 0 2.27 1 2.27 2.67v6.37h1.86V7.26c0-2.7-1.47-4.24-4.3-4.24Z" />
+          <path
+            d="M4.2 14.55c2.48 1.86 8.03 2.06 11.22.18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+          />
+          <path
+            d="M13.9 12.95h2.45v2.45"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M16.3 12.95c-.42 1.82-1.67 3.05-3.72 3.66"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "deezer":

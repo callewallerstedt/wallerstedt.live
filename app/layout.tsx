@@ -4,7 +4,8 @@ import { Inter, Playfair_Display } from "next/font/google";
 import { Footer } from "@/components/Footer";
 import { MotionEffects } from "@/components/MotionEffects";
 import { SiteHeader } from "@/components/SiteHeader";
-import { artist } from "@/lib/site-data";
+import { artist } from "@/lib/artist";
+import { getSiteContent } from "@/lib/site-content";
 
 import "./globals.css";
 
@@ -44,14 +45,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const siteContent = await getSiteContent();
+
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable}`}>
         <MotionEffects />
         <SiteHeader />
         {children}
-        <Footer />
+        <Footer contactEmail={siteContent.contactEmail} />
       </body>
     </html>
   );

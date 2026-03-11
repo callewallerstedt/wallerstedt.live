@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 
-import { catalogSongs } from "@/lib/site-data";
+import { getCatalogSongs } from "@/lib/site-data";
 
 export const dynamic = "force-dynamic";
 
-export default function RandomPage() {
+export default async function RandomPage() {
+  const catalogSongs = await getCatalogSongs();
   const song = catalogSongs[Math.floor(Math.random() * catalogSongs.length)];
   redirect(`/${song.slug}`);
 }

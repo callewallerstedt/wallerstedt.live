@@ -2,22 +2,39 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Route } from "next";
 
 import { PlatformIcon } from "@/components/icons";
-import { getSong, songs, type SongSlug } from "@/lib/site-data";
+import { getCatalogSongs, getReleaseForSongSlug, getSongBySlug, type SongSlug } from "@/lib/site-data";
 
 const suggestedSongSlugs: SongSlug[] = ["september", "bon-voyage", "emergence", "solace"];
 const fallbackSongSlugs: SongSlug[] = ["midnight", "memories", "coalescence", "dawn"];
 
-export const dynamicParams = false;
+function getReleaseLabel(releaseDate: string) {
+  const parsed = new Date(releaseDate);
+  if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+    return "Releases";
+  }
 
-export function generateStaticParams() {
-  return Object.keys(songs).map((slug) => ({ song: slug }));
+  return "Released";
+}
+
+function getReleaseTypeLabel(subtitle: string) {
+  return "Single";
+}
+
+function getFallbackActionLabel(releaseDate: string) {
+  const parsed = new Date(releaseDate);
+  if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+    return "Pre-save now";
+  }
+
+  return "Listen everywhere";
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ song: string }> }): Promise<Metadata> {
   const { song: slug } = await params;
-  const song = getSong(slug);
+  const song = await getSongBySlug(slug);
   if (!song) {
     return {};
   }
@@ -43,17 +60,20 @@ export async function generateMetadata({ params }: { params: Promise<{ song: str
 
 export default async function SongPage({ params }: { params: Promise<{ song: SongSlug }> }) {
   const { song: slug } = await params;
-  const song = getSong(slug);
+  const [song, catalogSongs] = await Promise.all([getSongBySlug(slug), getCatalogSongs()]);
   if (!song) {
     notFound();
   }
 
+  const songs = Object.fromEntries(catalogSongs.map((entry) => [entry.slug, entry]));
   const relatedSongs = [...suggestedSongSlugs, ...fallbackSongSlugs]
     .filter((candidateSlug, index, allSlugs) => allSlugs.indexOf(candidateSlug) === index)
     .filter((candidateSlug) => candidateSlug !== song.slug)
     .map((candidateSlug) => songs[candidateSlug])
     .filter(Boolean)
     .slice(0, 4);
+  const parentRelease = await getReleaseForSongSlug(song.slug);
+  const parentReleaseHref = parentRelease && parentRelease.tracks.length > 1 ? (`/music/${parentRelease.slug}` as Route) : null;
 
   const availableCount = Object.values(song.platforms).filter(Boolean).length;
   const listenButtons: Array<{
@@ -87,10 +107,18 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
           <div className="song-info-grid">
             <div>
               <p className="eyebrow">From</p>
-              <strong>{song.subtitle}</strong>
+              {parentReleaseHref ? (
+                <strong>
+                  <Link className="text-link" href={parentReleaseHref}>
+                    {song.subtitle}
+                  </Link>
+                </strong>
+              ) : (
+                <strong>{song.subtitle}</strong>
+              )}
             </div>
             <div>
-              <p className="eyebrow">Released</p>
+              <p className="eyebrow">{getReleaseLabel(song.releaseDate)}</p>
               <strong>{song.releaseDate}</strong>
             </div>
             <div>
@@ -98,10 +126,6 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
               <strong>{availableCount} platforms</strong>
             </div>
           </div>
-          <p className="song-meta">
-            <span>{song.subtitle}</span>
-            <span>{song.releaseDate}</span>
-          </p>
           <div className="song-listen-panel">
             <div className="platform-grid platform-grid--song">
               {listenButtons.map((platform) => (
@@ -110,15 +134,29 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
                   <span>{platform.label}</span>
                 </a>
               ))}
+              {!listenButtons.length && song.allPlatforms ? (
+                <a
+                  className={getFallbackActionLabel(song.releaseDate) === "Pre-save now"
+                    ? "platform-button platform-button--song platform-button--highlight"
+                    : "platform-button platform-button--song"}
+                  href={song.allPlatforms}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>{getFallbackActionLabel(song.releaseDate)}</span>
+                </a>
+              ) : null}
             </div>
           </div>
-          <div className="embed-frame">
-            <iframe
-              src={song.embed}
-              loading="lazy"
-              allow="autoplay; clipboard-write; fullscreen; picture-in-picture"
-            ></iframe>
-          </div>
+          {song.embed ? (
+            <div className="embed-frame">
+              <iframe
+                src={song.embed}
+                loading="lazy"
+                allow="autoplay; clipboard-write; fullscreen; picture-in-picture"
+              ></iframe>
+            </div>
+          ) : null}
           <section className="song-more">
             <div className="section-heading section-heading--sub">
               <h2>You might like</h2>
@@ -128,6 +166,7 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
                 <article className="piece-card piece-card--related" key={related.slug}>
                   <Link className="card-link-overlay" href={`/${related.slug}`} aria-label={`Open ${related.title}`} />
                   <div className="piece-card__media">
+                    <span className="piece-card__badge">{getReleaseTypeLabel(related.subtitle)}</span>
                     <Image
                       className="cover-image"
                       src={related.art}
@@ -139,19 +178,6 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
                   </div>
                   <div className="piece-card__body piece-card__body--related">
                     <h3>{related.title}</h3>
-                    <p>{related.subtitle}</p>
-                    <div className="card-platforms">
-                      {related.platforms.spotify ? (
-                        <a className="button button--platform button--platform-icon" href={related.platforms.spotify} target="_blank" rel="noreferrer" aria-label={`Open ${related.title} on Spotify`}>
-                          <span className="button__icon"><PlatformIcon platform="spotify" /></span>
-                        </a>
-                      ) : null}
-                      {related.platforms.appleMusic ? (
-                        <a className="button button--platform button--platform-icon" href={related.platforms.appleMusic} target="_blank" rel="noreferrer" aria-label={`Open ${related.title} on Apple Music`}>
-                          <span className="button__icon"><PlatformIcon platform="appleMusic" /></span>
-                        </a>
-                      ) : null}
-                    </div>
                   </div>
                 </article>
               ))}

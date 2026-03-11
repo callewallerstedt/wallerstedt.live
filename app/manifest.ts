@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Wallerstedt",
     short_name: "Wallerstedt",
-    description: "Emotional piano music by Calle Wallerstedt.",
+    description: "Emotional piano music by Wallerstedt.",
     start_url: "/",
     display: "standalone",
     background_color: "#0e0e0e",

@@ -1,8 +1,10 @@
 import type { MetadataRoute } from "next";
 
-import { catalogReleases, catalogSongs } from "@/lib/site-data";
+import { getCatalogReleases, getCatalogSongs } from "@/lib/site-data";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [catalogReleases, catalogSongs] = await Promise.all([getCatalogReleases(), getCatalogSongs()]);
+
   return [
     {
       url: "https://wallerstedt.live",
