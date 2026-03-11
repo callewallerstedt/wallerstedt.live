@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "node scripts/prisma-generate.mjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
   },
