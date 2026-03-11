@@ -1,41 +1,45 @@
 [
   {
     "slug": "miracle",
-    "spotifyId": "",
+    "spotifyId": "3RLSnKETH1P3po6FdBAH6i",
     "title": "Miracle",
     "subtitle": "Miracle - Single",
     "releaseDate": "March 12, 2026",
     "art": "/media/songs/miracle.jpg",
     "blurb": "Miracle by Wallerstedt.",
     "note": "A new piano release scheduled for March 12, 2026.",
-    "embed": "",
+    "embed": "https://open.spotify.com/embed/track/3RLSnKETH1P3po6FdBAH6i?utm_source=generator&theme=0",
     "allPlatforms": "https://song.link/us/i/1881844993",
     "platforms": {
+      "spotify": "https://open.spotify.com/track/3RLSnKETH1P3po6FdBAH6i?si=905a57e556524b0e",
       "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844993&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m"
     },
     "releaseArt": "/media/songs/miracle.jpg",
     "releaseAllPlatforms": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4",
     "releasePlatforms": {
+      "spotify": "https://open.spotify.com/track/3RLSnKETH1P3po6FdBAH6i?si=905a57e556524b0e",
       "appleMusic": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4"
     }
   },
   {
     "slug": "miracle-slowed-plus-reverb",
-    "spotifyId": "",
+    "spotifyId": "7cBKZuWeQjOklpFnygkIur",
     "title": "Miracle - slowed + reverb",
     "subtitle": "Miracle - Single",
     "releaseDate": "March 12, 2026",
     "art": "/media/songs/miracle.jpg",
     "blurb": "Miracle - slowed + reverb by Wallerstedt.",
     "note": "A slowed companion version releasing alongside Miracle on March 12, 2026.",
-    "embed": "",
+    "embed": "https://open.spotify.com/embed/track/7cBKZuWeQjOklpFnygkIur?utm_source=generator&theme=0",
     "allPlatforms": "https://song.link/us/i/1881844995",
     "platforms": {
+      "spotify": "https://open.spotify.com/track/7cBKZuWeQjOklpFnygkIur?si=ceb0b855c1034457",
       "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844995&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m"
     },
     "releaseArt": "/media/songs/miracle.jpg",
     "releaseAllPlatforms": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4",
     "releasePlatforms": {
+      "spotify": "https://open.spotify.com/track/7cBKZuWeQjOklpFnygkIur?si=ceb0b855c1034457",
       "appleMusic": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4"
     }
   },

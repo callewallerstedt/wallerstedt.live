@@ -19,3 +19,4 @@ pnpm-debug.log*
 Thumbs.db
 
 .codex/
+data/analytics.json

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 
+import { AnalyticsTracker } from "@/components/AnalyticsTracker";
 import { Footer } from "@/components/Footer";
 import { MotionEffects } from "@/components/MotionEffects";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -51,6 +52,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable}`}>
+        <AnalyticsTracker />
         <MotionEffects />
         <SiteHeader />
         {children}

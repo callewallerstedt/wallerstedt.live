@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 export function MotionEffects() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsKey = searchParams.toString();
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -131,7 +133,7 @@ export function MotionEffects() {
       revealObserver.disconnect();
       featuredScrollCleanups.forEach((cleanup) => cleanup());
     };
-  }, [pathname]);
+  }, [pathname, searchParamsKey]);
 
   return null;
 }

@@ -3,24 +3,43 @@ import { redirect } from "next/navigation";
 
 import { addSongAction, loginAction, logoutAction, saveSettingsAction, saveSiteContentAction } from "./actions";
 
+import { getAnalyticsSnapshot } from "@/lib/analytics";
 import { getSiteContent } from "@/lib/site-content";
 import { getCatalogSongs } from "@/lib/site-data";
 import { getSiteSettings, isAdminAuthenticated, isAdminConfigured } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
-type AdminTab = "homepage" | "content" | "songs" | "pages";
+type AdminTab = "homepage" | "content" | "songs" | "analytics" | "pages";
 
 const adminTabs: Array<{ key: AdminTab; label: string; description: string }> = [
   { key: "homepage", label: "Homepage", description: "Hero and featured slots" },
   { key: "content", label: "Site content", description: "Bio, links, playlists" },
   { key: "songs", label: "Songs", description: "Add songs and review catalog" },
+  { key: "analytics", label: "Analytics", description: "Views and click-throughs" },
   { key: "pages", label: "Pages", description: "Preview hidden routes and drafts" },
 ];
 
 function getTabValue(value: string | string[] | undefined): AdminTab {
   const tab = typeof value === "string" ? value : "";
   return adminTabs.some((item) => item.key === tab) ? (tab as AdminTab) : "homepage";
+}
+
+function formatTimestamp(value: string) {
+  if (!value) {
+    return "No data yet";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-SE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Stockholm",
+  }).format(parsed);
 }
 
 export default async function AdminPage({
@@ -84,7 +103,12 @@ export default async function AdminPage({
     );
   }
 
-  const [settings, siteContent, catalogSongs] = await Promise.all([getSiteSettings(), getSiteContent(), getCatalogSongs()]);
+  const [settings, siteContent, catalogSongs, analytics] = await Promise.all([
+    getSiteSettings(),
+    getSiteContent(),
+    getCatalogSongs(),
+    getAnalyticsSnapshot(),
+  ]);
   const songs = Object.fromEntries(catalogSongs.map((song) => [song.slug, song]));
 
   return (
@@ -522,6 +546,119 @@ export default async function AdminPage({
                   </article>
                 ))}
               </div>
+            </section>
+          </section>
+        ) : null}
+
+        {activeTab === "analytics" ? (
+          <section className="admin-panel" data-reveal>
+            <div className="admin-panel__top">
+              <div>
+                <p className="eyebrow">Analytics</p>
+                <h2>Traffic and click-throughs</h2>
+                <p className="lead">Local counts for page entries and external button clicks, saved directly on the site.</p>
+              </div>
+            </div>
+
+            <div className="admin-note-grid">
+              <article className="admin-note-card">
+                <p className="eyebrow">All-time</p>
+                <h3>{analytics.totals.pageViews}</h3>
+                <p>Tracked page entries across the public site.</p>
+              </article>
+              <article className="admin-note-card">
+                <p className="eyebrow">All-time</p>
+                <h3>{analytics.totals.buttonClicks}</h3>
+                <p>External button clicks such as Spotify, Apple Music, Patreon, and playlists.</p>
+              </article>
+              <article className="admin-note-card">
+                <p className="eyebrow">Coverage</p>
+                <h3>{analytics.totals.trackedPages}</h3>
+                <p>Pages have recorded traffic so far.</p>
+              </article>
+              <article className="admin-note-card">
+                <p className="eyebrow">Last event</p>
+                <h3>{formatTimestamp(analytics.updatedAt)}</h3>
+                <p>Stored in <code>data/analytics.json</code>.</p>
+              </article>
+            </div>
+
+            <section className="admin-group">
+              <div className="admin-group__heading">
+                <h3>Top pages</h3>
+                <p>Raw page-entry counts. This is not deduplicated into unique visitors.</p>
+              </div>
+              {analytics.pages.length ? (
+                <div className="analytics-list">
+                  {analytics.pages.slice(0, 10).map((page) => (
+                    <article className="analytics-row" key={page.path}>
+                      <div className="analytics-row__copy">
+                        <strong>{page.title || page.path}</strong>
+                        <p>
+                          <code>{page.path}</code>
+                          {`  Last seen ${formatTimestamp(page.lastViewedAt)}`}
+                        </p>
+                      </div>
+                      <span className="analytics-row__value">{page.count}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="status-copy">No page views recorded yet.</p>
+              )}
+            </section>
+
+            <section className="admin-group">
+              <div className="admin-group__heading">
+                <h3>Top buttons</h3>
+                <p>External button clicks grouped by page, label, and destination.</p>
+              </div>
+              {analytics.clicks.length ? (
+                <div className="analytics-list">
+                  {analytics.clicks.slice(0, 12).map((click) => (
+                    <article className="analytics-row" key={click.key}>
+                      <div className="analytics-row__copy">
+                        <strong>{click.label}</strong>
+                        <p>
+                          <code>{click.path}</code>
+                          {`  ${click.href}`}
+                        </p>
+                      </div>
+                      <span className="analytics-row__value">{click.count}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="status-copy">No button clicks recorded yet.</p>
+              )}
+            </section>
+
+            <section className="admin-group">
+              <div className="admin-group__heading">
+                <h3>Recent activity</h3>
+                <p>The latest tracked page entries and button clicks.</p>
+              </div>
+              {analytics.recentEvents.length ? (
+                <div className="analytics-list">
+                  {analytics.recentEvents.slice(0, 12).map((event) => (
+                    <article
+                      className="analytics-row analytics-row--event"
+                      key={`${event.type}-${event.path}-${event.href ?? event.title ?? ""}-${event.at}`}
+                    >
+                      <div className="analytics-row__copy">
+                        <strong>{event.type === "pageview" ? "Page view" : event.label || "Button click"}</strong>
+                        <p>
+                          <code>{event.path}</code>
+                          {event.type === "button_click" && event.href ? `  ${event.href}` : ""}
+                        </p>
+                      </div>
+                      <span className="analytics-row__meta">{formatTimestamp(event.at)}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="status-copy">No analytics data yet. Open the public pages once and it will start filling in.</p>
+              )}
             </section>
           </section>
         ) : null}
