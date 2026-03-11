@@ -57,17 +57,29 @@ function getReleaseHref(release: Release): Route {
   return `/music/${release.slug}` as Route;
 }
 
-function isFutureRelease(releaseDate: string) {
-  const parsed = new Date(releaseDate);
+function isFutureRelease(release: Release) {
+  const hasLivePlatformLink = Boolean(
+    release.platforms.spotify ||
+    release.platforms.appleMusic ||
+    release.platforms.amazonMusic ||
+    release.platforms.deezer ||
+    release.platforms.tidal,
+  );
+
+  if (hasLivePlatformLink) {
+    return false;
+  }
+
+  const parsed = new Date(release.releaseDate);
   return !Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now();
 }
 
-function getReleaseStatusLabel(releaseDate: string) {
-  return isFutureRelease(releaseDate) ? "Releases" : "Released";
+function getReleaseStatusLabel(release: Release) {
+  return isFutureRelease(release) ? "Releases" : "Released";
 }
 
-function getReleaseEyebrow(releaseDate: string) {
-  return isFutureRelease(releaseDate) ? "Upcoming release" : "Latest release";
+function getReleaseEyebrow(release: Release) {
+  return isFutureRelease(release) ? "Upcoming release" : "Latest release";
 }
 
 function getPrimaryPlatformAction(release: Release) {
@@ -81,7 +93,7 @@ function getPrimaryPlatformAction(release: Release) {
 
   return {
     href: release.allPlatforms,
-    label: isFutureRelease(release.releaseDate) ? "Pre-save now" : "Listen on all platforms",
+    label: isFutureRelease(release) ? "Pre-save now" : "Listen on all platforms",
   };
 }
 
@@ -146,7 +158,7 @@ export function HomeHeroSection({
                 ) : null}
               </div>
               <div>
-                <p className="eyebrow">{latestRelease ? getReleaseEyebrow(latestRelease.releaseDate) : "Music"}</p>
+                <p className="eyebrow">{latestRelease ? getReleaseEyebrow(latestRelease) : "Music"}</p>
                 <strong>{latestRelease?.title ?? "View music"}</strong>
               </div>
             </a>
@@ -188,7 +200,7 @@ export function LatestReleaseSection({ latestRelease }: { latestRelease: Release
     <section className="section section--tight" id="latest">
       <div className="container">
         <div className="section-heading" data-reveal>
-          <p className="eyebrow">{getReleaseEyebrow(latestRelease.releaseDate)}</p>
+          <p className="eyebrow">{getReleaseEyebrow(latestRelease)}</p>
           <h2>{latestRelease.title}</h2>
         </div>
         <div className="latest-surface" data-reveal>
@@ -225,14 +237,14 @@ export function LatestReleaseSection({ latestRelease }: { latestRelease: Release
               </ul>
             </aside>
             <div className="latest-copy">
-              <p className="eyebrow">{getReleaseStatusLabel(latestRelease.releaseDate)} {latestRelease.releaseDate}</p>
+              <p className="eyebrow">{getReleaseStatusLabel(latestRelease)} {latestRelease.releaseDate}</p>
               <h2>{latestRelease.title}</h2>
-              {latestRelease.slug === "miracle" ? (
+              {latestRelease.slug === "miracle" && isFutureRelease(latestRelease) ? (
                 <ReleaseCountdown targetIso="2026-03-12T00:00:00+01:00" label="Countdown" />
               ) : null}
               <div className="latest__actions button-row">
                 <a
-                  className={isFutureRelease(latestRelease.releaseDate) ? "button button--primary button--highlight" : "button button--primary"}
+                  className={isFutureRelease(latestRelease) ? "button button--primary button--highlight" : "button button--primary"}
                   href={primaryAction.href}
                   target="_blank"
                   rel="noreferrer"

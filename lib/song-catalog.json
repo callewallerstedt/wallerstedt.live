@@ -9,11 +9,15 @@
     "blurb": "Miracle by Wallerstedt.",
     "note": "A new piano release scheduled for March 12, 2026.",
     "embed": "",
-    "allPlatforms": "https://distrokid.com/hyperfollow/wallerstedt/miracle",
-    "platforms": {},
+    "allPlatforms": "https://song.link/us/i/1881844993",
+    "platforms": {
+      "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844993&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m"
+    },
     "releaseArt": "/media/songs/miracle.jpg",
-    "releaseAllPlatforms": "https://distrokid.com/hyperfollow/wallerstedt/miracle",
-    "releasePlatforms": {}
+    "releaseAllPlatforms": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4",
+    "releasePlatforms": {
+      "appleMusic": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4"
+    }
   },
   {
     "slug": "miracle-slowed-plus-reverb",
@@ -25,11 +29,15 @@
     "blurb": "Miracle - slowed + reverb by Wallerstedt.",
     "note": "A slowed companion version releasing alongside Miracle on March 12, 2026.",
     "embed": "",
-    "allPlatforms": "https://distrokid.com/hyperfollow/wallerstedt/miracle",
-    "platforms": {},
+    "allPlatforms": "https://song.link/us/i/1881844995",
+    "platforms": {
+      "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844995&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m"
+    },
     "releaseArt": "/media/songs/miracle.jpg",
-    "releaseAllPlatforms": "https://distrokid.com/hyperfollow/wallerstedt/miracle",
-    "releasePlatforms": {}
+    "releaseAllPlatforms": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4",
+    "releasePlatforms": {
+      "appleMusic": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4"
+    }
   },
   {
     "slug": "september-slowed-plus-reverb",

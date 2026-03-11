@@ -51,7 +51,11 @@ function getSpotifyEmbedFromLink(spotifyLink?: string) {
   return null;
 }
 
-function getReleaseLabel(releaseDate: string) {
+function getReleaseLabel(releaseDate: string, hasLivePlatformLink: boolean) {
+  if (hasLivePlatformLink) {
+    return "Released";
+  }
+
   const parsed = new Date(releaseDate);
   if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
     return "Releases";
@@ -113,7 +117,7 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
               <strong>{release.subtitle}</strong>
             </div>
             <div>
-              <p className="eyebrow">{getReleaseLabel(release.releaseDate)}</p>
+              <p className="eyebrow">{getReleaseLabel(release.releaseDate, listenButtons.length > 0)}</p>
               <strong>{release.releaseDate}</strong>
             </div>
             <div>
@@ -143,7 +147,7 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
               ) : null}
             </div>
           </div>
-          {release.slug === "miracle" ? (
+          {release.slug === "miracle" && !listenButtons.length ? (
             <ReleaseCountdown targetIso="2026-03-12T00:00:00+01:00" label="Countdown" />
           ) : null}
           {spotifyEmbed ? (

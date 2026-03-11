@@ -29,7 +29,7 @@ export default async function MusicPage() {
           <div className="music-overview__copy" data-reveal>
             {latestRelease ? (
               <>
-                <p className="eyebrow">Upcoming release</p>
+                <p className="eyebrow">Latest release</p>
                 <div className="music-overview__art">
                   <Image
                     className="cover-image"
@@ -42,12 +42,17 @@ export default async function MusicPage() {
                 </div>
                 <h1>{latestRelease.title}</h1>
                 <p className="music-overview__meta">{latestRelease.releaseDate}</p>
-                {latestRelease.slug === "miracle" ? (
+                {latestRelease.slug === "miracle" && !latestRelease.platforms.appleMusic ? (
                   <ReleaseCountdown targetIso="2026-03-12T00:00:00+01:00" label="Countdown" />
                 ) : null}
                 <div className="button-row">
-                  <a className="button button--primary button--highlight" href={latestRelease.allPlatforms} target="_blank" rel="noreferrer">
-                    Pre-save now
+                  <a
+                    className={latestRelease.platforms.appleMusic ? "button button--primary" : "button button--primary button--highlight"}
+                    href={latestRelease.platforms.appleMusic ?? latestRelease.allPlatforms}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {latestRelease.platforms.appleMusic ? "Apple Music" : "Pre-save now"}
                   </a>
                   <Link className="button button--primary" href={`/music/${latestRelease.slug}` as Route}>
                     View release

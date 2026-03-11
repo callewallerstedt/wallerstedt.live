@@ -10,7 +10,11 @@ import { getCatalogSongs, getReleaseForSongSlug, getSongBySlug, type SongSlug } 
 const suggestedSongSlugs: SongSlug[] = ["september", "bon-voyage", "emergence", "solace"];
 const fallbackSongSlugs: SongSlug[] = ["midnight", "memories", "coalescence", "dawn"];
 
-function getReleaseLabel(releaseDate: string) {
+function getReleaseLabel(releaseDate: string, hasLivePlatformLink: boolean) {
+  if (hasLivePlatformLink) {
+    return "Released";
+  }
+
   const parsed = new Date(releaseDate);
   if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
     return "Releases";
@@ -118,7 +122,7 @@ export default async function SongPage({ params }: { params: Promise<{ song: Son
               )}
             </div>
             <div>
-              <p className="eyebrow">{getReleaseLabel(song.releaseDate)}</p>
+              <p className="eyebrow">{getReleaseLabel(song.releaseDate, availableCount > 0)}</p>
               <strong>{song.releaseDate}</strong>
             </div>
             <div>

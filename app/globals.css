@@ -98,9 +98,9 @@ button {
   align-items: center;
   font-family: var(--font-display), serif;
   letter-spacing: 0.02em;
-  font-size: 1.22rem;
+  font-size: 1.34rem;
   line-height: 1;
-  padding: 0 6px;
+  padding: 0 2px;
   transition: color 240ms ease;
 }
 
@@ -258,7 +258,7 @@ button {
 .hero-background__image {
   object-fit: cover;
   object-position: center 18%;
-  filter: blur(34px) saturate(0.92);
+  filter: blur(26px) saturate(0.92);
   transform: scale(1.12);
 }
 
@@ -1293,7 +1293,7 @@ main > .section:last-child {
 
 .song-backdrop__image {
   object-fit: cover;
-  filter: blur(12px) saturate(0.92);
+  filter: blur(9px) saturate(0.92);
   transform: scale(1.05);
 }
 
