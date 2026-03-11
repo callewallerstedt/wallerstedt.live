@@ -1,3 +1,0 @@
-module.exports=[66188,a=>{"use strict";var b=a.i(7997),c=a.i(95936);function d(){return(0,b.jsx)("main",{className:"song-main",children:(0,b.jsxs)("div",{className:"container section-heading","data-reveal":!0,children:[(0,b.jsx)("p",{className:"eyebrow",children:"Not found"}),(0,b.jsx)("h2",{children:"That piece is not here."}),(0,b.jsx)("p",{children:"Try the homepage or jump to a random song."}),(0,b.jsxs)("div",{className:"button-row",children:[(0,b.jsx)(c.default,{className:"button button--primary",href:"/",children:"Back home"}),(0,b.jsx)(c.default,{className:"button button--secondary",href:"/random",children:"Random song"})]})]})})}a.s(["default",()=>d])}];
-
-//# sourceMappingURL=app_not-found_tsx_ef35050a._.js.map

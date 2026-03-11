@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///home/calle/.openclaw/workspace/wallerstedt.live/app/random/page.tsx"],"sourcesContent":["import { redirect } from \"next/navigation\";\n\nimport { catalogSongs } from \"@/lib/site-data\";\n\nexport const dynamic = \"force-dynamic\";\n\nexport default function RandomPage() {\n  const song = catalogSongs[Math.floor(Math.random() * catalogSongs.length)];\n  redirect(`/${song.slug}`);\n}\n"],"names":[],"mappings":";;;;;;AAAA;AAAA;AAEA;;;AAEO,MAAM,UAAU;AAER,SAAS;IACtB,MAAM,OAAO,mIAAY,CAAC,KAAK,KAAK,CAAC,KAAK,MAAM,KAAK,mIAAY,CAAC,MAAM,EAAE;IAC1E,IAAA,iMAAQ,EAAC,CAAC,CAAC,EAAE,KAAK,IAAI,EAAE;AAC1B"}}]
-}
