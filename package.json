@@ -5,10 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push"
   },
   "dependencies": {
+    "@prisma/client": "^7.5.0",
     "next": "16.1.6",
+    "prisma": "^7.5.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

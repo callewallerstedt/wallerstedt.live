@@ -12,6 +12,7 @@ interface AnalyticsPayload {
 }
 
 const dedupeWindowMs = 1500;
+const trackingEndpoint = "/api/collect";
 
 function shouldTrackPath(pathname: string) {
   return pathname !== "" && !pathname.startsWith("/admin") && !pathname.startsWith("/api");
@@ -22,11 +23,11 @@ function sendAnalytics(payload: AnalyticsPayload) {
 
   if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
     const blob = new Blob([body], { type: "application/json" });
-    navigator.sendBeacon("/api/analytics", blob);
+    navigator.sendBeacon(trackingEndpoint, blob);
     return;
   }
 
-  void fetch("/api/analytics", {
+  void fetch(trackingEndpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -52,10 +53,7 @@ function shouldSkipDuplicatePageview(pathname: string) {
 
 function rememberPageview(pathname: string) {
   try {
-    window.sessionStorage.setItem(
-      "wallerstedt:last-pageview",
-      JSON.stringify({ path: pathname, at: Date.now() }),
-    );
+    window.sessionStorage.setItem("wallerstedt:last-pageview", JSON.stringify({ path: pathname, at: Date.now() }));
   } catch {
     // Ignore storage issues; analytics should stay best-effort.
   }

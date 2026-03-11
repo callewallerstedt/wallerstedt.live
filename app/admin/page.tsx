@@ -62,7 +62,7 @@ export default async function AdminPage({
     return (
       <main className="song-main">
         <div className="container admin-shell">
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <p className="eyebrow">Admin</p>
             <h1>Admin password is not configured.</h1>
             <p className="lead">Set `ADMIN_PASSWORD` in your `.env` file, then reload `/admin`.</p>
@@ -76,7 +76,7 @@ export default async function AdminPage({
     return (
       <main className="song-main">
         <div className="container admin-shell">
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <p className="eyebrow">Admin</p>
             <h1>Sign in</h1>
             <p className="lead">Use the password from `.env` to manage the site.</p>
@@ -114,7 +114,7 @@ export default async function AdminPage({
   return (
     <main className="song-main">
       <div className="container admin-shell">
-        <section className="admin-panel admin-panel--header" data-reveal>
+        <section className="admin-panel admin-panel--header">
           <div className="admin-panel__top">
             <div>
               <p className="eyebrow">Admin</p>
@@ -149,7 +149,7 @@ export default async function AdminPage({
         </section>
 
         {activeTab === "homepage" ? (
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <div className="admin-panel__top">
               <div>
                 <p className="eyebrow">Homepage</p>
@@ -212,7 +212,7 @@ export default async function AdminPage({
         ) : null}
 
         {activeTab === "content" ? (
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <div className="admin-panel__top">
               <div>
                 <p className="eyebrow">Site content</p>
@@ -331,7 +331,7 @@ export default async function AdminPage({
         ) : null}
 
         {activeTab === "songs" ? (
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <div className="admin-panel__top">
               <div>
                 <p className="eyebrow">Songs</p>
@@ -551,7 +551,7 @@ export default async function AdminPage({
         ) : null}
 
         {activeTab === "analytics" ? (
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <div className="admin-panel__top">
               <div>
                 <p className="eyebrow">Analytics</p>
@@ -579,7 +579,11 @@ export default async function AdminPage({
               <article className="admin-note-card">
                 <p className="eyebrow">Last event</p>
                 <h3>{formatTimestamp(analytics.updatedAt)}</h3>
-                <p>Stored in <code>data/analytics.json</code>.</p>
+                <p>
+                  {analytics.source === "database"
+                    ? "Stored in Postgres via Prisma."
+                    : "Stored in the local JSON fallback."}
+                </p>
               </article>
             </div>
 
@@ -664,7 +668,7 @@ export default async function AdminPage({
         ) : null}
 
         {activeTab === "pages" ? (
-          <section className="admin-panel" data-reveal>
+          <section className="admin-panel">
             <div className="admin-panel__top">
               <div>
                 <p className="eyebrow">Pages</p>
