@@ -58,6 +58,34 @@ export interface AnalyticsSnapshot {
   recentEvents: AnalyticsEvent[];
 }
 
+interface AnalyticsCountRow {
+  count: bigint | number;
+}
+
+interface AnalyticsPageRow {
+  path: string;
+  title: string;
+  count: bigint | number;
+  lastViewedAt: Date;
+}
+
+interface AnalyticsClickRow {
+  path: string;
+  label: string;
+  href: string;
+  count: bigint | number;
+  lastClickedAt: Date;
+}
+
+interface AnalyticsRecentRow {
+  type: string;
+  path: string;
+  label: string;
+  href: string;
+  title: string;
+  createdAt: Date;
+}
+
 function createDefaultStore(): AnalyticsStore {
   return {
     updatedAt: "",
@@ -271,18 +299,24 @@ async function getAnalyticsSnapshotFromDatabase(): Promise<AnalyticsSnapshot> {
 
   await ensureAnalyticsTable();
 
-  const [pageCountRows, buttonCountRows, pageRows, clickRows, recentRows] = await Promise.all([
-    prisma.$queryRaw<Array<{ count: bigint | number }>>`
+  const [pageCountRows, buttonCountRows, pageRows, clickRows, recentRows]: [
+    AnalyticsCountRow[],
+    AnalyticsCountRow[],
+    AnalyticsPageRow[],
+    AnalyticsClickRow[],
+    AnalyticsRecentRow[],
+  ] = await Promise.all([
+    prisma.$queryRaw<AnalyticsCountRow[]>`
       SELECT COUNT(*) AS count
       FROM "AnalyticsEvent"
       WHERE "type" = 'pageview'
     `,
-    prisma.$queryRaw<Array<{ count: bigint | number }>>`
+    prisma.$queryRaw<AnalyticsCountRow[]>`
       SELECT COUNT(*) AS count
       FROM "AnalyticsEvent"
       WHERE "type" = 'button_click'
     `,
-    prisma.$queryRaw<Array<{ path: string; title: string; count: bigint | number; lastViewedAt: Date }>>`
+    prisma.$queryRaw<AnalyticsPageRow[]>`
       SELECT
         "path",
         COALESCE(NULLIF("title", ''), "path") AS "title",
@@ -294,7 +328,7 @@ async function getAnalyticsSnapshotFromDatabase(): Promise<AnalyticsSnapshot> {
       ORDER BY COUNT(*) DESC, MAX("createdAt") DESC
       LIMIT 50
     `,
-    prisma.$queryRaw<Array<{ path: string; label: string; href: string; count: bigint | number; lastClickedAt: Date }>>`
+    prisma.$queryRaw<AnalyticsClickRow[]>`
       SELECT
         "path",
         COALESCE(NULLIF("label", ''), 'Button') AS "label",
@@ -307,7 +341,7 @@ async function getAnalyticsSnapshotFromDatabase(): Promise<AnalyticsSnapshot> {
       ORDER BY COUNT(*) DESC, MAX("createdAt") DESC
       LIMIT 50
     `,
-    prisma.$queryRaw<Array<{ type: string; path: string; label: string; href: string; title: string; createdAt: Date }>>`
+    prisma.$queryRaw<AnalyticsRecentRow[]>`
       SELECT
         "type",
         "path",
@@ -323,13 +357,13 @@ async function getAnalyticsSnapshotFromDatabase(): Promise<AnalyticsSnapshot> {
 
   const pageViews = Number(pageCountRows[0]?.count ?? 0);
   const buttonClicks = Number(buttonCountRows[0]?.count ?? 0);
-  const pages = pageRows.map((row) => ({
+  const pages = pageRows.map((row: AnalyticsPageRow) => ({
     path: normalizePath(row.path),
     title: normalizeText(row.title, normalizePath(row.path)),
     count: Number(row.count ?? 0),
     lastViewedAt: new Date(row.lastViewedAt).toISOString(),
   }));
-  const clicks = clickRows.map((row) => ({
+  const clicks = clickRows.map((row: AnalyticsClickRow) => ({
     key: `${normalizePath(row.path)}::${normalizeText(row.label, "Button")}::${normalizeText(row.href)}`,
     path: normalizePath(row.path),
     label: normalizeText(row.label, "Button"),
@@ -337,7 +371,7 @@ async function getAnalyticsSnapshotFromDatabase(): Promise<AnalyticsSnapshot> {
     count: Number(row.count ?? 0),
     lastClickedAt: new Date(row.lastClickedAt).toISOString(),
   }));
-  const recentEvents = recentRows.map((row) => ({
+  const recentEvents = recentRows.map((row: AnalyticsRecentRow) => ({
     type: row.type === "button_click" ? "button_click" : "pageview",
     path: normalizePath(row.path),
     label: normalizeText(row.label),
