@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Inter, Playfair_Display } from "next/font/google";
 
 import { AnalyticsTracker } from "@/components/AnalyticsTracker";
@@ -57,6 +58,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <SiteHeader />
         {children}
         <Footer contactEmail={siteContent.contactEmail} />
+        <Analytics />
       </body>
     </html>
   );
