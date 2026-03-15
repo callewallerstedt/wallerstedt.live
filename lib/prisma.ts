@@ -1,17 +1,43 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient, type Prisma } from "@prisma/client";
+import { withAccelerate } from "@prisma/extension-accelerate";
 
 declare global {
-  var __wallerstedtPrisma: PrismaClient | undefined;
+  var __wallerstedtPrisma: ReturnType<typeof createPrismaClient> | undefined;
 }
 
-const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const databaseUrl = process.env.DATABASE_URL?.trim();
+
+function isAccelerateUrl(value: string) {
+  return value.startsWith("prisma://") || value.startsWith("prisma+postgres://");
+}
+
+function getPrismaLogLevels(): Prisma.LogLevel[] {
+  return process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"];
+}
+
+function createPrismaClient(connectionString: string) {
+  if (isAccelerateUrl(connectionString)) {
+    return new PrismaClient({
+      accelerateUrl: connectionString,
+      log: getPrismaLogLevels(),
+    }).$extends(withAccelerate());
+  }
+
+  const adapter = new PrismaPg({
+    connectionString,
+  });
+
+  return new PrismaClient({
+    adapter,
+    log: getPrismaLogLevels(),
+  });
+}
 
 export const prisma =
-  hasDatabaseUrl
+  databaseUrl
     ? global.__wallerstedtPrisma ??
-      new PrismaClient({
-        log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-      })
+      createPrismaClient(databaseUrl)
     : null;
 
 if (prisma && process.env.NODE_ENV !== "production") {
@@ -19,5 +45,5 @@ if (prisma && process.env.NODE_ENV !== "production") {
 }
 
 export function hasPrismaDatabase() {
-  return Boolean(prisma);
+  return Boolean(databaseUrl);
 }
