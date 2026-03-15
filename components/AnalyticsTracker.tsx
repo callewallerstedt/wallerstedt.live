@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@vercel/analytics";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
@@ -34,6 +35,14 @@ function sendAnalytics(payload: AnalyticsPayload) {
     },
     body,
     keepalive: true,
+  });
+}
+
+function trackExternalButtonClick(path: string, label: string, href: string) {
+  track("Button Click", {
+    path,
+    label,
+    href,
   });
 }
 
@@ -109,6 +118,7 @@ export function AnalyticsTracker() {
       }
 
       const label = anchor.textContent?.replace(/\s+/g, " ").trim() || "Button";
+      trackExternalButtonClick(pathname, label, resolvedHref.toString());
       sendAnalytics({
         type: "button_click",
         path: pathname,
