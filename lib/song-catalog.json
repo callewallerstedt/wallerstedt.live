@@ -15,10 +15,11 @@
       "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844993&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m"
     },
     "releaseArt": "/media/songs/miracle.jpg",
-    "releaseAllPlatforms": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4",
+    "releaseAllPlatforms": "https://song.link/us/i/1881844993",
     "releasePlatforms": {
       "spotify": "https://open.spotify.com/track/3RLSnKETH1P3po6FdBAH6i?si=905a57e556524b0e",
-      "appleMusic": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4"
+      "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844993&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m",
+      "tidal": "https://listen.tidal.com/track/503450880"
     }
   },
   {
@@ -37,10 +38,11 @@
       "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844995&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m"
     },
     "releaseArt": "/media/songs/miracle.jpg",
-    "releaseAllPlatforms": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4",
+    "releaseAllPlatforms": "https://song.link/us/i/1881844993",
     "releasePlatforms": {
-      "spotify": "https://open.spotify.com/track/7cBKZuWeQjOklpFnygkIur?si=ceb0b855c1034457",
-      "appleMusic": "https://music.apple.com/us/album/miracle-single/1881844840?uo=4"
+      "spotify": "https://open.spotify.com/track/3RLSnKETH1P3po6FdBAH6i?si=905a57e556524b0e",
+      "appleMusic": "https://geo.music.apple.com/se/album/_/1881844840?i=1881844993&mt=1&app=music&ls=1&at=1000lHKX&ct=api_http&itscg=30200&itsct=odsl_m",
+      "tidal": "https://listen.tidal.com/track/503450880"
     }
   },
   {

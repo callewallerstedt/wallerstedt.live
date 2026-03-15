@@ -279,14 +279,22 @@ function buildCatalogReleases(entries: Song[]) {
       const existing = dynamicReleasesByKey.get(key);
 
       if (existing) {
+        const firstTrack = existing.tracks[0];
         existing.tracks.push(song);
-        if (song.releaseArt) {
+
+        if (song.releaseArt && existing.art === firstTrack.art) {
           existing.art = song.releaseArt;
         }
-        if (song.releaseAllPlatforms) {
+
+        if (song.releaseAllPlatforms && existing.allPlatforms === firstTrack.allPlatforms) {
           existing.allPlatforms = song.releaseAllPlatforms;
         }
-        if (song.releasePlatforms && Object.keys(song.releasePlatforms).length > 0) {
+
+        if (
+          song.releasePlatforms &&
+          Object.keys(song.releasePlatforms).length > 0 &&
+          existing.platforms === firstTrack.platforms
+        ) {
           existing.platforms = song.releasePlatforms;
         }
         return;

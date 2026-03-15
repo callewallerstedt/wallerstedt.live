@@ -14,6 +14,7 @@ interface AnalyticsPayload {
 
 const dedupeWindowMs = 1500;
 const trackingEndpoint = "/api/collect";
+const trackedExternalLinkSelector = "a.button[href], a.platform-button[href]";
 
 function shouldTrackPath(pathname: string) {
   return pathname !== "" && !pathname.startsWith("/admin") && !pathname.startsWith("/api");
@@ -95,7 +96,7 @@ export function AnalyticsTracker() {
         return;
       }
 
-      const anchor = target.closest("a.button[href]");
+      const anchor = target.closest(trackedExternalLinkSelector);
       if (!(anchor instanceof HTMLAnchorElement)) {
         return;
       }
