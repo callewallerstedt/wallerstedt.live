@@ -6,6 +6,7 @@ dist/
 
 .env
 .env.local
+tesla-private-key.pem
 .env.development.local
 .env.test.local
 .env.production.local
