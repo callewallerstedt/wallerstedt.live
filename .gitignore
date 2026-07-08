@@ -21,3 +21,5 @@ Thumbs.db
 
 .codex/
 data/analytics.json
+.vercel
+.env*

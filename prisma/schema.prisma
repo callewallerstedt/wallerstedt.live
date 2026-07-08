@@ -19,3 +19,94 @@ model AnalyticsEvent {
   @@index([type, createdAt])
   @@index([path, createdAt])
 }
+
+/** Latest Tesla Fleet Telemetry snapshot for aiOS dashboard. */
+model TeslaLiveState {
+  vin            String   @id
+  speedKmh       Int      @default(0)
+  gear           String   @default("P")
+  batteryPercent Int      @default(-1)
+  rangeKm        Int      @default(-1)
+  connected      Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+}
+
+model TeslaTrip {
+  id             String              @id @default(cuid())
+  vin            String
+  startedAt      DateTime
+  endedAt        DateTime?
+  sampleCount    Int                 @default(0)
+  distanceKm     Float               @default(0)
+  driveSeconds   Int                 @default(0)
+  maxSpeedKmh    Int                 @default(0)
+  avgSpeedKmh    Float               @default(0)
+  startBattery   Int                 @default(-1)
+  endBattery     Int                 @default(-1)
+  startRangeKm   Int                 @default(-1)
+  endRangeKm     Int                 @default(-1)
+  startLat       Float?
+  startLon       Float?
+  endLat         Float?
+  endLon         Float?
+  destination    String              @default("")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  samples        TeslaTripSample[]
+  chargeEvents   TeslaChargeEvent[]
+
+  @@index([vin, startedAt])
+  @@index([endedAt, updatedAt])
+}
+
+model TeslaTripSample {
+  id                      String   @id @default(cuid())
+  tripId                  String
+  trip                    TeslaTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  vin                     String
+  sampledAt               DateTime
+  latitude                Float?
+  longitude               Float?
+  heading                 Float?
+  speedKmh                Int      @default(0)
+  gear                    String   @default("P")
+  batteryPercent          Int      @default(-1)
+  rangeKm                 Int      @default(-1)
+  odometerKm              Float?
+  outsideTempC            Float?
+  destinationName         String   @default("")
+  routeLine               String   @default("")
+  routeTrafficDelayMin    Float?
+  chargeState             String   @default("")
+  chargePowerKw           Float?
+  chargeRateKmh           Float?
+  chargerVoltage          Float?
+  chargerAmps             Float?
+  createdAt               DateTime @default(now())
+
+  @@unique([tripId, sampledAt])
+  @@index([vin, sampledAt])
+  @@index([tripId, sampledAt])
+}
+
+model TeslaChargeEvent {
+  id             String    @id @default(cuid())
+  tripId         String?
+  trip           TeslaTrip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  vin            String
+  startedAt      DateTime
+  endedAt        DateTime?
+  startBattery   Int       @default(-1)
+  endBattery     Int       @default(-1)
+  startRangeKm   Int       @default(-1)
+  endRangeKm     Int       @default(-1)
+  maxPowerKw     Float     @default(0)
+  energyAddedPct Int       @default(0)
+  locationLat    Float?
+  locationLon    Float?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([vin, startedAt])
+  @@index([endedAt, updatedAt])
+}

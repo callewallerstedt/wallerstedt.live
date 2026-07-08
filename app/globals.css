@@ -47,6 +47,220 @@ body > main {
   flex: 1 0 auto;
 }
 
+body:has(.tesla-trip-shell) {
+  background: #050607;
+}
+
+.tesla-trip-shell {
+  position: relative;
+  min-height: calc(100vh - 72px);
+  background: #050607;
+  overflow: hidden;
+}
+
+.tesla-trip-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  min-height: calc(100vh - 72px);
+  background: #0b0d0f;
+}
+
+.tesla-trip-panel {
+  position: relative;
+  z-index: 1000;
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100vh - 96px);
+  margin: 12px;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background: rgba(8, 10, 12, 0.86);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(18px);
+}
+
+.trip-kicker {
+  margin: 0 0 4px;
+  color: #4fd1c5;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.trip-panel-top h1 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: clamp(1.7rem, 4vw, 2.6rem);
+  line-height: 1.02;
+}
+
+.trip-panel-top p:last-child {
+  margin: 8px 0 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.trip-token-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.trip-token-row input,
+.trip-token-row button {
+  min-height: 38px;
+  border-radius: 6px;
+}
+
+.trip-token-row input {
+  min-width: 0;
+  padding: 0 11px;
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.trip-token-row button {
+  padding: 0 12px;
+  color: #081012;
+  font-weight: 800;
+  background: #4fd1c5;
+  border: 0;
+  cursor: pointer;
+}
+
+.trip-token-row button:last-child {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.trip-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.trip-stat-grid div {
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.trip-stat-grid span {
+  display: block;
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.trip-stat-grid strong {
+  display: block;
+  margin-top: 5px;
+  color: #f8fafc;
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+.trip-timeline-wrap {
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.trip-timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(226, 232, 240, 0.66);
+  font-size: 0.8rem;
+}
+
+.trip-timeline {
+  display: flex;
+  align-items: end;
+  gap: 2px;
+  height: 78px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.trip-timeline span {
+  flex: 1 1 2px;
+  min-width: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, #67e8f9, #4fd1c5);
+}
+
+.trip-status {
+  min-height: 24px;
+  margin: 12px 0;
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 0.85rem;
+}
+
+.trip-list {
+  display: grid;
+  gap: 8px;
+}
+
+.trip-item {
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.065);
+  cursor: pointer;
+}
+
+.trip-item.is-active {
+  border-color: rgba(79, 209, 197, 0.75);
+  background: rgba(79, 209, 197, 0.14);
+}
+
+.trip-item span,
+.trip-item small {
+  display: block;
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 0.78rem;
+}
+
+.trip-item strong {
+  display: block;
+  margin: 3px 0;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 720px) {
+  .tesla-trip-shell,
+  .tesla-trip-map {
+    min-height: calc(100vh - 64px);
+  }
+
+  .tesla-trip-panel {
+    width: calc(100vw - 16px);
+    max-height: 58vh;
+    margin: 8px;
+    padding: 14px;
+  }
+
+  .trip-token-row {
+    grid-template-columns: 1fr 72px;
+  }
+
+  .trip-token-row button:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 [id] {
   scroll-margin-top: var(--header-offset);
 }

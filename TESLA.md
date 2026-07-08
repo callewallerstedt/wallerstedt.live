@@ -23,10 +23,20 @@ The public key at `/.well-known/appspecific/com.tesla.3p.public-key.pem` must st
 
 ## Connect from phone
 
-1. Deploy with env vars
-2. In aiOS settings, paste the same connect secret
-3. Tap **Connect Tesla account**
-4. Pair key in Tesla app if asked: `https://tesla.com/_ak/wallerstedt.live`
+1. Deploy with env vars (`npx vercel deploy --prod`)
+2. Run `npx prisma db push` when schema changes (Tesla live table)
+3. In aiOS settings, paste the same connect secret
+4. Tap **Connect Tesla account**
+5. Pair key in Tesla app if asked: `https://tesla.com/_ak/wallerstedt.live`
+
+## Fleet Telemetry (live dash)
+
+Phone API (Vercel, already on this project):
+
+- `GET /api/tesla/live` — aiOS dashboard (header `X-Aios-Token: TESLA_CONNECT_SECRET`)
+- `POST /api/tesla/ingest` — home PC bridge pushes car data here
+
+Car receiver runs on **your home PC** (Docker), not Vercel. See `C:\aiOS\tesla-telemetry\README.md`.
 
 ## Register domain (once)
 
