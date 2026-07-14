@@ -34,6 +34,7 @@ export async function GET(_request: Request, { params }: Params) {
   });
 
   const response = NextResponse.redirect(`${TESLA_AUTH_URL}?${authParams.toString()}`);
+  response.headers.set("Referrer-Policy", "no-referrer");
   response.cookies.set("tesla_oauth_state", state, {
     httpOnly: true,
     secure: true,

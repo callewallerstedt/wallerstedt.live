@@ -45,3 +45,41 @@ $env:TESLA_CLIENT_ID="..."
 $env:TESLA_CLIENT_SECRET="..."
 node scripts/register-tesla-partner.mjs
 ```
+
+## iPhone Drive PWA
+
+The private mobile dashboard lives at `/tesla`. It only reads from this app's
+existing Tesla APIs and Prisma tables. It never requests vehicle data directly
+from Tesla, so normal dashboard refreshes do not create Fleet API polling cost.
+
+### First-time iPhone setup
+
+1. Open `https://www.wallerstedt.live/tesla` in Safari.
+2. Open **Setup**, paste `TESLA_CONNECT_SECRET`, and tap **Save and connect**.
+3. Allow Precise Location and Microphone when iOS asks.
+4. Tap **Voice** once. The default wake phrase is `Hey Tesla`.
+5. In Safari, tap **Share**, then **Add to Home Screen**.
+
+The connection token and optional personal OpenAI key are stored only in that
+browser's local storage. For the voice agent, setting `OPENAI_API_KEY` in Vercel
+is safer than entering a key on the phone. `TESLA_VOICE_MODEL` is optional and
+defaults to `gpt-5-nano`. Speed, battery, range, status, trip, app, refresh, and
+map voice commands are handled locally and do not use OpenAI.
+
+Wake phrase recognition automatically resumes while the PWA is visible. iOS
+does not allow a web app to keep the microphone active after it is backgrounded
+or the phone is locked, so tap Voice again after returning if Safari stopped it.
+
+### Real GPS routes
+
+Route data appears after the laptop bridge has a current Tesla refresh token and
+the vehicle Fleet Telemetry configuration includes Location again. Until then,
+the dashboard shows an explicit empty state and can use iPhone GPS as a speed
+fallback. No new OAuth app, Fleet key, or database is required.
+
+### Read-only safety boundary
+
+The PWA currently displays live state and launches trusted iPhone apps. It does
+not send lock, climate, trunk, or drive commands to the vehicle. Those actions
+should only be added after the existing backend has secure refresh-token storage
+and Tesla's signed vehicle-command proxy configured.

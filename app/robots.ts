@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: "/learn",
+        disallow: ["/learn", "/tesla", "/tesla-trips", "/admin", "/api/tesla"],
       },
     ],
     sitemap: "https://wallerstedt.live/sitemap.xml",
