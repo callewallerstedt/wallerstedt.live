@@ -30,6 +30,7 @@ export type AccountingEntry = {
   notes?: string | null;
   status?: string | null;
   version?: number | null;
+  documentCount: number;
   documents: AccountingDocument[];
 };
 
@@ -41,6 +42,8 @@ export type DashboardSummary = {
   companyAccountBalance: number;
   capitalInsuranceBalance: number;
   accountBalancesAsOf?: string | null;
+  debt: number;
+  missingReceiptCount: number;
   vat: number;
   entryCount: number;
   receiptCount: number;
@@ -127,4 +130,4 @@ export type AccountingAgentResult = {
   proposal: AccountingAgentProposal | null;
 };
 
-export type AppTab = "home" | "add" | "ledger" | "settings";
+export type AppTab = "home" | "ledger" | "add" | "chat" | "settings";

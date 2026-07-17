@@ -140,6 +140,10 @@ export function normalizeEntry(value: unknown, index = 0): AccountingEntry {
     notes: asOptionalString(record.notes ?? record.note ?? record.anteckningar),
     status: asOptionalString(record.status),
     version: record.version == null ? null : asNumber(record.version),
+    documentCount: asNumber(
+      record.documentCount ?? record.document_count,
+      asArray(record.documents ?? record.attachments ?? record.files).length,
+    ),
     documents: asArray(record.documents ?? record.attachments ?? record.files).map(normalizeDocument),
   };
 }
@@ -155,6 +159,8 @@ export function normalizeDashboard(value: unknown): DashboardData {
     companyAccountBalance: asNumber(summaryRecord.companyAccountBalance ?? summaryRecord.saldo1930 ?? summaryRecord.saldo_1930),
     capitalInsuranceBalance: asNumber(summaryRecord.capitalInsuranceBalance ?? summaryRecord.saldo1385 ?? summaryRecord.investerat_kf),
     accountBalancesAsOf: asOptionalString(summaryRecord.accountBalancesAsOf ?? summaryRecord.balancesAsOf ?? summaryRecord.saldoDatum),
+    debt: asNumber(summaryRecord.debt ?? summaryRecord.skuld),
+    missingReceiptCount: asNumber(summaryRecord.missingReceiptCount ?? summaryRecord.missing_receipt_count),
     vat: asNumber(summaryRecord.vat ?? summaryRecord.moms),
     entryCount: asNumber(summaryRecord.entryCount ?? summaryRecord.entries ?? summaryRecord.antalPoster ?? root.entryCount),
     receiptCount: asNumber(summaryRecord.receiptCount ?? summaryRecord.receipts ?? summaryRecord.antalKvitton ?? root.documentCount),

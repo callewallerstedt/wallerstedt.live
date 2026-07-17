@@ -480,6 +480,8 @@ export async function dashboard() {
   let income = new Prisma.Decimal(0);
   let expenses = new Prisma.Decimal(0);
   let vat = new Prisma.Decimal(0);
+  let debt = new Prisma.Decimal(0);
+  let missingReceiptCount = 0;
   const months = new Map<
     string,
     { income: Prisma.Decimal; expenses: Prisma.Decimal }
@@ -497,6 +499,9 @@ export async function dashboard() {
     } else if (typeKey.includes("utbetal") || typeKey === "expense") {
       expenses = expenses.plus(entry.amount.abs());
       month.expenses = month.expenses.plus(entry.amount.abs());
+      if (entry._count.documents === 0) missingReceiptCount += 1;
+    } else if (typeKey.includes("skuld") || typeKey.includes("debt")) {
+      debt = debt.plus(entry.amount.abs());
     }
     if (entry.vatAmount) vat = vat.plus(entry.vatAmount);
     months.set(key, month);
@@ -518,6 +523,8 @@ export async function dashboard() {
       companyAccountBalance: centsToMoney(accountBalances.companyAccountCents),
       capitalInsuranceBalance: centsToMoney(accountBalances.capitalInsuranceCents),
       accountBalancesAsOf: accountBalances.asOf,
+      debt: debt.toFixed(2),
+      missingReceiptCount,
       entryCount: entries.length,
       receiptCount: documentCount,
     },

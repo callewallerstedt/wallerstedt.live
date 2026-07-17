@@ -44,7 +44,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#070707",
+  themeColor: "#161616",
 };
 
 export default function AccountingVaultLayout({ children }: { children: ReactNode }) {

@@ -18,8 +18,8 @@ export async function GET(
     scope: "/vault/",
     display: "standalone",
     orientation: "portrait-primary",
-    background_color: "#070707",
-    theme_color: "#070707",
+    background_color: "#161616",
+    theme_color: "#161616",
     categories: ["business", "finance", "productivity"],
     lang: "sv-SE",
     icons: [

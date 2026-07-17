@@ -49,4 +49,5 @@ export const AccountingIcons = {
   Calendar: (props: IconProps) => <Icon {...props}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></Icon>,
   Wallet: (props: IconProps) => <Icon {...props}><path d="M4 6h15v14H4a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3h12v3"/><path d="M14 11h7v5h-7a2.5 2.5 0 0 1 0-5Z"/></Icon>,
   Info: (props: IconProps) => <Icon {...props}><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></Icon>,
+  Paperclip: (props: IconProps) => <Icon {...props}><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L16 7"/></Icon>,
 };

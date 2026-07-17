@@ -141,6 +141,7 @@ function createManualDraft(): AccountingDraft {
       notes: "",
       status: "draft",
       version: null,
+      documentCount: 0,
       documents: [],
     }],
   };
@@ -191,6 +192,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [agentMessages, setAgentMessages] = useState<AccountingAgentMessage[]>([]);
   const [agentResult, setAgentResult] = useState<AccountingAgentResult | null>(null);
   const [agentProposal, setAgentProposal] = useState<AccountingAgentProposal | null>(null);
+  const [ledgerDocFilter, setLedgerDocFilter] = useState<"all" | "missing">("all");
   const [toast, setToast] = useState("");
 
   const expireSession = useCallback(() => {
@@ -397,7 +399,6 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
         { role: "assistant", content: result.message } as AccountingAgentMessage,
       ].slice(-12));
       setAgentResult(result);
-      setTab("home");
     } catch (error) {
       if (!handleUnauthorized(error)) {
         setAgentMessages(previousMessages);
@@ -454,7 +455,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     ].slice(-12));
     setEntriesLoaded(false);
     setEditingEntry(null);
-    setTab("home");
+    setTab("chat");
     setToast(message);
     void loadDashboard();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -551,32 +552,45 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
           />
         ) : tab === "home" ? (
           <HomeView
-            agentMessages={agentMessages}
-            agentResult={agentResult}
             dashboard={dashboard}
             error={dashboardError}
-            files={aiFiles}
             loading={dashboardLoading}
+            onAddNew={() => changeTab("add")}
+            onOpenChat={() => changeTab("chat")}
+            onOpenEntry={(entry) => void openEntry(entry)}
+            onOpenLedger={() => {
+              setLedgerDocFilter("all");
+              changeTab("ledger");
+            }}
+            onRetry={() => void loadDashboard()}
+            onShowMissing={() => {
+              setLedgerDocFilter("missing");
+              changeTab("ledger");
+            }}
+          />
+        ) : tab === "chat" ? (
+          <ChatView
+            aiError={aiError}
+            files={aiFiles}
+            loading={aiLoading}
+            messages={agentMessages}
             onAnalyze={() => void runAgent()}
-            onClearAgent={() => {
+            onClear={() => {
               setAgentMessages([]);
               setAgentResult(null);
             }}
             onFiles={setAiFiles}
             onManual={startManualDraft}
-            onOpenEntry={(entry) => void openEntry(entry)}
             onOpenDraft={(nextDraft) => {
               setDraft(nextDraft);
-              setTab("add");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
+            onOpenEntry={(entry) => void openEntry(entry)}
             onReviewProposal={setAgentProposal}
-            onRetry={() => void loadDashboard()}
             onText={setAiText}
-            text={aiText}
-            aiError={aiError}
-            aiLoading={aiLoading}
             progress={aiProgress}
+            result={agentResult}
+            text={aiText}
           />
         ) : tab === "add" ? (
           <AddView
@@ -592,9 +606,11 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
           />
         ) : tab === "ledger" ? (
           <LedgerView
+            docFilter={ledgerDocFilter}
             entries={entries}
             error={entriesError}
             loading={entriesLoading}
+            onDocFilter={setLedgerDocFilter}
             onOpenEntry={(entry) => void openEntry(entry)}
             onRetry={() => void loadEntries()}
           />
@@ -727,8 +743,9 @@ function LoginGate({ online, onLogin }: { online: boolean; onLogin: (password: s
 function BottomNav({ active, onChange }: { active: AppTab; onChange: (tab: AppTab) => void }) {
   const items: Array<{ id: AppTab; label: string; icon: typeof Icon.Home }> = [
     { id: "home", label: "Hem", icon: Icon.Home },
-    { id: "add", label: "Ny post", icon: Icon.Spark },
     { id: "ledger", label: "Poster", icon: Icon.Receipt },
+    { id: "add", label: "Ny", icon: Icon.Plus },
+    { id: "chat", label: "AI", icon: Icon.Spark },
     { id: "settings", label: "Mer", icon: Icon.Settings },
   ];
   return (
@@ -745,7 +762,7 @@ function BottomNav({ active, onChange }: { active: AppTab; onChange: (tab: AppTa
               onClick={() => onChange(item.id)}
               type="button"
             >
-              <span className="ac-nav-icon"><ItemIcon size={isAdd ? 24 : 22} /></span>
+              <span className="ac-nav-icon"><ItemIcon size={isAdd ? 26 : 22} /></span>
               <span>{item.label}</span>
             </button>
           );
@@ -779,163 +796,205 @@ type ComposerProps = {
   text: string;
 };
 
+function homeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 5) return "God natt";
+  if (hour < 10) return "God morgon";
+  if (hour < 18) return "Hej";
+  return "God kväll";
+}
+
 function HomeView({
-  agentMessages,
-  agentResult,
   dashboard,
   error,
-  files,
   loading,
-  onAnalyze,
-  onClearAgent,
-  onFiles,
-  onManual,
+  onAddNew,
+  onOpenChat,
   onOpenEntry,
-  onOpenDraft,
+  onOpenLedger,
   onRetry,
-  onText,
-  onReviewProposal,
-  text,
-  aiError,
-  aiLoading,
-  progress,
+  onShowMissing,
 }: {
-  agentMessages: AccountingAgentMessage[];
-  agentResult: AccountingAgentResult | null;
   dashboard: DashboardData | null;
   error: string;
-  files: File[];
   loading: boolean;
-  onAnalyze: () => void;
-  onClearAgent: () => void;
-  onFiles: (files: File[]) => void;
-  onManual: () => void;
+  onAddNew: () => void;
+  onOpenChat: () => void;
   onOpenEntry: (entry: AccountingEntry) => void;
-  onOpenDraft: (draft: AccountingDraft) => void;
+  onOpenLedger: () => void;
   onRetry: () => void;
-  onText: (text: string) => void;
-  onReviewProposal: (proposal: AccountingAgentProposal) => void;
-  text: string;
-  aiError: string;
-  aiLoading: boolean;
-  progress: AccountingUploadProgress | null;
+  onShowMissing: () => void;
 }) {
+  const summary = dashboard?.summary ?? null;
+  const resultPositive = (summary?.result ?? 0) >= 0;
+
   return (
     <div className="ac-view ac-home-view">
-      <PageHeading eyebrow="Översikt" title="Hej Calle" description="Allt du behöver för dagens bokföring." />
+      <header className="ac-home-greeting">
+        <p className="ac-eyebrow">Wallerstedt Productions AB</p>
+        <h1>{homeGreeting()} Calle</h1>
+      </header>
 
-      <AccountBalanceCards dashboard={dashboard} error={error} loading={loading} onRetry={onRetry} />
-
-      <div className="ac-home-grid">
-        <div className="ac-home-primary">
-          <AgentChat
-            messages={agentMessages}
-            result={agentResult}
-            aiError={aiError}
-            files={files}
-            loading={aiLoading}
-            onAnalyze={onAnalyze}
-            onClear={onClearAgent}
-            onFiles={onFiles}
-            onManual={onManual}
-            onOpenDraft={onOpenDraft}
-            onOpenEntry={onOpenEntry}
-            onReviewProposal={onReviewProposal}
-            onText={onText}
-            progress={progress}
-            text={text}
-          />
-
-          <section className="ac-section-block" aria-labelledby="recent-heading">
-            <div className="ac-section-heading-row">
-              <div>
-                <p className="ac-eyebrow">Senaste</p>
-                <h2 id="recent-heading">Nyligen bokfört</h2>
-              </div>
-              {dashboard && <span className="ac-count-badge">{dashboard.summary.entryCount} poster</span>}
+      {loading && !dashboard ? (
+        <>
+          <div className="ac-hero-card ac-skeleton-card" aria-hidden="true" />
+          <div className="ac-stat-grid" aria-label="Laddar nyckeltal">
+            <div className="ac-stat-card ac-skeleton-card" />
+            <div className="ac-stat-card ac-skeleton-card" />
+            <div className="ac-stat-card ac-skeleton-card" />
+            <div className="ac-stat-card ac-skeleton-card" />
+          </div>
+        </>
+      ) : error && !dashboard ? (
+        <ErrorState message={error} onRetry={onRetry} />
+      ) : summary ? (
+        <>
+          <section className="ac-hero-card" aria-labelledby="hero-balance-heading">
+            <div className="ac-hero-main">
+              <span id="hero-balance-heading">Företagskonto</span>
+              <strong>{formatCurrency(summary.companyAccountBalance)}</strong>
+              <small>
+                Konto 1930
+                {summary.accountBalancesAsOf ? ` · t.o.m. ${formatDate(summary.accountBalancesAsOf)}` : ""}
+              </small>
             </div>
-            {loading && !dashboard ? (
-              <EntryListSkeleton count={3} />
-            ) : error && !dashboard ? (
-              <ErrorState message={error} onRetry={onRetry} />
-            ) : dashboard?.recentEntries.length ? (
-              <div className="ac-entry-list">
-                {dashboard.recentEntries.slice(0, 6).map((entry) => (
-                  <EntryRow entry={entry} key={entry.id} onClick={() => onOpenEntry(entry)} />
-                ))}
+            <div className="ac-hero-row">
+              <div>
+                <span>KF Avanza</span>
+                <strong>{formatCurrency(summary.capitalInsuranceBalance)}</strong>
+                <small>Konto 1385</small>
               </div>
-            ) : (
-              <EmptyState
-                icon={<Icon.Receipt />}
-                title="Inga poster ännu"
-                description="Din första sparade post kommer att visas här. Börja med AI-rutan ovan."
-              />
-            )}
+              <div>
+                <span>Skuld</span>
+                <strong>{formatCurrency(summary.debt)}</strong>
+                <small>Bokförda skulder</small>
+              </div>
+            </div>
           </section>
-        </div>
 
-        <aside className="ac-home-sidebar" aria-label="Ekonomisk sammanfattning">
-          <SummaryCards dashboard={dashboard} error={error} loading={loading} onRetry={onRetry} />
-        </aside>
-      </div>
+          {summary.missingReceiptCount > 0 && (
+            <button className="ac-missing-banner" onClick={onShowMissing} type="button">
+              <span className="ac-missing-banner-icon"><Icon.Alert size={19} /></span>
+              <span className="ac-missing-banner-copy">
+                <strong>{summary.missingReceiptCount} {summary.missingReceiptCount === 1 ? "post saknar underlag" : "poster saknar underlag"}</strong>
+                <small>Tryck för att se och komplettera med kvitton</small>
+              </span>
+              <Icon.Chevron size={19} />
+            </button>
+          )}
+
+          <section className="ac-quick-actions" aria-label="Genvägar">
+            <button className="ac-quick-action ac-quick-action--chat" onClick={onOpenChat} type="button">
+              <span className="ac-quick-action-icon"><Icon.Spark size={22} /></span>
+              <span className="ac-quick-action-copy">
+                <strong>Fråga Bokförings-AI</strong>
+                <small>Bokför kvitton, sök och rätta poster</small>
+              </span>
+              <Icon.Chevron size={19} />
+            </button>
+            <button className="ac-quick-action" onClick={onAddNew} type="button">
+              <span className="ac-quick-action-icon"><Icon.Plus size={22} /></span>
+              <span className="ac-quick-action-copy">
+                <strong>Ny post</strong>
+                <small>Foto, fil eller manuellt</small>
+              </span>
+              <Icon.Chevron size={19} />
+            </button>
+          </section>
+
+          <section className="ac-section-block" aria-labelledby="stats-heading">
+            <div className="ac-section-heading-row">
+              <h2 id="stats-heading">Året i siffror</h2>
+            </div>
+            <div className="ac-stat-grid">
+              <article className={`ac-stat-card ac-stat-card--wide ${resultPositive ? "is-positive" : "is-negative"}`}>
+                <span>Resultat</span>
+                <strong>{formatCurrency(summary.result)}</strong>
+                <small>{resultPositive ? "Intäkter minus kostnader" : "Kostnaderna överstiger intäkterna"}</small>
+              </article>
+              <article className="ac-stat-card">
+                <span>Intäkter</span>
+                <strong className="ac-text-positive">{formatCurrency(summary.income)}</strong>
+              </article>
+              <article className="ac-stat-card">
+                <span>Kostnader</span>
+                <strong className="ac-text-negative">{formatCurrency(summary.expenses)}</strong>
+              </article>
+              <article className="ac-stat-card">
+                <span>Moms</span>
+                <strong>{formatCurrency(summary.vat)}</strong>
+              </article>
+              <article className="ac-stat-card">
+                <span>Underlag</span>
+                <strong>{numberFormatter.format(summary.receiptCount)}</strong>
+              </article>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      <section className="ac-section-block" aria-labelledby="recent-heading">
+        <div className="ac-section-heading-row">
+          <h2 id="recent-heading">Senaste poster</h2>
+          {dashboard && (
+            <button className="ac-see-all" onClick={onOpenLedger} type="button">
+              Visa alla {dashboard.summary.entryCount} <Icon.Chevron size={16} />
+            </button>
+          )}
+        </div>
+        {loading && !dashboard ? (
+          <EntryListSkeleton count={3} />
+        ) : error && !dashboard ? null : dashboard?.recentEntries.length ? (
+          <div className="ac-entry-list">
+            {dashboard.recentEntries.slice(0, 6).map((entry) => (
+              <EntryRow entry={entry} key={entry.id} onClick={() => onOpenEntry(entry)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Icon.Receipt />}
+            title="Inga poster ännu"
+            description="Din första sparade post kommer att visas här. Börja med AI-fliken."
+          />
+        )}
+      </section>
+
+      {dashboard?.backup && (
+        <div className="ac-backup-mini">
+          <span className={`ac-backup-dot ${dashboard.backup.status === "error" ? "is-error" : ""}`} />
+          <div>
+            <strong>{dashboard.backup.status === "error" ? "Kontrollera backup" : "Senaste backup"}</strong>
+            <span>{formatDateTime(dashboard.backup.lastAt)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AccountBalanceCards({
-  dashboard,
-  error,
-  loading,
-  onRetry,
-}: {
-  dashboard: DashboardData | null;
-  error: string;
+type AgentChatProps = {
+  aiError: string;
+  files: File[];
   loading: boolean;
-  onRetry: () => void;
-}) {
-  if (loading && !dashboard) {
-    return (
-      <section className="ac-account-balances" aria-label="Laddar kontosaldon">
-        <div className="ac-account-balance-grid">
-          <article className="ac-account-balance-card ac-skeleton-card" />
-          <article className="ac-account-balance-card ac-skeleton-card" />
-        </div>
-      </section>
-    );
-  }
-  if (error && !dashboard) {
-    return (
-      <section className="ac-account-balances ac-account-balances--error" aria-label="Kontosaldon">
-        <span>Kunde inte läsa kontosaldona.</span>
-        <button onClick={onRetry} type="button">Försök igen</button>
-      </section>
-    );
-  }
-  if (!dashboard) return null;
+  messages: AccountingAgentMessage[];
+  onAnalyze: () => void;
+  onClear: () => void;
+  onFiles: (files: File[]) => void;
+  onManual: () => void;
+  onOpenDraft: (draft: AccountingDraft) => void;
+  onOpenEntry: (entry: AccountingEntry) => void;
+  onReviewProposal: (proposal: AccountingAgentProposal) => void;
+  onText: (text: string) => void;
+  progress: AccountingUploadProgress | null;
+  result: AccountingAgentResult | null;
+  text: string;
+};
 
-  const summary = dashboard.summary;
+function ChatView(props: AgentChatProps) {
   return (
-    <section className="ac-account-balances" aria-labelledby="account-balances-heading">
-      <div className="ac-account-balances-heading">
-        <div>
-          <p className="ac-eyebrow">Snabbkontroll</p>
-          <h2 id="account-balances-heading">Kontosaldon</h2>
-        </div>
-        <span>{summary.accountBalancesAsOf ? `T.o.m. ${formatDate(summary.accountBalancesAsOf)}` : "Baserat på bokförda poster"}</span>
-      </div>
-      <div className="ac-account-balance-grid">
-        <article className="ac-account-balance-card">
-          <div className="ac-account-balance-label"><span><Icon.Wallet size={17} /></span> Företagskonto</div>
-          <strong>{formatCurrency(summary.companyAccountBalance)}</strong>
-          <small>Konto 1930 · debet minus kredit</small>
-        </article>
-        <article className="ac-account-balance-card">
-          <div className="ac-account-balance-label"><span><Icon.Wallet size={17} /></span> KF-saldo</div>
-          <strong>{formatCurrency(summary.capitalInsuranceBalance)}</strong>
-          <small>Avanza · konto 1385 · bokfört värde</small>
-        </article>
-      </div>
-    </section>
+    <div className="ac-view ac-chat-view">
+      <AgentChat {...props} />
+    </div>
   );
 }
 
@@ -955,23 +1014,7 @@ function AgentChat({
   progress,
   result,
   text,
-}: {
-  aiError: string;
-  files: File[];
-  loading: boolean;
-  messages: AccountingAgentMessage[];
-  onAnalyze: () => void;
-  onClear: () => void;
-  onFiles: (files: File[]) => void;
-  onManual: () => void;
-  onOpenDraft: (draft: AccountingDraft) => void;
-  onOpenEntry: (entry: AccountingEntry) => void;
-  onReviewProposal: (proposal: AccountingAgentProposal) => void;
-  onText: (text: string) => void;
-  progress: AccountingUploadProgress | null;
-  result: AccountingAgentResult | null;
-  text: string;
-}) {
+}: AgentChatProps) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
@@ -1445,69 +1488,6 @@ function AgentProposalReview({
   );
 }
 
-function SummaryCards({
-  dashboard,
-  error,
-  loading,
-  onRetry,
-}: {
-  dashboard: DashboardData | null;
-  error: string;
-  loading: boolean;
-  onRetry: () => void;
-}) {
-  if (loading && !dashboard) {
-    return (
-      <div className="ac-summary-grid" aria-label="Laddar sammanfattning">
-        <div className="ac-summary-card ac-skeleton-card" />
-        <div className="ac-summary-card ac-skeleton-card" />
-        <div className="ac-summary-card ac-skeleton-card" />
-      </div>
-    );
-  }
-  if (error && !dashboard) return <ErrorState message={error} onRetry={onRetry} />;
-  const summary = dashboard?.summary;
-  if (!summary) return null;
-  const resultPositive = summary.result >= 0;
-  return (
-    <div className="ac-summary-grid">
-      <article className={`ac-summary-card ac-summary-card--result ${resultPositive ? "is-positive" : "is-negative"}`}>
-        <div className="ac-summary-card-top">
-          <span>Resultat</span>
-          <span className="ac-summary-icon"><Icon.Wallet size={20} /></span>
-        </div>
-        <strong>{formatCurrency(summary.result)}</strong>
-        <small>{resultPositive ? "Intäkter minus kostnader" : "Kostnaderna överstiger intäkterna"}</small>
-      </article>
-      <div className="ac-summary-pair">
-        <article className="ac-summary-card">
-          <span>Intäkter</span>
-          <strong className="ac-text-positive">{formatCurrency(summary.income)}</strong>
-        </article>
-        <article className="ac-summary-card">
-          <span>Kostnader</span>
-          <strong className="ac-text-negative">{formatCurrency(summary.expenses)}</strong>
-        </article>
-      </div>
-      <article className="ac-summary-card ac-summary-card--compact">
-        <div><span>Moms</span><strong>{formatCurrency(summary.vat)}</strong></div>
-        <div><span>Nettoflöde</span><strong>{summary.balance == null ? "Ej beräknat" : formatCurrency(summary.balance)}</strong></div>
-      </article>
-      <article className="ac-summary-card ac-summary-card--compact">
-        <div><span>Poster</span><strong>{numberFormatter.format(summary.entryCount)}</strong></div>
-        <div><span>Underlag</span><strong>{numberFormatter.format(summary.receiptCount)}</strong></div>
-      </article>
-      <div className="ac-backup-mini">
-        <span className={`ac-backup-dot ${dashboard?.backup?.status === "error" ? "is-error" : ""}`} />
-        <div>
-          <strong>{dashboard?.backup?.status === "error" ? "Kontrollera backup" : "Backupstatus"}</strong>
-          <span>{formatDateTime(dashboard?.backup?.lastAt)}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AddView(props: ComposerProps) {
   return (
     <div className="ac-view ac-add-view">
@@ -1686,20 +1666,42 @@ function AiComposer({
   );
 }
 
+function entryAttachmentStatus(entry: AccountingEntry): "has" | "missing" | "none" {
+  const count = entry.documentCount ?? entry.documents.length;
+  if (count > 0) return "has";
+  return entryTone(entry) === "expense" ? "missing" : "none";
+}
+
 function EntryRow({ entry, onClick }: { entry: AccountingEntry; onClick: () => void }) {
   const tone = entryTone(entry);
+  const attachment = entryAttachmentStatus(entry);
+  const documentCount = entry.documentCount ?? entry.documents.length;
+  const account = entry.debitAccount || entry.creditAccount;
   return (
     <button className={`ac-entry-row is-${tone}`} onClick={onClick} type="button">
-      <span className={`ac-entry-avatar is-${tone}`}><Icon.Receipt size={20} /></span>
+      <span className={`ac-entry-avatar is-${tone}`}><Icon.Receipt size={19} /></span>
       <span className="ac-entry-copy">
         <strong>{entry.description || "Bokföringspost"}</strong>
-        <small>{formatDate(entry.date)} · {entry.debitAccount || entry.creditAccount || entryTypeLabel(entry)}</small>
+        <small>
+          {formatDate(entry.date)}
+          {account ? ` · ${account}` : ""} · {entryTypeLabel(entry)}
+        </small>
+        <span className="ac-entry-tags">
+          {attachment === "has" && (
+            <span className="ac-entry-tag is-attachment">
+              <Icon.Paperclip size={13} /> {documentCount} {documentCount === 1 ? "bilaga" : "bilagor"}
+            </span>
+          )}
+          {attachment === "missing" && (
+            <span className="ac-entry-tag is-missing">
+              <Icon.Alert size={13} /> Underlag saknas
+            </span>
+          )}
+        </span>
       </span>
       <span className="ac-entry-amount">
         <strong className={tone === "income" ? "ac-text-positive" : tone === "expense" ? "ac-text-negative" : ""}>{formatCurrency(entry.amount)}</strong>
-        <small>{entryTypeLabel(entry)}</small>
       </span>
-      <Icon.Chevron className="ac-row-chevron" size={19} />
     </button>
   );
 }
@@ -2128,15 +2130,19 @@ function EntryFields({
 }
 
 function LedgerView({
+  docFilter,
   entries,
   error,
   loading,
+  onDocFilter,
   onOpenEntry,
   onRetry,
 }: {
+  docFilter: "all" | "missing";
   entries: AccountingEntry[];
   error: string;
   loading: boolean;
+  onDocFilter: (filter: "all" | "missing") => void;
   onOpenEntry: (entry: AccountingEntry) => void;
   onRetry: () => void;
 }) {
@@ -2145,12 +2151,17 @@ function LedgerView({
   const [year, setYear] = useState("all");
 
   const years = useMemo(() => Array.from(new Set(entries.map((entry) => entry.date.slice(0, 4)).filter(Boolean))).sort().reverse(), [entries]);
+  const missingCount = useMemo(
+    () => entries.filter((entry) => entryAttachmentStatus(entry) === "missing").length,
+    [entries],
+  );
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("sv-SE");
     return entries
       .filter((entry) => {
         if (year !== "all" && !entry.date.startsWith(year)) return false;
         if (type !== "all" && entryTone(entry) !== type) return false;
+        if (docFilter === "missing" && entryAttachmentStatus(entry) !== "missing") return false;
         if (!normalizedQuery) return true;
         const haystack = [
           entry.description,
@@ -2165,59 +2176,70 @@ function LedgerView({
         return haystack.includes(normalizedQuery);
       })
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [entries, query, type, year]);
+  }, [docFilter, entries, query, type, year]);
+
+  const hasActiveFilter = Boolean(query) || type !== "all" || year !== "all" || docFilter !== "all";
 
   return (
     <div className="ac-view ac-ledger-view">
-      <PageHeading eyebrow="Huvudbok" title="Alla poster" description="Sök, kontrollera och uppdatera dina importerade och nya verifikationer." />
-      <section className="ac-card ac-ledger-card">
-        <div className="ac-ledger-toolbar">
-          <label className="ac-search-field">
-            <span className="ac-visually-hidden">Sök poster</span>
-            <Icon.Search size={20} />
-            <input onChange={(event) => setQuery(event.target.value)} placeholder="Sök företag, belopp eller konto" type="search" value={query} />
-            {query && <button aria-label="Rensa sökning" onClick={() => setQuery("")} type="button"><Icon.Close size={17} /></button>}
+      <PageHeading eyebrow="Huvudbok" title="Alla poster" />
+      <div className="ac-ledger-toolbar">
+        <label className="ac-search-field">
+          <span className="ac-visually-hidden">Sök poster</span>
+          <Icon.Search size={19} />
+          <input onChange={(event) => setQuery(event.target.value)} placeholder="Sök beskrivning, belopp, konto…" type="search" value={query} />
+          {query && <button aria-label="Rensa sökning" onClick={() => setQuery("")} type="button"><Icon.Close size={16} /></button>}
+        </label>
+        <div className="ac-filter-row">
+          <button
+            className={`ac-filter-chip ${docFilter === "missing" ? "is-active is-warning" : ""}`}
+            onClick={() => onDocFilter(docFilter === "missing" ? "all" : "missing")}
+            type="button"
+          >
+            <Icon.Alert size={15} /> Saknar underlag{missingCount > 0 ? ` (${missingCount})` : ""}
+          </button>
+          <label className="ac-filter-select">
+            <span className="ac-visually-hidden">Filtrera typ</span>
+            <select onChange={(event) => setType(event.target.value)} value={type}>
+              <option value="all">Alla typer</option>
+              <option value="income">Intäkter</option>
+              <option value="expense">Kostnader</option>
+              <option value="neutral">Övrigt</option>
+            </select>
           </label>
-          <div className="ac-filter-row">
-            <label>
-              <span className="ac-visually-hidden">Filtrera typ</span>
-              <select onChange={(event) => setType(event.target.value)} value={type}>
-                <option value="all">Alla typer</option>
-                <option value="income">Intäkter</option>
-                <option value="expense">Kostnader</option>
-                <option value="neutral">Övrigt</option>
-              </select>
-            </label>
-            <label>
-              <span className="ac-visually-hidden">Filtrera år</span>
-              <select onChange={(event) => setYear(event.target.value)} value={year}>
-                <option value="all">Alla år</option>
-                {years.map((entryYear) => <option key={entryYear} value={entryYear}>{entryYear}</option>)}
-              </select>
-            </label>
-          </div>
+          <label className="ac-filter-select">
+            <span className="ac-visually-hidden">Filtrera år</span>
+            <select onChange={(event) => setYear(event.target.value)} value={year}>
+              <option value="all">Alla år</option>
+              {years.map((entryYear) => <option key={entryYear} value={entryYear}>{entryYear}</option>)}
+            </select>
+          </label>
         </div>
-        <div className="ac-ledger-result-row">
-          <span>{filtered.length} {filtered.length === 1 ? "post" : "poster"}</span>
-          {(query || type !== "all" || year !== "all") && <button onClick={() => { setQuery(""); setType("all"); setYear("all"); }} type="button">Rensa filter</button>}
-        </div>
-
-        {loading && entries.length === 0 ? (
-          <EntryListSkeleton count={7} />
-        ) : error && entries.length === 0 ? (
-          <ErrorState message={error} onRetry={onRetry} />
-        ) : filtered.length ? (
-          <div className="ac-entry-list ac-entry-list--ledger">
-            {filtered.map((entry) => <EntryRow entry={entry} key={entry.id} onClick={() => onOpenEntry(entry)} />)}
-          </div>
-        ) : (
-          <EmptyState
-            icon={<Icon.Search />}
-            title={entries.length ? "Inga träffar" : "Inga bokföringsposter"}
-            description={entries.length ? "Prova ett annat sökord eller rensa filtren." : "Importerade och nya poster visas här när de finns."}
-          />
+      </div>
+      <div className="ac-ledger-result-row">
+        <span>{filtered.length} {filtered.length === 1 ? "post" : "poster"}</span>
+        {hasActiveFilter && (
+          <button onClick={() => { setQuery(""); setType("all"); setYear("all"); onDocFilter("all"); }} type="button">
+            Rensa filter
+          </button>
         )}
-      </section>
+      </div>
+
+      {loading && entries.length === 0 ? (
+        <EntryListSkeleton count={7} />
+      ) : error && entries.length === 0 ? (
+        <ErrorState message={error} onRetry={onRetry} />
+      ) : filtered.length ? (
+        <div className="ac-entry-list ac-entry-list--ledger">
+          {filtered.map((entry) => <EntryRow entry={entry} key={entry.id} onClick={() => onOpenEntry(entry)} />)}
+        </div>
+      ) : (
+        <EmptyState
+          icon={docFilter === "missing" ? <Icon.Check /> : <Icon.Search />}
+          title={docFilter === "missing" && !query ? "Allt har underlag" : entries.length ? "Inga träffar" : "Inga bokföringsposter"}
+          description={docFilter === "missing" && !query ? "Inga kostnadsposter saknar bilagor just nu." : entries.length ? "Prova ett annat sökord eller rensa filtren." : "Importerade och nya poster visas här när de finns."}
+        />
+      )}
     </div>
   );
 }
