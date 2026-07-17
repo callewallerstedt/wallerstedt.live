@@ -25,11 +25,13 @@ export type AccountingUploadProgress = {
 
 export class AccountingApiError extends Error {
   status: number;
+  code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "AccountingApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -318,7 +320,11 @@ export class AccountingApi {
     }
 
     if (!response.ok) {
-      throw new AccountingApiError(getErrorMessage(payload, response.status), response.status);
+      throw new AccountingApiError(
+        getErrorMessage(payload, response.status),
+        response.status,
+        asOptionalString(asRecord(payload).error) ?? undefined,
+      );
     }
     return payload as T;
   }

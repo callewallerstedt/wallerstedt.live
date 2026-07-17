@@ -225,7 +225,8 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
         setSessionStatus("unauthenticated");
         return;
       }
-      setSessionError(displayError(error, "Kunde inte kontrollera inloggningen."));
+      const code = error instanceof AccountingApiError && error.code ? ` (${error.code})` : "";
+      setSessionError(`${displayError(error, "Kunde inte kontrollera inloggningen.")}${code}`);
       setSessionStatus("error");
     }
   }, [api]);
