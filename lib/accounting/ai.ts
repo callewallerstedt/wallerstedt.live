@@ -352,18 +352,24 @@ export async function createAiDraft(request: Request) {
           `${account.account} ${account.name}${account.category ? ` (${account.category})` : ""}`,
       )
       .join("\n");
-    const model = process.env.ACCOUNTING_AI_MODEL?.trim() || "openai/gpt-5.4";
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) {
+      throw new AccountingError(
+        "OpenAI is not configured. Nothing was added to the ledger.",
+        503,
+        "openai_not_configured",
+      );
+    }
+    const configuredModel = process.env.ACCOUNTING_AI_MODEL?.trim() || "gpt-5.6-sol";
+    const modelId = configuredModel.replace(/^openai\//, "");
     const { generateText, Output } = await import("ai");
+    const { createOpenAI } = await import("@ai-sdk/openai");
+    const openai = createOpenAI({ apiKey });
 
     let extracted: unknown;
     try {
       const result = await generateText({
-        model,
-        providerOptions: {
-          gateway: {
-            models: ["openai/gpt-5.4-mini", "anthropic/claude-sonnet-4.6"],
-          },
-        },
+        model: openai(modelId),
         output: Output.object({
           schema: aiExtractionSchema,
           name: "accounting_draft",
@@ -401,7 +407,7 @@ ${accountList || "No cloud account list has been imported yet."}`,
     const draft = await db.accountingAiDraft.create({
       data: {
         status: "pending",
-        model,
+        model: modelId,
         inputText: input.text,
         documentIds: json(input.documents.map((document) => document.id)),
         ownedDocumentIds: json(input.ownedDocumentIds),

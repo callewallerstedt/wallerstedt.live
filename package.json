@@ -20,6 +20,7 @@
     "accounting:restore": "tsx scripts/restore-accounting.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@prisma/extension-accelerate": "^2.0.1",
