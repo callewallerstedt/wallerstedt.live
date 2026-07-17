@@ -11,18 +11,27 @@
     "start": "next start",
     "postinstall": "node scripts/prisma-generate.mjs",
     "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:deploy:local": "node scripts/prisma-local.mjs migrate deploy",
+    "prisma:status:local": "node scripts/prisma-local.mjs migrate status",
+    "test:accounting": "tsx --test lib/accounting/*.test.ts",
+    "accounting:import": "node scripts/import-accounting.mjs",
+    "accounting:restore": "tsx scripts/restore-accounting.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.5.0",
-    "@prisma/client": "^7.5.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "@prisma/extension-accelerate": "^2.0.1",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/blob": "^2.6.1",
+    "ai": "^6.0.229",
     "next": "^16.2.10",
-    "pg": "^8.16.3",
-    "prisma": "^7.5.0",
+    "pg": "^8.22.0",
+    "prisma": "^7.8.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.5.0",
@@ -30,6 +39,15 @@
     "@types/react-dom": "^19.2.2",
     "eslint": "^9.35.0",
     "eslint-config-next": "^16.2.10",
+    "tsx": "^4.20.0",
     "typescript": "^5.9.2"
+  },
+  "overrides": {
+    "@prisma/dev": {
+      "@hono/node-server": "1.19.13"
+    },
+    "next": {
+      "postcss": "8.5.10"
+    }
   }
 }

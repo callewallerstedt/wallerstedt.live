@@ -23,3 +23,18 @@ Thumbs.db
 data/analytics.json
 .vercel
 .env*
+
+# Financial data is migrated directly to managed storage and must never enter Git.
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.bak
+*.dump
+private-data/
+migration-artifacts/
+accounting-imports/
+accounting-backups/
+*.tsbuildinfo
+
+.env*

@@ -110,3 +110,221 @@ model TeslaChargeEvent {
   @@index([vin, startedAt])
   @@index([endedAt, updatedAt])
 }
+
+/**
+ * BAS account mirrored from the owner-managed desktop accounting application.
+ */
+model AccountingAccount {
+  id        String    @id @default(uuid()) @db.Uuid
+  legacyId  Int?      @unique
+  account   Int       @unique
+  name      String
+  category  String?
+  version   Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([deletedAt, account])
+  @@index([updatedAt])
+}
+
+/**
+ * A double-entry accounting record. Money is exact decimal, never floating point.
+ */
+model AccountingEntry {
+  id             String                    @id @default(uuid()) @db.Uuid
+  legacyId       Int?                      @unique
+  date           DateTime?                 @db.Date
+  description    String                    @default("")
+  debitName      String?
+  debitAccount   Int?
+  creditName     String?
+  creditAccount  Int?
+  amountExVat    Decimal?                  @db.Decimal(18, 2)
+  vatAmount      Decimal?                  @db.Decimal(18, 2)
+  vatAccount     Int?
+  amount         Decimal                   @db.Decimal(18, 2)
+  type           String                    @default("Utbetalning")
+  source         String?
+  notes          String                    @default("")
+  status         String?                   @default("Bokförd")
+  version        Int                       @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  documents      AccountingDocument[]
+  revisions      AccountingEntryRevision[]
+  approvedDrafts AccountingAiDraft[]
+
+  @@index([deletedAt, date])
+  @@index([type, date])
+  @@index([status, date])
+  @@index([updatedAt])
+}
+
+/**
+ * Metadata for a private Vercel Blob attachment. Deletes are always soft deletes.
+ */
+model AccountingDocument {
+  id                  String           @id @default(uuid()) @db.Uuid
+  legacyId            Int?             @unique
+  legacyTransactionId Int?
+  entryId             String?          @db.Uuid
+  entry               AccountingEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  originalName        String
+  blobPathname        String?          @unique
+  blobUrl             String?          @unique
+  sha256              String?
+  byteSize            Int?
+  mimeType            String?
+  storageStatus       String           @default("metadata_only")
+  version             Int              @default(1)
+  deletedAt           DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([entryId, deletedAt])
+  @@index([sha256])
+  @@index([updatedAt])
+}
+
+/**
+ * Immutable snapshot of every committed accounting-entry version.
+ */
+model AccountingEntryRevision {
+  id        String          @id @default(uuid()) @db.Uuid
+  entryId   String          @db.Uuid
+  entry     AccountingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  version   Int
+  action    String
+  actor     String
+  snapshot  Json
+  createdAt DateTime        @default(now())
+
+  @@unique([entryId, version])
+  @@index([createdAt])
+}
+
+/**
+ * Append-only audit log. Its monotonic id is also the desktop pull cursor.
+ */
+model AccountingAuditEvent {
+  id         BigInt   @id @default(autoincrement())
+  entityType String
+  entityId   String
+  operation  String
+  version    Int
+  actor      String
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, id])
+  @@index([createdAt])
+}
+
+/**
+ * AI-extracted suggestions. A draft never changes the ledger until approval.
+ */
+model AccountingAiDraft {
+  id          String           @id @default(uuid()) @db.Uuid
+  status      String           @default("pending")
+  model       String
+  inputText   String           @default("")
+  documentIds Json
+  ownedDocumentIds Json        @default("[]")
+  extracted   Json
+  entryId     String?          @db.Uuid
+  entry       AccountingEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/**
+ * Hashed, database-backed login throttle state; raw IP addresses are never stored.
+ */
+model AccountingLoginThrottle {
+  id              String    @id
+  failedCount     Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  lockedUntil     DateTime?
+  lastAttemptAt   DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([lockedUntil])
+  @@index([updatedAt])
+}
+
+/**
+ * Server-side owner session registry. The signed cookie contains a random nonce;
+ * only its SHA-256 digest is stored so individual sessions can be revoked.
+ */
+model AccountingOwnerSession {
+  id            String    @id
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  lastUsedAt    DateTime  @default(now())
+  userAgentHash String?
+  createdAt     DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@index([revokedAt, expiresAt])
+  @@index([lastUsedAt])
+  @@index([createdAt])
+}
+
+model AccountingSyncDevice {
+  id         String   @id
+  name       String
+  appVersion String?
+  lastSeenAt DateTime @default(now())
+  lastCursor BigInt?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([lastSeenAt])
+}
+
+/**
+ * Idempotency record for each desktop mutation. Conflict records remain immutable.
+ */
+model AccountingSyncOperation {
+  id             String   @id
+  deviceId       String?
+  entityType     String
+  entityId       String?
+  operation      String
+  baseVersion    Int?
+  appliedVersion Int?
+  status         String
+  request        Json
+  response       Json
+  createdAt      DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([entityType, entityId])
+  @@index([status, createdAt])
+}
+
+/**
+ * Durable metadata for database/document backups kept outside the deployment filesystem.
+ */
+model AccountingBackup {
+  id            String   @id @default(uuid()) @db.Uuid
+  kind          String
+  blobPathname  String?  @unique
+  blobUrl       String?  @unique
+  sha256        String?
+  byteSize      Int?
+  entryCount    Int?
+  documentCount Int?
+  status        String   @default("created")
+  createdBy     String   @default("system")
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}

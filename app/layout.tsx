@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import { Inter, Playfair_Display } from "next/font/google";
 
 import { AnalyticsTracker } from "@/components/AnalyticsTracker";
 import { Footer } from "@/components/Footer";
 import { MotionEffects } from "@/components/MotionEffects";
+import { PrivacyAwareAnalytics } from "@/components/PrivacyAwareAnalytics";
 import { SiteHeader } from "@/components/SiteHeader";
 import { artist } from "@/lib/artist";
 import { getSiteContent } from "@/lib/site-content";
@@ -58,7 +58,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <SiteHeader />
         {children}
         <Footer contactEmail={siteContent.contactEmail} />
-        <Analytics />
+        <PrivacyAwareAnalytics />
       </body>
     </html>
   );
