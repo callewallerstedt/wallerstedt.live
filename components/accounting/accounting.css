@@ -1319,6 +1319,79 @@ body:has(.accounting-app) > .footer {
   font-size: 0.8rem;
 }
 
+.ac-ai-batch-editor {
+  display: grid;
+  padding: 20px;
+  margin-bottom: 17px;
+  gap: 13px;
+  border-color: #4d4d4d;
+  background: linear-gradient(145deg, #191919, #121212);
+}
+
+.ac-ai-batch-editor__heading {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 11px;
+}
+
+.ac-ai-batch-editor__heading > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  color: #0b0b0b;
+  border-radius: 12px;
+  background: #ededed;
+}
+
+.ac-ai-batch-editor__heading strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #f4f4f4;
+  font-size: 0.92rem;
+}
+
+.ac-ai-batch-editor__heading p {
+  margin: 0;
+  color: var(--ac-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.ac-ai-batch-editor textarea {
+  width: 100%;
+  min-height: 94px;
+  resize: vertical;
+  padding: 13px 14px;
+  color: var(--ac-text);
+  line-height: 1.5;
+  border: 1px solid var(--ac-line-strong);
+  border-radius: 14px;
+  background: #0f0f0f;
+}
+
+.ac-ai-batch-editor .ac-button {
+  justify-self: start;
+}
+
+.ac-ai-batch-editor__notice {
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  gap: 7px;
+  color: #d7d7d7;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.ac-ai-batch-editor__notice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .ac-draft-stack {
   display: grid;
   gap: 17px;
@@ -2894,6 +2967,14 @@ body:has(.accounting-app) > .footer {
 }
 
 @media (max-width: 520px) {
+  .ac-ai-batch-editor {
+    padding: 16px;
+  }
+
+  .ac-ai-batch-editor .ac-button {
+    width: 100%;
+  }
+
   .ac-topbar-inner {
     min-height: 62px;
   }

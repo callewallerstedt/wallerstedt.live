@@ -18,6 +18,7 @@ import { serializeDraft, serializeEntry } from "./serialize";
 import { createEntryInTransaction } from "./service";
 import {
   aiExtractionSchema,
+  aiRevisionRequestSchema,
   entryCreateSchema,
   normalizeEntryInput,
   parseWithSchema,
@@ -338,20 +339,162 @@ function buildUserContent(input: DraftRequest): UserContent {
   return content;
 }
 
+function buildRevisionContent(
+  instruction: string,
+  entries: unknown[],
+  documents: AiInputDocument[],
+): UserContent {
+  const content: Exclude<UserContent, string> = [
+    {
+      type: "text",
+      text:
+        "Revise the complete current accounting draft batch according to the owner's instruction. " +
+        "Return the complete batch, including unchanged entries. You may update multiple entries, add, remove, or reorder entries only when the instruction requires it. " +
+        "Never post anything to the ledger. The owner must review every returned entry again.\n\n" +
+        `OWNER'S BATCH EDIT INSTRUCTION:\n${instruction}\n\n` +
+        `CURRENT DRAFT BATCH (${entries.length} entries):\n${JSON.stringify(entries, null, 2)}`,
+    },
+  ];
+  appendDocuments(content, documents);
+  return content;
+}
+
+function appendDocuments(
+  content: Exclude<UserContent, string>,
+  documents: AiInputDocument[],
+) {
+  for (const document of documents) {
+    if (
+      document.mimeType === "image/jpeg" ||
+      document.mimeType === "image/png"
+    ) {
+      content.push({
+        type: "image",
+        image: document.buffer,
+        mediaType: document.mimeType,
+      });
+    } else if (
+      document.mimeType === "text/plain" ||
+      document.mimeType === "text/csv"
+    ) {
+      content.push({
+        type: "text",
+        text:
+          `ATTACHED ${document.mimeType === "text/csv" ? "CSV" : "TEXT"} FILE ` +
+          `${document.name}:\n${document.buffer.toString("utf8")}`,
+      });
+    } else {
+      content.push({
+        type: "file",
+        data: document.buffer,
+        mediaType: document.mimeType,
+        filename: document.name,
+      });
+    }
+  }
+}
+
+function formatAccountList(
+  accounts: Array<{ account: number; name: string; category: string | null }>,
+) {
+  return accounts
+    .map(
+      (account) =>
+        `${account.account} ${account.name}${account.category ? ` (${account.category})` : ""}`,
+    )
+    .join("\n");
+}
+
+function formatLedgerHistory(
+  entries: Array<{
+    date: Date | null;
+    description: string | null;
+    debitAccount: number | null;
+    debitName: string | null;
+    creditAccount: number | null;
+    creditName: string | null;
+    amountExVat: unknown;
+    vatAmount: unknown;
+    amount: unknown;
+    type: string | null;
+  }>,
+) {
+  if (!entries.length) return "No previous ledger entries are available yet.";
+  return entries
+    .map((entry) =>
+      [
+        entry.date?.toISOString().slice(0, 10) ?? "date missing",
+        entry.description || "description missing",
+        `debit ${entry.debitAccount ?? "?"} ${entry.debitName ?? ""}`.trim(),
+        `credit ${entry.creditAccount ?? "?"} ${entry.creditName ?? ""}`.trim(),
+        `ex VAT ${entry.amountExVat ?? "?"}`,
+        `VAT ${entry.vatAmount ?? "?"}`,
+        `total ${entry.amount ?? "?"}`,
+        `type ${entry.type ?? "?"}`,
+      ].join(" | "),
+    )
+    .join("\n");
+}
+
+async function loadAccountingReferenceContext() {
+  const db = getAccountingDb();
+  const [accounts, previousEntries] = await Promise.all([
+    db.accountingAccount.findMany({
+      where: { deletedAt: null },
+      orderBy: { account: "asc" },
+      select: { account: true, name: true, category: true },
+    }),
+    db.accountingEntry.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      take: 500,
+      select: {
+        date: true,
+        description: true,
+        debitAccount: true,
+        debitName: true,
+        creditAccount: true,
+        creditName: true,
+        amountExVat: true,
+        vatAmount: true,
+        amount: true,
+        type: true,
+      },
+    }),
+  ]);
+  return {
+    accountList: formatAccountList(accounts),
+    ledgerHistory: formatLedgerHistory(previousEntries),
+  };
+}
+
+function accountingSystemPrompt(accountList: string, ledgerHistory: string) {
+  return `You prepare bookkeeping suggestions for Wallerstedt Productions AB, a Swedish aktiebolag.
+Return drafts only. Never claim that anything has been posted, paid, filed, or saved.
+Use exact figures and dates visible in the inputs. Use null when evidence is missing.
+Each entry needs balanced debit and credit accounts. Prefer an account in the supplied BAS account list.
+For bulk input, identify every distinct transaction and emit a separate entry for each. Do not summarize or combine separate purchases, receipts, invoice lines that are separate postings, payments, or CSV rows.
+Use sourceDocumentIndexes on every row so each uploaded document is traceable to the correct proposed entry. If one document contains multiple transactions, reuse its index on each relevant row.
+For Swedish deductible VAT, separate total, amount excluding VAT, VAT, and normally use VAT account 2641.
+Foreign reverse-charge services require caution; explain uncertainty in warnings and reasoning.
+sourceDocumentIndexes are zero-based indexes into the attached documents relevant to that row.
+Keep descriptions concise and reasoning in Swedish. Do not provide tax or legal certainty.
+
+Use the previous ledger only as a precedent for the owner's naming and account-selection patterns. Never copy its dates or amounts into a new transaction, and never invent evidence from it. Prefer the same accounts for genuinely similar transactions.
+
+AVAILABLE BAS ACCOUNTS:
+${accountList || "No cloud account list has been imported yet."}
+
+PREVIOUS LEDGER ENTRIES, NEWEST FIRST:
+${ledgerHistory}`;
+}
+
 export async function createAiDraft(request: Request) {
   const input = await parseDraftRequest(request);
   try {
     const db = getAccountingDb();
-    const accounts = await db.accountingAccount.findMany({
-      where: { deletedAt: null },
-      orderBy: { account: "asc" },
-    });
-    const accountList = accounts
-      .map(
-        (account) =>
-          `${account.account} ${account.name}${account.category ? ` (${account.category})` : ""}`,
-      )
-      .join("\n");
+    const { accountList, ledgerHistory } =
+      await loadAccountingReferenceContext();
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       throw new AccountingError(
@@ -376,19 +519,7 @@ export async function createAiDraft(request: Request) {
           description:
             "One or more Swedish double-entry accounting drafts for owner review",
         }),
-        system: `You extract bookkeeping suggestions for Wallerstedt Productions AB, a Swedish aktiebolag.
-Return drafts only. Never claim that anything has been posted, paid, filed, or saved.
-Use exact figures and dates visible in the inputs. Use null when evidence is missing.
-Each entry needs balanced debit and credit accounts. Prefer an account in the supplied BAS account list.
-For bulk input, identify every distinct transaction and emit a separate entry for each. Do not summarize or combine separate purchases, receipts, invoice lines that are separate postings, payments, or CSV rows.
-Use sourceDocumentIndexes on every row so each uploaded document is traceable to the correct proposed entry. If one document contains multiple transactions, reuse its index on each relevant row.
-For Swedish deductible VAT, separate total, amount excluding VAT, VAT, and normally use VAT account 2641.
-Foreign reverse-charge services require caution; explain uncertainty in warnings and reasoning.
-sourceDocumentIndexes are zero-based indexes into the attached documents relevant to that row.
-Keep descriptions concise and reasoning in Swedish. Do not provide tax or legal certainty.
-
-AVAILABLE BAS ACCOUNTS:
-${accountList || "No cloud account list has been imported yet."}`,
+        system: accountingSystemPrompt(accountList, ledgerHistory),
         messages: [{ role: "user", content: buildUserContent(input) }],
       });
       extracted = result.output;
@@ -422,6 +553,117 @@ ${accountList || "No cloud account list has been imported yet."}`,
     );
     throw error;
   }
+}
+
+export async function reviseAiDraft(id: string, value: unknown) {
+  const input = parseWithSchema(aiRevisionRequestSchema, value);
+  const db = getAccountingDb();
+  const draft = await db.accountingAiDraft.findUnique({ where: { id } });
+  if (!draft) {
+    throw new AccountingError("Draft not found.", 404, "draft_not_found");
+  }
+  if (draft.status !== "pending") {
+    throw new AccountingConflictError(
+      "Only a pending AI draft can be revised.",
+      { status: draft.status },
+    );
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new AccountingError(
+      "OpenAI is not configured. The draft was not changed.",
+      503,
+      "openai_not_configured",
+    );
+  }
+
+  const [{ accountList, ledgerHistory }, documents] = await Promise.all([
+    loadAccountingReferenceContext(),
+    loadExistingDocuments(documentIdsFromJson(draft.documentIds)),
+  ]);
+  const configuredModel =
+    process.env.ACCOUNTING_AI_MODEL?.trim() || "gpt-5.6-sol";
+  const modelId = configuredModel.replace(/^openai\//, "");
+  const { generateText, Output } = await import("ai");
+  const { createOpenAI } = await import("@ai-sdk/openai");
+  const openai = createOpenAI({ apiKey });
+
+  let extracted: unknown;
+  try {
+    const result = await generateText({
+      model: openai(modelId),
+      output: Output.object({
+        schema: aiExtractionSchema,
+        name: "revised_accounting_draft_batch",
+        description:
+          "The complete revised batch of Swedish double-entry accounting drafts for owner review",
+      }),
+      system:
+        accountingSystemPrompt(accountList, ledgerHistory) +
+        "\n\nThis is a batch revision. Apply the owner's instruction across the entire current batch and return every resulting entry, including entries that remain unchanged. Do not silently return only one edited entry. Preserve source-document mappings whenever they remain relevant.",
+      messages: [
+        {
+          role: "user",
+          content: buildRevisionContent(
+            input.instruction,
+            input.entries,
+            documents,
+          ),
+        },
+      ],
+    });
+    extracted = result.output;
+  } catch (error) {
+    console.error(
+      "Accounting AI batch revision failed",
+      redactedErrorDiagnostic(error),
+    );
+    throw new AccountingError(
+      "AI could not revise the batch. The current draft is unchanged; try again.",
+      502,
+      "ai_revision_failed",
+    );
+  }
+
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.accountingAiDraft.updateMany({
+      where: {
+        id,
+        status: "pending",
+        updatedAt: draft.updatedAt,
+      },
+      data: {
+        model: modelId,
+        extracted: json(extracted),
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new AccountingConflictError(
+        "This draft changed while AI was working. Reload it before trying again.",
+        { reason: "draft_revision_conflict" },
+      );
+    }
+    await tx.accountingAuditEvent.create({
+      data: {
+        entityType: "ai_draft",
+        entityId: id,
+        operation: "revise",
+        version: 1,
+        actor: "web",
+        payload: json({
+          instruction: input.instruction,
+          previousEntryCount: input.entries.length,
+          model: modelId,
+        }),
+      },
+    });
+    const revised = await tx.accountingAiDraft.findUnique({ where: { id } });
+    if (!revised) {
+      throw new AccountingError("Draft not found.", 404, "draft_not_found");
+    }
+    return serializeDraft(revised);
+  });
 }
 
 export async function getAiDraft(id: string) {

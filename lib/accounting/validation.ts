@@ -224,6 +224,11 @@ export const aiExtractionSchema = z.object({
   warnings: z.array(z.string().max(500)).max(20),
 });
 
+export const aiRevisionRequestSchema = z.object({
+  instruction: z.string().trim().min(2).max(4_000),
+  entries: z.array(z.object({}).passthrough()).min(1).max(50),
+});
+
 export const draftApprovalSchema = z.object({
   entries: z.array(z.object(entryFields)).min(1).max(50),
 });

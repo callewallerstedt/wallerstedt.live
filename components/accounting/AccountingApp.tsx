@@ -173,6 +173,8 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [entriesError, setEntriesError] = useState("");
   const [entriesLoaded, setEntriesLoaded] = useState(false);
+  const [accounts, setAccounts] = useState<AccountingAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
   const [editingEntry, setEditingEntry] = useState<AccountingEntry | null>(null);
   const [entryLoading, setEntryLoading] = useState(false);
   const [draft, setDraft] = useState<AccountingDraft | null>(null);
@@ -188,6 +190,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     setDashboard(null);
     setEntries([]);
     setEntriesLoaded(false);
+    setAccounts([]);
     setEditingEntry(null);
     setDraft(null);
   }, []);
@@ -244,6 +247,19 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     }
   }, [api, handleUnauthorized]);
 
+  const loadAccounts = useCallback(async () => {
+    setAccountsLoading(true);
+    try {
+      setAccounts(await api.accounts());
+    } catch (error) {
+      if (!handleUnauthorized(error)) {
+        console.error("Kunde inte hämta kontoplanen", error);
+      }
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, [api, handleUnauthorized]);
+
   useEffect(() => {
     const previousLanguage = document.documentElement.lang;
     document.documentElement.lang = "sv";
@@ -269,6 +285,10 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       void loadEntries();
     }
   }, [entriesLoaded, entriesLoading, loadEntries, sessionStatus, tab]);
+
+  useEffect(() => {
+    if (sessionStatus === "authenticated") void loadAccounts();
+  }, [loadAccounts, sessionStatus, tab]);
 
   useEffect(() => {
     if (!toast) return;
@@ -305,6 +325,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     }
     if (tab === "ledger") await loadEntries();
     else await loadDashboard();
+    await loadAccounts();
   }
 
   async function analyzeDraft() {
@@ -375,7 +396,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     return <LoginGate online={online} onLogin={login} />;
   }
 
-  const refreshing = dashboardLoading || entriesLoading || entryLoading;
+  const refreshing = dashboardLoading || entriesLoading || entryLoading || accountsLoading;
 
   return (
     <main className="accounting-app ac-shell">
@@ -417,6 +438,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       <div className="ac-page-wrap">
         {draft ? (
           <DraftReview
+            accounts={accounts}
             api={api}
             draft={draft}
             onCancel={() => setDraft(null)}
@@ -427,6 +449,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
         ) : editingEntry ? (
           <EntryEditor
             accessKey={accessKey}
+            accounts={accounts}
             api={api}
             entry={editingEntry}
             loading={entryLoading}
@@ -1014,6 +1037,7 @@ function EmptyState({ icon, title, description }: { icon: ReactNode; title: stri
 }
 
 function DraftReview({
+  accounts,
   api,
   draft,
   onCancel,
@@ -1021,6 +1045,7 @@ function DraftReview({
   onExpired,
   onSaved,
 }: {
+  accounts: AccountingAccount[];
   api: AccountingApi;
   draft: AccountingDraft;
   onCancel: () => void;
@@ -1029,6 +1054,9 @@ function DraftReview({
   onSaved: (message: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [revising, setRevising] = useState(false);
+  const [revisionInstruction, setRevisionInstruction] = useState("");
+  const [revisionNotice, setRevisionNotice] = useState("");
   const [error, setError] = useState("");
   const [reviewedEntryKeys, setReviewedEntryKeys] = useState<Set<string>>(() => new Set());
 
@@ -1071,6 +1099,32 @@ function DraftReview({
     });
   }
 
+  async function reviseBatch() {
+    const instruction = revisionInstruction.trim();
+    if (instruction.length < 2) {
+      setError("Skriv vad AI ska ändra i utkasten.");
+      return;
+    }
+    setRevising(true);
+    setError("");
+    setRevisionNotice("");
+    try {
+      const revised = await api.reviseDraft(draft, instruction);
+      onChange(revised);
+      setReviewedEntryKeys(new Set());
+      setRevisionInstruction("");
+      setRevisionNotice(
+        `AI uppdaterade hela utkastet. Kontrollera alla ${revised.entries.length} ${revised.entries.length === 1 ? "post" : "poster"} igen.`,
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (revisionError) {
+      if (isUnauthorized(revisionError)) onExpired();
+      else setError(displayError(revisionError, "AI kunde inte ändra utkasten. Dina nuvarande utkast är kvar."));
+    } finally {
+      setRevising(false);
+    }
+  }
+
   async function save() {
     const invalid = draft.entries.find((entry) => !entry.date || !entry.description.trim() || !Number.isFinite(asNumber(entry.amount)));
     if (invalid) {
@@ -1105,7 +1159,7 @@ function DraftReview({
 
   return (
     <div className="ac-view ac-review-view">
-      <button className="ac-back-button" disabled={saving} onClick={onCancel} type="button"><Icon.ArrowLeft /> Tillbaka</button>
+      <button className="ac-back-button" disabled={saving || revising} onClick={onCancel} type="button"><Icon.ArrowLeft /> Tillbaka</button>
       <div className="ac-review-heading">
         <div>
           <p className="ac-eyebrow">Steg 2 av 2</p>
@@ -1148,6 +1202,38 @@ function DraftReview({
         </div>
       )}
 
+      {!draft.manual && (
+        <section className="ac-card ac-ai-batch-editor" aria-busy={revising}>
+          <div className="ac-ai-batch-editor__heading">
+            <span><Icon.Spark size={20} /></span>
+            <div>
+              <strong>Be AI ändra hela utkastet</strong>
+              <p>Beskriv en ändring för en eller flera poster. AI returnerar alltid hela bunten för ny kontroll.</p>
+            </div>
+          </div>
+          <textarea
+            disabled={saving || revising}
+            maxLength={4000}
+            onChange={(event) => {
+              setRevisionInstruction(event.target.value);
+              setError("");
+            }}
+            placeholder="Exempel: Ändra konto på alla taxiresor till 5800, behåll övriga poster och förklara ändringarna."
+            rows={3}
+            value={revisionInstruction}
+          />
+          <button
+            className="ac-button ac-button--secondary"
+            disabled={saving || revising || revisionInstruction.trim().length < 2}
+            onClick={() => void reviseBatch()}
+            type="button"
+          >
+            {revising ? <><span className="ac-button-spinner" /> AI uppdaterar alla…</> : <><Icon.Spark /> Uppdatera hela bunten med AI</>}
+          </button>
+          {revisionNotice && <p className="ac-ai-batch-editor__notice" role="status"><Icon.Check size={17} /> {revisionNotice}</p>}
+        </section>
+      )}
+
       <div className="ac-draft-stack">
         {draft.entries.map((entry, index) => (
           <article
@@ -1158,7 +1244,7 @@ function DraftReview({
             <div className="ac-draft-card-heading">
               <div><span>{index + 1}</span><h2>{entry.description || "Ny bokföringspost"}</h2></div>
               {draft.entries.length > 1 && (
-                <button aria-label={`Ta bort post ${index + 1}`} className="ac-icon-button ac-icon-button--danger" onClick={() => removeEntry(index)} type="button"><Icon.Trash size={19} /></button>
+                <button aria-label={`Ta bort post ${index + 1}`} className="ac-icon-button ac-icon-button--danger" disabled={saving || revising} onClick={() => removeEntry(index)} type="button"><Icon.Trash size={19} /></button>
               )}
             </div>
             {entry.reasoning && (
@@ -1167,11 +1253,12 @@ function DraftReview({
                 <p><strong>AI:s bedömning{entry.confidence != null ? ` · ${Math.round(entry.confidence * 100)} % säkerhet` : ""}</strong>{entry.reasoning}</p>
               </div>
             )}
-            <EntryFields entry={entry} onChange={(patch) => updateEntry(index, patch)} />
+            <EntryFields accounts={accounts} disabled={saving || revising} entry={entry} onChange={(patch) => updateEntry(index, patch)} />
             {!draft.manual && (
               <label className="ac-entry-review-check">
                 <input
                   checked={reviewedEntryKeys.has(entryReviewKey(entry, index))}
+                  disabled={saving || revising}
                   onChange={(event) => {
                     const key = entryReviewKey(entry, index);
                     setReviewedEntryKeys((current) => {
@@ -1191,7 +1278,7 @@ function DraftReview({
         ))}
       </div>
 
-      <button className="ac-add-row-button" disabled={saving} onClick={addEntry} type="button"><Icon.Plus /> Lägg till ytterligare rad</button>
+      <button className="ac-add-row-button" disabled={saving || revising} onClick={addEntry} type="button"><Icon.Plus /> Lägg till ytterligare rad</button>
 
       {error && <p className="ac-form-error ac-form-error--block" role="alert"><Icon.Alert size={18} /> {error}</p>}
 
@@ -1201,7 +1288,7 @@ function DraftReview({
           <strong>{formatCurrency(draft.entries.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}</strong>
           <small>{draft.entries.length} {draft.entries.length === 1 ? "post" : "poster"}</small>
         </div>
-        <button className="ac-button ac-button--primary" disabled={saving} onClick={() => void save()} type="button">
+        <button className="ac-button ac-button--primary" disabled={saving || revising} onClick={() => void save()} type="button">
           {saving ? <><span className="ac-button-spinner" /> Sparar säkert…</> : <><Icon.Check /> Godkänn och bokför</>}
         </button>
       </div>
@@ -1210,20 +1297,66 @@ function DraftReview({
   );
 }
 
-function EntryFields({ entry, onChange }: { entry: DraftEntry | AccountingEntry; onChange: (patch: Partial<DraftEntry>) => void }) {
+function AccountSelect({
+  accounts,
+  disabled,
+  value,
+  onChange,
+}: {
+  accounts: AccountingAccount[];
+  disabled?: boolean;
+  value: string | number | null | undefined;
+  onChange: (account: AccountingAccount | null, value: string) => void;
+}) {
+  const selected = value == null ? "" : String(value);
+  const currentExists = accounts.some((account) => String(account.account) === selected);
+  return (
+    <select
+      disabled={disabled}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        onChange(
+          accounts.find((account) => String(account.account) === nextValue) ?? null,
+          nextValue,
+        );
+      }}
+      value={selected}
+    >
+      <option value="">Välj konto…</option>
+      {selected && !currentExists && <option value={selected}>{selected} — Nuvarande konto</option>}
+      {accounts.map((account) => (
+        <option key={account.id || account.account} value={account.account}>
+          {account.account} — {account.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function EntryFields({
+  accounts,
+  disabled = false,
+  entry,
+  onChange,
+}: {
+  accounts: AccountingAccount[];
+  disabled?: boolean;
+  entry: DraftEntry | AccountingEntry;
+  onChange: (patch: Partial<DraftEntry>) => void;
+}) {
   return (
     <div className="ac-entry-fields">
       <label className="ac-field">
         <span>Datum</span>
-        <input type="date" value={entry.date || ""} onChange={(event) => onChange({ date: event.target.value })} />
+        <input disabled={disabled} type="date" value={entry.date || ""} onChange={(event) => onChange({ date: event.target.value })} />
       </label>
       <label className="ac-field ac-field--wide">
         <span>Beskrivning</span>
-        <input autoComplete="off" placeholder="Vad gäller posten?" value={entry.description || ""} onChange={(event) => onChange({ description: event.target.value })} />
+        <input autoComplete="off" disabled={disabled} placeholder="Vad gäller posten?" value={entry.description || ""} onChange={(event) => onChange({ description: event.target.value })} />
       </label>
       <label className="ac-field">
         <span>Typ</span>
-        <select value={canonicalEntryType(entry.type)} onChange={(event) => onChange({ type: event.target.value })}>
+        <select disabled={disabled} value={canonicalEntryType(entry.type)} onChange={(event) => onChange({ type: event.target.value })}>
           <option value="Utbetalning">Kostnad (utbetalning)</option>
           <option value="Inbetalning">Intäkt (inbetalning)</option>
           <option value="Överföring">Överföring</option>
@@ -1233,53 +1366,74 @@ function EntryFields({ entry, onChange }: { entry: DraftEntry | AccountingEntry;
       <label className="ac-field">
         <span>Totalbelopp</span>
         <span className="ac-money-input">
-          <input inputMode="decimal" min="0" step="0.01" type="number" value={entry.amount ?? 0} onChange={(event) => onChange({ amount: asNumber(event.target.value) })} />
+          <input disabled={disabled} inputMode="decimal" min="0" step="0.01" type="number" value={entry.amount ?? 0} onChange={(event) => onChange({ amount: asNumber(event.target.value) })} />
           <span>SEK</span>
         </span>
       </label>
       <label className="ac-field">
         <span>Exkl. moms</span>
         <span className="ac-money-input">
-          <input inputMode="decimal" min="0" placeholder="0,00" step="0.01" type="number" value={entry.beloppExMoms ?? ""} onChange={(event) => onChange({ beloppExMoms: event.target.value === "" ? null : asNumber(event.target.value) })} />
+          <input disabled={disabled} inputMode="decimal" min="0" placeholder="0,00" step="0.01" type="number" value={entry.beloppExMoms ?? ""} onChange={(event) => onChange({ beloppExMoms: event.target.value === "" ? null : asNumber(event.target.value) })} />
           <span>SEK</span>
         </span>
       </label>
       <label className="ac-field">
         <span>Moms</span>
         <span className="ac-money-input">
-          <input inputMode="decimal" min="0" placeholder="0,00" step="0.01" type="number" value={entry.moms ?? ""} onChange={(event) => onChange({ moms: event.target.value === "" ? null : asNumber(event.target.value) })} />
+          <input disabled={disabled} inputMode="decimal" min="0" placeholder="0,00" step="0.01" type="number" value={entry.moms ?? ""} onChange={(event) => onChange({ moms: event.target.value === "" ? null : asNumber(event.target.value) })} />
           <span>SEK</span>
         </span>
       </label>
-      <fieldset className="ac-account-group ac-field--wide">
+      <fieldset className="ac-account-group ac-field--wide" disabled={disabled}>
         <legend>Debet</legend>
         <label className="ac-field">
           <span>Konto</span>
-          <input inputMode="numeric" placeholder="T.ex. 6540" value={entry.debitAccount || ""} onChange={(event) => onChange({ debitAccount: event.target.value })} />
+          <AccountSelect
+            accounts={accounts}
+            disabled={disabled}
+            onChange={(account, accountValue) => onChange({
+              debitAccount: accountValue,
+              debitName: account?.name ?? (accountValue ? entry.debitName : ""),
+            })}
+            value={entry.debitAccount}
+          />
         </label>
         <label className="ac-field">
           <span>Kontonamn</span>
-          <input placeholder="T.ex. IT-tjänster" value={entry.debitName || ""} onChange={(event) => onChange({ debitName: event.target.value })} />
+          <input disabled={disabled} placeholder="T.ex. IT-tjänster" value={entry.debitName || ""} onChange={(event) => onChange({ debitName: event.target.value })} />
         </label>
       </fieldset>
-      <fieldset className="ac-account-group ac-field--wide">
+      <fieldset className="ac-account-group ac-field--wide" disabled={disabled}>
         <legend>Kredit</legend>
         <label className="ac-field">
           <span>Konto</span>
-          <input inputMode="numeric" placeholder="T.ex. 1930" value={entry.creditAccount || ""} onChange={(event) => onChange({ creditAccount: event.target.value })} />
+          <AccountSelect
+            accounts={accounts}
+            disabled={disabled}
+            onChange={(account, accountValue) => onChange({
+              creditAccount: accountValue,
+              creditName: account?.name ?? (accountValue ? entry.creditName : ""),
+            })}
+            value={entry.creditAccount}
+          />
         </label>
         <label className="ac-field">
           <span>Kontonamn</span>
-          <input placeholder="T.ex. Företagskonto" value={entry.creditName || ""} onChange={(event) => onChange({ creditName: event.target.value })} />
+          <input disabled={disabled} placeholder="T.ex. Företagskonto" value={entry.creditName || ""} onChange={(event) => onChange({ creditName: event.target.value })} />
         </label>
       </fieldset>
       <label className="ac-field">
         <span>Momskonto</span>
-        <input inputMode="numeric" placeholder="T.ex. 2641" value={entry.momsAccount || ""} onChange={(event) => onChange({ momsAccount: event.target.value })} />
+        <AccountSelect
+          accounts={accounts}
+          disabled={disabled}
+          onChange={(_, accountValue) => onChange({ momsAccount: accountValue })}
+          value={entry.momsAccount}
+        />
       </label>
       <label className="ac-field ac-field--wide">
         <span>Anteckning</span>
-        <textarea placeholder="Valfri intern anteckning" rows={3} value={entry.notes || ""} onChange={(event) => onChange({ notes: event.target.value })} />
+        <textarea disabled={disabled} placeholder="Valfri intern anteckning" rows={3} value={entry.notes || ""} onChange={(event) => onChange({ notes: event.target.value })} />
       </label>
     </div>
   );
@@ -1382,6 +1536,7 @@ function LedgerView({
 
 function EntryEditor({
   accessKey,
+  accounts,
   api,
   entry,
   loading,
@@ -1392,6 +1547,7 @@ function EntryEditor({
   onSaved,
 }: {
   accessKey: string;
+  accounts: AccountingAccount[];
   api: AccountingApi;
   entry: AccountingEntry;
   loading: boolean;
@@ -1525,7 +1681,7 @@ function EntryEditor({
             <div><p className="ac-eyebrow">Redigera</p><h2 id="edit-entry-heading">Postens uppgifter</h2></div>
             <span className="ac-section-icon"><Icon.Edit size={20} /></span>
           </div>
-          <EntryFields entry={entry} onChange={patchEntry} />
+          <EntryFields accounts={accounts} disabled={saving || deleting} entry={entry} onChange={patchEntry} />
           {error && <p className="ac-form-error ac-form-error--block" role="alert"><Icon.Alert size={18} /> {error}</p>}
           <div className="ac-editor-actions">
             <button className="ac-button ac-button--primary" disabled={saving || deleting} onClick={() => void save()} type="button">

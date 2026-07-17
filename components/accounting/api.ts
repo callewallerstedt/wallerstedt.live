@@ -540,6 +540,24 @@ export class AccountingApi {
     }
   }
 
+  async reviseDraft(
+    draft: AccountingDraft,
+    instruction: string,
+  ): Promise<AccountingDraft> {
+    const payload = await this.request<unknown>(
+      `/ai/draft/${encodeURIComponent(draft.id)}/revise`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instruction: instruction.trim(),
+          entries: draft.entries,
+        }),
+      },
+    );
+    return normalizeDraft(payload);
+  }
+
   async approveDraft(draft: AccountingDraft): Promise<AccountingEntry[]> {
     const init: RequestInit = {
       method: "POST",
