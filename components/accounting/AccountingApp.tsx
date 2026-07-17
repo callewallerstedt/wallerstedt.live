@@ -3,8 +3,10 @@
 import Image from "next/image";
 import {
   type ChangeEvent,
+  type ClipboardEvent,
   type DragEvent,
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -364,30 +366,43 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       setAiError("Skriv vad du vill att AI-agenten ska göra eller lägg till ett underlag.");
       return;
     }
-    const userMessage = aiText.trim()
-      || `Granska ${aiFiles.length} ${aiFiles.length === 1 ? "bifogat underlag" : "bifogade underlag"}.`;
+    const requestText = aiText;
+    const requestFiles = [...aiFiles];
+    const attachmentSummary = requestFiles.length > 0
+      ? `Bifogat: ${requestFiles.map((file) => file.name).join(", ")}`
+      : "";
+    const userMessage = [
+      requestText.trim() || `Granska ${requestFiles.length} ${requestFiles.length === 1 ? "bifogat underlag" : "bifogade underlag"}.`,
+      attachmentSummary,
+    ].filter(Boolean).join("\n\n");
+    const previousMessages = agentMessages;
     setAiLoading(true);
     setAiProgress(null);
     setAiError("");
+    setAgentMessages((current) => [
+      ...current,
+      { role: "user", content: userMessage } as AccountingAgentMessage,
+    ].slice(-12));
+    setAiText("");
+    setAiFiles([]);
     try {
       const result = await api.askAgent(
-        aiText,
-        aiFiles,
-        agentMessages,
+        requestText,
+        requestFiles,
+        previousMessages,
         setAiProgress,
       );
       setAgentMessages((current) => [
         ...current,
-        { role: "user", content: userMessage } as AccountingAgentMessage,
         { role: "assistant", content: result.message } as AccountingAgentMessage,
       ].slice(-12));
       setAgentResult(result);
-      setAiText("");
-      setAiFiles([]);
       setTab("home");
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       if (!handleUnauthorized(error)) {
+        setAgentMessages(previousMessages);
+        setAiText(requestText);
+        setAiFiles(requestFiles);
         setAiError(displayError(error, "AI-agenten kunde inte slutföra uppdraget. Ingenting ändrades."));
       }
     } finally {
@@ -813,32 +828,23 @@ function HomeView({
 
       <div className="ac-home-grid">
         <div className="ac-home-primary">
-          <AiComposer
-            agentMode
+          <AgentChat
+            messages={agentMessages}
+            result={agentResult}
             aiError={aiError}
-            compact
             files={files}
             loading={aiLoading}
             onAnalyze={onAnalyze}
+            onClear={onClearAgent}
             onFiles={onFiles}
             onManual={onManual}
+            onOpenDraft={onOpenDraft}
+            onOpenEntry={onOpenEntry}
+            onReviewProposal={onReviewProposal}
             onText={onText}
             progress={progress}
             text={text}
           />
-
-          {agentMessages.length > 0 && (
-            <AgentConversation messages={agentMessages} onClear={onClearAgent} />
-          )}
-
-          {agentResult && (
-            <AgentResultPanel
-              onOpenDraft={onOpenDraft}
-              onOpenEntry={onOpenEntry}
-              onReviewProposal={onReviewProposal}
-              result={agentResult}
-            />
-          )}
 
           <section className="ac-section-block" aria-labelledby="recent-heading">
             <div className="ac-section-heading-row">
@@ -933,27 +939,251 @@ function AccountBalanceCards({
   );
 }
 
-function AgentConversation({
+function AgentChat({
+  aiError,
+  files,
+  loading,
   messages,
+  onAnalyze,
   onClear,
+  onFiles,
+  onManual,
+  onOpenDraft,
+  onOpenEntry,
+  onReviewProposal,
+  onText,
+  progress,
+  result,
+  text,
 }: {
+  aiError: string;
+  files: File[];
+  loading: boolean;
   messages: AccountingAgentMessage[];
+  onAnalyze: () => void;
   onClear: () => void;
+  onFiles: (files: File[]) => void;
+  onManual: () => void;
+  onOpenDraft: (draft: AccountingDraft) => void;
+  onOpenEntry: (entry: AccountingEntry) => void;
+  onReviewProposal: (proposal: AccountingAgentProposal) => void;
+  onText: (text: string) => void;
+  progress: AccountingUploadProgress | null;
+  result: AccountingAgentResult | null;
+  text: string;
 }) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const filesRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (messages.length === 0 && !loading && !result) return;
+    chatEndRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [loading, messages, result]);
+
+  function appendFiles(nextFiles: File[]) {
+    const merged = [...files];
+    nextFiles.filter((file) => file.size > 0).forEach((file) => {
+      if (!merged.some((current) => current.name === file.name && current.size === file.size && current.lastModified === file.lastModified)) {
+        merged.push(file);
+      }
+    });
+    onFiles(merged.slice(0, 8));
+  }
+
+  function picked(event: ChangeEvent<HTMLInputElement>) {
+    appendFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+    if (menuRef.current) menuRef.current.open = false;
+    textareaRef.current?.focus();
+  }
+
+  function pasted(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const directFiles = Array.from(event.clipboardData.files);
+    const itemFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const pastedFiles = directFiles.length > 0 ? directFiles : itemFiles;
+    if (pastedFiles.length === 0) return;
+    event.preventDefault();
+    appendFiles(pastedFiles);
+  }
+
+  function dropped(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    setDragging(false);
+    appendFiles(Array.from(event.dataTransfer.files));
+  }
+
+  function submit(event?: FormEvent) {
+    event?.preventDefault();
+    if (!loading && (text.trim() || files.length > 0)) onAnalyze();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    submit();
+  }
+
+  function resizeTextarea(element: HTMLTextAreaElement) {
+    element.style.height = "0px";
+    element.style.height = `${Math.min(element.scrollHeight, 144)}px`;
+  }
+
+  const hasConversation = messages.length > 0 || result;
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+
   return (
-    <section className="ac-agent-conversation" aria-label="Samtal med AI-agenten">
-      <div className="ac-agent-section-heading">
-        <div><Icon.Spark size={18} /><strong>Senaste samtalet</strong></div>
-        <button onClick={onClear} type="button">Rensa</button>
-      </div>
-      <div className="ac-agent-messages">
-        {messages.slice(-6).map((message, index) => (
-          <div className={`ac-agent-message is-${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 20)}`}>
-            <span>{message.role === "user" ? "Du" : "AI"}</span>
-            <AgentMessageContent content={message.content} />
+    <section
+      className={`ac-agent-chat ${dragging ? "is-dragging" : ""}`}
+      aria-labelledby="accounting-chat-heading"
+      onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={dropped}
+    >
+      <header className="ac-agent-chat-header">
+        <div className="ac-agent-chat-identity">
+          <span><Icon.Spark size={19} /></span>
+          <div>
+            <h2 id="accounting-chat-heading">Bokförings-AI</h2>
+            <small>Kan läsa, hitta och förbereda ändringar</small>
+          </div>
+        </div>
+        {hasConversation && (
+          <button className="ac-agent-new-chat" disabled={loading} onClick={onClear} type="button">
+            Nytt samtal
+          </button>
+        )}
+      </header>
+
+      <div className={`ac-agent-chat-thread ${hasConversation ? "has-conversation" : "is-empty"}`} aria-live="polite">
+        {!hasConversation && (
+          <div className="ac-agent-chat-welcome">
+            <span><Icon.Spark size={24} /></span>
+            <h3>Vad vill du göra?</h3>
+            <p>Fråga om bokföringen, skapa poster eller lägg till kvitton och filer.</p>
+            <div className="ac-agent-suggestions" aria-label="Förslag">
+              {["Visa vad jag behöver bokföra", "Kontrollera senaste posterna", "Hjälp mig bokföra ett kvitto"].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => {
+                    onText(suggestion);
+                    window.setTimeout(() => textareaRef.current?.focus(), 0);
+                  }}
+                  type="button"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.slice(-12).map((message, index) => (
+          <div className={`ac-agent-chat-message is-${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 20)}`}>
+            {message.role === "assistant" && <span className="ac-agent-chat-avatar"><Icon.Spark size={15} /></span>}
+            <div className="ac-agent-chat-bubble">
+              <AgentMessageContent content={message.content} />
+            </div>
           </div>
         ))}
+
+        {loading && (
+          <div className="ac-agent-chat-message is-assistant is-loading" role="status">
+            <span className="ac-agent-chat-avatar"><Icon.Spark size={15} /></span>
+            <div className="ac-agent-chat-bubble">
+              <span className="ac-agent-thinking"><i /><i /><i /></span>
+              <small>{progress?.phase === "uploading" ? "Laddar upp underlag…" : "Arbetar med bokföringen…"}</small>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <AgentResultPanel
+            onOpenDraft={onOpenDraft}
+            onOpenEntry={onOpenEntry}
+            onReviewProposal={onReviewProposal}
+            result={result}
+          />
+        )}
+        <div ref={chatEndRef} />
       </div>
+
+      <form className="ac-agent-chat-composer" onSubmit={submit}>
+        <input accept="image/*" capture="environment" className="ac-visually-hidden" onChange={picked} ref={cameraRef} type="file" />
+        <input accept="image/jpeg,image/png,.pdf,.txt,.csv" className="ac-visually-hidden" multiple onChange={picked} ref={filesRef} type="file" />
+
+        {files.length > 0 && (
+          <div className="ac-agent-chat-files">
+            <div className="ac-agent-chat-file-summary">
+              <span>{files.length} {files.length === 1 ? "bilaga" : "bilagor"}</span>
+              <small>{totalSize < 1_000_000 ? `${Math.max(1, Math.round(totalSize / 1000))} kB` : `${(totalSize / 1_000_000).toFixed(1).replace(".", ",")} MB`}</small>
+            </div>
+            <div className="ac-agent-chat-file-list">
+              {files.map((file, index) => (
+                <div className="ac-agent-chat-file" key={`${file.name}-${file.size}-${file.lastModified}`}>
+                  <span><Icon.File size={16} /></span>
+                  <strong>{file.name}</strong>
+                  <button aria-label={`Ta bort ${file.name}`} onClick={() => onFiles(files.filter((_, fileIndex) => fileIndex !== index))} type="button"><Icon.Close size={15} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {aiError && <p className="ac-form-error" role="alert"><Icon.Alert size={18} /> {aiError}</p>}
+
+        <div className="ac-agent-chat-input-row">
+          <details className="ac-agent-attach" ref={menuRef}>
+            <summary aria-label="Lägg till bilaga"><Icon.Plus size={21} /></summary>
+            <div className="ac-agent-attach-menu">
+              <button disabled={loading} onClick={() => cameraRef.current?.click()} type="button"><Icon.Camera size={19} /><span><strong>Ta foto</strong><small>Använd kameran</small></span></button>
+              <button disabled={loading} onClick={() => filesRef.current?.click()} type="button"><Icon.Upload size={19} /><span><strong>Välj filer</strong><small>Bild, PDF, text eller CSV</small></span></button>
+              <button disabled={loading} onClick={() => { if (menuRef.current) menuRef.current.open = false; onManual(); }} type="button"><Icon.Edit size={19} /><span><strong>Manuell post</strong><small>Fyll i själv</small></span></button>
+            </div>
+          </details>
+          <textarea
+            aria-label="Meddelande till Bokförings-AI"
+            disabled={loading}
+            onChange={(event) => {
+              onText(event.target.value);
+              resizeTextarea(event.target);
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={pasted}
+            placeholder="Skriv till Bokförings-AI…"
+            ref={textareaRef}
+            rows={1}
+            value={text}
+          />
+          <button
+            aria-label="Skicka meddelande"
+            className="ac-agent-chat-send"
+            disabled={loading || (!text.trim() && files.length === 0)}
+            type="submit"
+          >
+            {loading ? <span className="ac-button-spinner" /> : <Icon.Chevron size={21} />}
+          </button>
+        </div>
+        <p className="ac-agent-chat-hint">Enter skickar · Shift + Enter gör ny rad · klistra in bilder direkt</p>
+        <p className="ac-agent-chat-safety"><Icon.Shield size={14} /> Ändringar kräver alltid ditt godkännande</p>
+      </form>
+
+      {dragging && (
+        <div className="ac-agent-drop-overlay" aria-hidden="true">
+          <Icon.Upload size={28} />
+          <strong>Släpp filer här</strong>
+          <small>Upp till 8 underlag per meddelande</small>
+        </div>
+      )}
     </section>
   );
 }
