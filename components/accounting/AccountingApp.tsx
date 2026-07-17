@@ -872,7 +872,7 @@ function AiComposer({
       <div className="ac-ai-copy">
         <p className="ac-eyebrow">AI-assistent</p>
         <h2 id={compact ? "quick-ai-heading" : "new-ai-heading"}>{compact ? "Ny post med AI" : "Skapa ett utkast"}</h2>
-        <p>{compact ? "Skriv, fotografera eller lägg till ett kvitto." : "AI läser materialet och förbereder ett redigerbart bokföringsförslag."}</p>
+        <p>{compact ? "Skriv eller lägg till flera kvitton samtidigt." : "AI delar upp materialet i separata, redigerbara bokföringsförslag som du kontrollerar ett i taget."}</p>
       </div>
 
       <label className="ac-ai-textarea">
