@@ -17,7 +17,12 @@ const trackingEndpoint = "/api/collect";
 const trackedExternalLinkSelector = "a.button[href], a.platform-button[href]";
 
 function shouldTrackPath(pathname: string) {
-  return pathname !== "" && !pathname.startsWith("/admin") && !pathname.startsWith("/api");
+  return (
+    pathname !== "" &&
+    !pathname.startsWith("/admin") &&
+    !pathname.startsWith("/api") &&
+    !pathname.startsWith("/vault")
+  );
 }
 
 function sendAnalytics(payload: AnalyticsPayload) {
