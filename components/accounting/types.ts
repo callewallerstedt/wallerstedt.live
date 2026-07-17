@@ -38,6 +38,9 @@ export type DashboardSummary = {
   expenses: number;
   result: number;
   balance: number | null;
+  companyAccountBalance: number;
+  capitalInsuranceBalance: number;
+  accountBalancesAsOf?: string | null;
   vat: number;
   entryCount: number;
   receiptCount: number;

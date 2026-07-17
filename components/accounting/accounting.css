@@ -388,6 +388,122 @@ body:has(.accounting-app) > .footer {
   top: calc(90px + env(safe-area-inset-top));
 }
 
+.ac-account-balances {
+  display: grid;
+  margin: -5px 0 24px;
+  gap: 11px;
+}
+
+.ac-account-balances-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 14px;
+}
+
+.ac-account-balances-heading h2 {
+  margin: 0;
+  font-size: 1.14rem;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.ac-account-balances-heading .ac-eyebrow {
+  margin-bottom: 3px;
+}
+
+.ac-account-balances-heading > span {
+  color: var(--ac-muted);
+  font-size: 0.71rem;
+  text-align: right;
+}
+
+.ac-account-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ac-account-balance-card {
+  display: grid;
+  min-width: 0;
+  min-height: 116px;
+  padding: 16px 18px;
+  overflow: hidden;
+  border: 1px solid var(--ac-line);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 92% 4%, rgba(255, 255, 255, 0.06), transparent 38%),
+    var(--ac-surface);
+  box-shadow: var(--ac-shadow-sm);
+}
+
+.ac-account-balance-label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  color: var(--ac-muted);
+  font-size: 0.78rem;
+  font-weight: 720;
+}
+
+.ac-account-balance-label > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  color: var(--ac-ink);
+  border: 1px solid var(--ac-line-strong);
+  border-radius: 9px;
+  background: #202020;
+}
+
+.ac-account-balance-card > strong {
+  align-self: end;
+  margin-top: 9px;
+  overflow: hidden;
+  font-size: clamp(1.05rem, 3vw, 1.42rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-account-balance-card > small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--ac-muted-light);
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-account-balances--error {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 13px;
+  color: var(--ac-muted);
+  font-size: 0.8rem;
+  border: 1px dashed var(--ac-line-strong);
+  border-radius: 17px;
+  background: var(--ac-surface);
+}
+
+.ac-account-balances--error button {
+  min-height: 36px;
+  padding: 0 11px;
+  color: var(--ac-ink);
+  cursor: pointer;
+  border: 1px solid var(--ac-line-strong);
+  border-radius: 10px;
+  background: var(--ac-surface-soft);
+}
+
 .ac-ai-composer {
   position: relative;
   isolation: isolate;
@@ -3371,6 +3487,46 @@ body:has(.accounting-app) > .footer {
 }
 
 @media (max-width: 520px) {
+  .ac-account-balances {
+    margin-bottom: 18px;
+  }
+
+  .ac-account-balances-heading {
+    align-items: flex-start;
+  }
+
+  .ac-account-balances-heading > span {
+    max-width: 126px;
+  }
+
+  .ac-account-balance-grid {
+    gap: 9px;
+  }
+
+  .ac-account-balance-card {
+    min-height: 108px;
+    padding: 13px;
+    border-radius: 17px;
+  }
+
+  .ac-account-balance-label {
+    gap: 6px;
+    font-size: 0.72rem;
+  }
+
+  .ac-account-balance-label > span {
+    width: 27px;
+    height: 27px;
+  }
+
+  .ac-account-balance-card > strong {
+    font-size: clamp(0.98rem, 4.3vw, 1.18rem);
+  }
+
+  .ac-account-balance-card > small {
+    font-size: 0.61rem;
+  }
+
   .ac-agent-message {
     max-width: 94%;
   }

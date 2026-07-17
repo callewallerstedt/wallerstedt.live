@@ -809,6 +809,8 @@ function HomeView({
     <div className="ac-view ac-home-view">
       <PageHeading eyebrow="Översikt" title="Hej Calle" description="Allt du behöver för dagens bokföring." />
 
+      <AccountBalanceCards dashboard={dashboard} error={error} loading={loading} onRetry={onRetry} />
+
       <div className="ac-home-grid">
         <div className="ac-home-primary">
           <AiComposer
@@ -871,6 +873,63 @@ function HomeView({
         </aside>
       </div>
     </div>
+  );
+}
+
+function AccountBalanceCards({
+  dashboard,
+  error,
+  loading,
+  onRetry,
+}: {
+  dashboard: DashboardData | null;
+  error: string;
+  loading: boolean;
+  onRetry: () => void;
+}) {
+  if (loading && !dashboard) {
+    return (
+      <section className="ac-account-balances" aria-label="Laddar kontosaldon">
+        <div className="ac-account-balance-grid">
+          <article className="ac-account-balance-card ac-skeleton-card" />
+          <article className="ac-account-balance-card ac-skeleton-card" />
+        </div>
+      </section>
+    );
+  }
+  if (error && !dashboard) {
+    return (
+      <section className="ac-account-balances ac-account-balances--error" aria-label="Kontosaldon">
+        <span>Kunde inte läsa kontosaldona.</span>
+        <button onClick={onRetry} type="button">Försök igen</button>
+      </section>
+    );
+  }
+  if (!dashboard) return null;
+
+  const summary = dashboard.summary;
+  return (
+    <section className="ac-account-balances" aria-labelledby="account-balances-heading">
+      <div className="ac-account-balances-heading">
+        <div>
+          <p className="ac-eyebrow">Snabbkontroll</p>
+          <h2 id="account-balances-heading">Kontosaldon</h2>
+        </div>
+        <span>{summary.accountBalancesAsOf ? `T.o.m. ${formatDate(summary.accountBalancesAsOf)}` : "Baserat på bokförda poster"}</span>
+      </div>
+      <div className="ac-account-balance-grid">
+        <article className="ac-account-balance-card">
+          <div className="ac-account-balance-label"><span><Icon.Wallet size={17} /></span> Företagskonto</div>
+          <strong>{formatCurrency(summary.companyAccountBalance)}</strong>
+          <small>Konto 1930 · debet minus kredit</small>
+        </article>
+        <article className="ac-account-balance-card">
+          <div className="ac-account-balance-label"><span><Icon.Wallet size={17} /></span> KF-saldo</div>
+          <strong>{formatCurrency(summary.capitalInsuranceBalance)}</strong>
+          <small>Avanza · konto 1385 · bokfört värde</small>
+        </article>
+      </div>
+    </section>
   );
 }
 
@@ -1202,7 +1261,7 @@ function SummaryCards({
       </div>
       <article className="ac-summary-card ac-summary-card--compact">
         <div><span>Moms</span><strong>{formatCurrency(summary.vat)}</strong></div>
-        <div><span>Saldo</span><strong>{summary.balance == null ? "Ej beräknat" : formatCurrency(summary.balance)}</strong></div>
+        <div><span>Nettoflöde</span><strong>{summary.balance == null ? "Ej beräknat" : formatCurrency(summary.balance)}</strong></div>
       </article>
       <article className="ac-summary-card ac-summary-card--compact">
         <div><span>Poster</span><strong>{numberFormatter.format(summary.entryCount)}</strong></div>

@@ -1,4 +1,5 @@
 import { Prisma, type AccountingEntry } from "@prisma/client";
+import { calculateAccountBalances, centsToMoney } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError, AccountingError } from "./errors";
 import {
@@ -508,11 +509,15 @@ export async function dashboard() {
     // This simplified ledger has no bank reconciliation model yet; expose result explicitly.
     balance: income.minus(expenses).toFixed(2),
   };
+  const accountBalances = calculateAccountBalances(entries);
   const recent = entries.slice(0, 8).map(serializeEntry);
   return {
     totals,
     summary: {
       ...totals,
+      companyAccountBalance: centsToMoney(accountBalances.companyAccountCents),
+      capitalInsuranceBalance: centsToMoney(accountBalances.capitalInsuranceCents),
+      accountBalancesAsOf: accountBalances.asOf,
       entryCount: entries.length,
       receiptCount: documentCount,
     },
