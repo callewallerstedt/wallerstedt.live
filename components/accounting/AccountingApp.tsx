@@ -90,9 +90,9 @@ function entryTypeLabel(entry: AccountingEntry) {
 }
 
 function entryTone(entry: AccountingEntry) {
-  const label = entryTypeLabel(entry);
-  if (label === "Intäkt") return "income";
-  if (label === "Kostnad") return "expense";
+  const type = canonicalEntryType(entry.type);
+  if (type === "Inbetalning") return "income";
+  if (type === "Utbetalning") return "expense";
   return "neutral";
 }
 
@@ -1197,7 +1197,7 @@ function SummaryCards({
         </article>
         <article className="ac-summary-card">
           <span>Kostnader</span>
-          <strong>{formatCurrency(summary.expenses)}</strong>
+          <strong className="ac-text-negative">{formatCurrency(summary.expenses)}</strong>
         </article>
       </div>
       <article className="ac-summary-card ac-summary-card--compact">
@@ -1400,14 +1400,14 @@ function AiComposer({
 function EntryRow({ entry, onClick }: { entry: AccountingEntry; onClick: () => void }) {
   const tone = entryTone(entry);
   return (
-    <button className="ac-entry-row" onClick={onClick} type="button">
+    <button className={`ac-entry-row is-${tone}`} onClick={onClick} type="button">
       <span className={`ac-entry-avatar is-${tone}`}><Icon.Receipt size={20} /></span>
       <span className="ac-entry-copy">
         <strong>{entry.description || "Bokföringspost"}</strong>
         <small>{formatDate(entry.date)} · {entry.debitAccount || entry.creditAccount || entryTypeLabel(entry)}</small>
       </span>
       <span className="ac-entry-amount">
-        <strong className={tone === "income" ? "ac-text-positive" : ""}>{formatCurrency(entry.amount)}</strong>
+        <strong className={tone === "income" ? "ac-text-positive" : tone === "expense" ? "ac-text-negative" : ""}>{formatCurrency(entry.amount)}</strong>
         <small>{entryTypeLabel(entry)}</small>
       </span>
       <Icon.Chevron className="ac-row-chevron" size={19} />

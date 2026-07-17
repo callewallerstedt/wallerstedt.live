@@ -19,6 +19,12 @@
   --ac-danger-soft: #1d1d1d;
   --ac-warning: #d5d5d5;
   --ac-warning-soft: #202020;
+  --ac-income: #a9e6bd;
+  --ac-income-soft: rgba(79, 169, 111, 0.14);
+  --ac-income-line: rgba(169, 230, 189, 0.34);
+  --ac-outgoing: #f2aaa6;
+  --ac-outgoing-soft: rgba(190, 74, 70, 0.14);
+  --ac-outgoing-line: rgba(242, 170, 166, 0.34);
   --ac-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42), 0 12px 32px rgba(0, 0, 0, 0.28);
   --ac-shadow-md: 0 18px 54px rgba(0, 0, 0, 0.38);
   --ac-radius-sm: 14px;
@@ -86,6 +92,7 @@ body:has(.accounting-app) > .footer {
 .accounting-app textarea,
 .accounting-app select {
   font: inherit;
+  max-width: 100%;
 }
 
 .accounting-app button,
@@ -886,6 +893,14 @@ body:has(.accounting-app) > .footer {
   transition: border-color 170ms ease, background 170ms ease, transform 170ms ease;
 }
 
+.ac-entry-row.is-income {
+  box-shadow: inset 2px 0 0 var(--ac-income-line);
+}
+
+.ac-entry-row.is-expense {
+  box-shadow: inset 2px 0 0 var(--ac-outgoing-line);
+}
+
 .ac-entry-row:hover {
   transform: translateX(2px);
   border-color: var(--ac-line);
@@ -1307,6 +1322,10 @@ body:has(.accounting-app) > .footer {
 
 .ac-text-positive {
   color: var(--ac-green-bright) !important;
+}
+
+.ac-text-negative {
+  color: var(--ac-danger) !important;
 }
 
 .ac-row-chevron {
@@ -1923,6 +1942,9 @@ body:has(.accounting-app) > .footer {
 .ac-entry-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   gap: 17px;
 }
 
@@ -1964,13 +1986,31 @@ body:has(.accounting-app) > .footer {
 .ac-field input[type="date"] {
   display: block;
   width: 100%;
+  inline-size: 100%;
   min-width: 0;
+  min-inline-size: 0;
   max-width: 100%;
+  max-inline-size: 100%;
+  overflow: hidden;
+  color-scheme: dark;
 }
 
 .ac-field input[type="date"]::-webkit-date-and-time-value {
+  width: 100%;
   min-width: 0;
+  padding: 0;
   text-align: left;
+}
+
+.ac-field input[type="date"]::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
+}
+
+.ac-field select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ac-field textarea {
@@ -1998,6 +2038,9 @@ body:has(.accounting-app) > .footer {
 .ac-money-input {
   position: relative;
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .ac-money-input input {
@@ -2017,12 +2060,20 @@ body:has(.accounting-app) > .footer {
 .ac-account-group {
   display: grid;
   grid-template-columns: minmax(120px, 0.55fr) minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 15px;
   margin: 0;
   gap: 13px;
   border: 1px solid var(--ac-line);
   border-radius: 17px;
   background: var(--ac-surface-soft);
+}
+
+.ac-account-group > .ac-field {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .ac-account-group legend {
@@ -3575,10 +3626,7 @@ body:has(.accounting-app) > .footer {
   color-scheme: dark;
 }
 
-/* Keep every status and third-party document preview strictly monochrome. */
-.accounting-app > * {
-  filter: grayscale(1);
-}
+/* Dark graphite stays monochrome apart from semantic money colors below. */
 
 .accounting-app button:focus-visible,
 .accounting-app a:focus-visible,
@@ -3798,20 +3846,27 @@ body:has(.accounting-app) > .footer {
 }
 
 .ac-entry-avatar.is-income {
-  color: #f2f2f2;
-  border: 1px solid #555;
-  background: #252525;
+  color: var(--ac-income);
+  border: 1px solid var(--ac-income-line);
+  background: var(--ac-income-soft);
 }
 
 .ac-entry-avatar.is-expense {
-  color: #b8b8b8;
-  border: 1px dashed #555;
-  background: #161616;
+  color: var(--ac-outgoing);
+  border: 1px solid var(--ac-outgoing-line);
+  background: var(--ac-outgoing-soft);
 }
 
-.ac-text-positive,
+.ac-text-positive {
+  color: var(--ac-income) !important;
+}
+
+.ac-text-negative {
+  color: var(--ac-outgoing) !important;
+}
+
 .ac-row-chevron {
-  color: var(--ac-ink) !important;
+  color: var(--ac-muted) !important;
 }
 
 .ac-entry-row--skeleton span,
@@ -3926,9 +3981,127 @@ body:has(.accounting-app) > .footer {
 }
 
 .ac-detail-amount.is-income {
-  color: var(--ac-ink);
-  border-color: #555;
-  background: #202020;
+  color: var(--ac-income);
+  border-color: var(--ac-income-line);
+  background: var(--ac-income-soft);
+}
+
+.ac-detail-amount.is-expense {
+  color: var(--ac-outgoing);
+  border-color: var(--ac-outgoing-line);
+  background: var(--ac-outgoing-soft);
+}
+
+/* Mobile overflow hardening ------------------------------------------------ */
+
+.ac-page-wrap,
+.ac-view,
+.ac-home-grid,
+.ac-home-primary,
+.ac-home-sidebar,
+.ac-ledger-card,
+.ac-detail-grid,
+.ac-detail-grid > *,
+.ac-settings-grid,
+.ac-settings-grid > *,
+.ac-draft-stack,
+.ac-draft-card,
+.ac-entry-editor-card,
+.ac-section-heading-row,
+.ac-section-heading-row > div,
+.ac-detail-heading > div,
+.ac-review-heading > div,
+.ac-document-actions,
+.ac-account-form,
+.ac-account-edit-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ac-page-heading h1,
+.ac-review-heading h1,
+.ac-detail-heading h1,
+.ac-section-heading-row h2,
+.ac-install-card h2,
+.ac-backup-card h2,
+.ac-security-card h2,
+.ac-session-card h2,
+.ac-danger-card h2,
+.ac-document-list strong,
+.ac-document-list small {
+  overflow-wrap: anywhere;
+}
+
+.ac-document-actions,
+.ac-ledger-result-row,
+.ac-account-delete-confirm,
+.ac-document-delete-confirm {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  .accounting-app input,
+  .accounting-app textarea,
+  .accounting-app select {
+    font-size: 16px;
+  }
+
+  .ac-entry-editor-card,
+  .ac-draft-card,
+  .ac-ledger-card,
+  .ac-accounts-card {
+    overflow: hidden;
+  }
+
+  .ac-field input,
+  .ac-field select,
+  .ac-field textarea,
+  .ac-money-input,
+  .ac-money-input input,
+  .ac-account-group,
+  .ac-search-field,
+  .ac-filter-row,
+  .ac-filter-row > label,
+  .ac-filter-row select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ac-section-heading-row {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 380px) {
+  .ac-section-block,
+  .ac-ledger-card,
+  .ac-draft-card,
+  .ac-entry-editor-card,
+  .ac-accounts-card {
+    padding: 15px;
+  }
+
+  .ac-account-group {
+    padding: 12px;
+  }
+
+  .ac-account-form,
+  .ac-account-edit-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ac-account-form .ac-field,
+  .ac-account-form .ac-button,
+  .ac-account-edit-row input,
+  .ac-account-edit-row > div {
+    grid-column: 1;
+  }
+
+  .ac-account-edit-row > div,
+  .ac-account-edit-row > div > button {
+    width: 100%;
+  }
 }
 
 .ac-section-icon,
