@@ -359,6 +359,11 @@ export async function createAiDraft(request: Request) {
     try {
       const result = await generateText({
         model,
+        providerOptions: {
+          gateway: {
+            models: ["openai/gpt-5.4-mini", "anthropic/claude-sonnet-4.6"],
+          },
+        },
         output: Output.object({
           schema: aiExtractionSchema,
           name: "accounting_draft",
