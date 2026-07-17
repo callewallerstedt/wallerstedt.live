@@ -35,7 +35,7 @@ import json, sqlite3, sys
 from decimal import Decimal, ROUND_HALF_UP
 
 def money(value):
-    if value is None:
+    if value is None or str(value).strip() == "":
         return None
     return format(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
 
