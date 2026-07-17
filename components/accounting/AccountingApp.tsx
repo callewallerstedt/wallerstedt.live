@@ -20,6 +20,9 @@ import type {
   AccountingDraft,
   AccountingEntry,
   AccountingAccount,
+  AccountingAgentMessage,
+  AccountingAgentProposal,
+  AccountingAgentResult,
   AccountingRevision,
   AppTab,
   DashboardData,
@@ -183,6 +186,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState<AccountingUploadProgress | null>(null);
   const [aiError, setAiError] = useState("");
+  const [agentMessages, setAgentMessages] = useState<AccountingAgentMessage[]>([]);
+  const [agentResult, setAgentResult] = useState<AccountingAgentResult | null>(null);
+  const [agentProposal, setAgentProposal] = useState<AccountingAgentProposal | null>(null);
   const [toast, setToast] = useState("");
 
   const expireSession = useCallback(() => {
@@ -193,6 +199,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     setAccounts([]);
     setEditingEntry(null);
     setDraft(null);
+    setAgentMessages([]);
+    setAgentResult(null);
+    setAgentProposal(null);
   }, []);
 
   const handleUnauthorized = useCallback((error: unknown) => {
@@ -350,6 +359,43 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     }
   }
 
+  async function runAgent() {
+    if (!aiText.trim() && aiFiles.length === 0) {
+      setAiError("Skriv vad du vill att AI-agenten ska göra eller lägg till ett underlag.");
+      return;
+    }
+    const userMessage = aiText.trim()
+      || `Granska ${aiFiles.length} ${aiFiles.length === 1 ? "bifogat underlag" : "bifogade underlag"}.`;
+    setAiLoading(true);
+    setAiProgress(null);
+    setAiError("");
+    try {
+      const result = await api.askAgent(
+        aiText,
+        aiFiles,
+        agentMessages,
+        setAiProgress,
+      );
+      setAgentMessages((current) => [
+        ...current,
+        { role: "user", content: userMessage } as AccountingAgentMessage,
+        { role: "assistant", content: result.message } as AccountingAgentMessage,
+      ].slice(-12));
+      setAgentResult(result);
+      setAiText("");
+      setAiFiles([]);
+      setTab("home");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      if (!handleUnauthorized(error)) {
+        setAiError(displayError(error, "AI-agenten kunde inte slutföra uppdraget. Ingenting ändrades."));
+      }
+    } finally {
+      setAiLoading(false);
+      setAiProgress(null);
+    }
+  }
+
   function startManualDraft() {
     setAiError("");
     setDraft(createManualDraft());
@@ -376,6 +422,21 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     setDraft(null);
     setAiText("");
     setAiFiles([]);
+    setEntriesLoaded(false);
+    setEditingEntry(null);
+    setTab("home");
+    setToast(message);
+    void loadDashboard();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function completeAgentChanges(message: string) {
+    setAgentProposal(null);
+    setAgentResult((current) => current ? { ...current, proposal: null } : current);
+    setAgentMessages((current) => [
+      ...current,
+      { role: "assistant", content: message } as AccountingAgentMessage,
+    ].slice(-12));
     setEntriesLoaded(false);
     setEditingEntry(null);
     setTab("home");
@@ -436,7 +497,15 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       )}
 
       <div className="ac-page-wrap">
-        {draft ? (
+        {agentProposal ? (
+          <AgentProposalReview
+            api={api}
+            onCancel={() => setAgentProposal(null)}
+            onExpired={expireSession}
+            onSaved={completeAgentChanges}
+            proposal={agentProposal}
+          />
+        ) : draft ? (
           <DraftReview
             accounts={accounts}
             api={api}
@@ -467,14 +536,26 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
           />
         ) : tab === "home" ? (
           <HomeView
+            agentMessages={agentMessages}
+            agentResult={agentResult}
             dashboard={dashboard}
             error={dashboardError}
             files={aiFiles}
             loading={dashboardLoading}
-            onAnalyze={() => void analyzeDraft()}
+            onAnalyze={() => void runAgent()}
+            onClearAgent={() => {
+              setAgentMessages([]);
+              setAgentResult(null);
+            }}
             onFiles={setAiFiles}
             onManual={startManualDraft}
             onOpenEntry={(entry) => void openEntry(entry)}
+            onOpenDraft={(nextDraft) => {
+              setDraft(nextDraft);
+              setTab("add");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onReviewProposal={setAgentProposal}
             onRetry={() => void loadDashboard()}
             onText={setAiText}
             text={aiText}
@@ -670,6 +751,7 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
 }
 
 type ComposerProps = {
+  agentMode?: boolean;
   aiError: string;
   compact?: boolean;
   files: File[];
@@ -683,31 +765,41 @@ type ComposerProps = {
 };
 
 function HomeView({
+  agentMessages,
+  agentResult,
   dashboard,
   error,
   files,
   loading,
   onAnalyze,
+  onClearAgent,
   onFiles,
   onManual,
   onOpenEntry,
+  onOpenDraft,
   onRetry,
   onText,
+  onReviewProposal,
   text,
   aiError,
   aiLoading,
   progress,
 }: {
+  agentMessages: AccountingAgentMessage[];
+  agentResult: AccountingAgentResult | null;
   dashboard: DashboardData | null;
   error: string;
   files: File[];
   loading: boolean;
   onAnalyze: () => void;
+  onClearAgent: () => void;
   onFiles: (files: File[]) => void;
   onManual: () => void;
   onOpenEntry: (entry: AccountingEntry) => void;
+  onOpenDraft: (draft: AccountingDraft) => void;
   onRetry: () => void;
   onText: (text: string) => void;
+  onReviewProposal: (proposal: AccountingAgentProposal) => void;
   text: string;
   aiError: string;
   aiLoading: boolean;
@@ -720,6 +812,7 @@ function HomeView({
       <div className="ac-home-grid">
         <div className="ac-home-primary">
           <AiComposer
+            agentMode
             aiError={aiError}
             compact
             files={files}
@@ -731,6 +824,19 @@ function HomeView({
             progress={progress}
             text={text}
           />
+
+          {agentMessages.length > 0 && (
+            <AgentConversation messages={agentMessages} onClear={onClearAgent} />
+          )}
+
+          {agentResult && (
+            <AgentResultPanel
+              onOpenDraft={onOpenDraft}
+              onOpenEntry={onOpenEntry}
+              onReviewProposal={onReviewProposal}
+              result={agentResult}
+            />
+          )}
 
           <section className="ac-section-block" aria-labelledby="recent-heading">
             <div className="ac-section-heading-row">
@@ -764,6 +870,257 @@ function HomeView({
           <SummaryCards dashboard={dashboard} error={error} loading={loading} onRetry={onRetry} />
         </aside>
       </div>
+    </div>
+  );
+}
+
+function AgentConversation({
+  messages,
+  onClear,
+}: {
+  messages: AccountingAgentMessage[];
+  onClear: () => void;
+}) {
+  return (
+    <section className="ac-agent-conversation" aria-label="Samtal med AI-agenten">
+      <div className="ac-agent-section-heading">
+        <div><Icon.Spark size={18} /><strong>Senaste samtalet</strong></div>
+        <button onClick={onClear} type="button">Rensa</button>
+      </div>
+      <div className="ac-agent-messages">
+        {messages.slice(-6).map((message, index) => (
+          <div className={`ac-agent-message is-${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 20)}`}>
+            <span>{message.role === "user" ? "Du" : "AI"}</span>
+            <p>{message.content}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AgentResultPanel({
+  onOpenDraft,
+  onOpenEntry,
+  onReviewProposal,
+  result,
+}: {
+  onOpenDraft: (draft: AccountingDraft) => void;
+  onOpenEntry: (entry: AccountingEntry) => void;
+  onReviewProposal: (proposal: AccountingAgentProposal) => void;
+  result: AccountingAgentResult;
+}) {
+  const proposalCount = (result.proposal?.edits.length ?? 0) + (result.proposal?.deletes.length ?? 0);
+  return (
+    <section className="ac-card ac-agent-result" aria-label="AI-agentens resultat">
+      {result.tools.length > 0 && (
+        <div className="ac-agent-tool-list" aria-label="Använda verktyg">
+          {result.tools.map((tool) => <span key={tool.name}><Icon.Check size={14} /> {tool.label}</span>)}
+        </div>
+      )}
+
+      {(result.draft || result.proposal) && (
+        <div className="ac-agent-action-grid">
+          {result.draft && (
+            <button className="ac-agent-action-card" onClick={() => onOpenDraft(result.draft!)} type="button">
+              <span><Icon.Plus size={20} /></span>
+              <div>
+                <strong>Granska {result.draft.entries.length} {result.draft.entries.length === 1 ? "nytt utkast" : "nya utkast"}</strong>
+                <small>Inget är bokfört ännu</small>
+              </div>
+              <Icon.Chevron size={19} />
+            </button>
+          )}
+          {result.proposal && (
+            <button className="ac-agent-action-card" onClick={() => onReviewProposal(result.proposal!)} type="button">
+              <span><Icon.Edit size={20} /></span>
+              <div>
+                <strong>Granska {proposalCount} {proposalCount === 1 ? "ändring" : "ändringar"}</strong>
+                <small>{result.proposal.deletes.length > 0 ? `${result.proposal.deletes.length} borttagning väntar` : "Väntar på ditt godkännande"}</small>
+              </div>
+              <Icon.Chevron size={19} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {result.referencedEntries.length > 0 && (
+        <div className="ac-agent-references">
+          <strong>Poster AI tittade på</strong>
+          <div className="ac-entry-list">
+            {result.referencedEntries.slice(0, 5).map((entry) => (
+              <EntryRow entry={entry} key={entry.id} onClick={() => onOpenEntry(entry)} />
+            ))}
+          </div>
+          {result.referencedEntries.length > 5 && <small>+ {result.referencedEntries.length - 5} fler poster analyserades</small>}
+        </div>
+      )}
+
+      <p className="ac-agent-result-safety"><Icon.Shield size={16} /> Läsverktyg körs direkt. Bokföring, ändringar och borttagning kräver alltid din granskning.</p>
+    </section>
+  );
+}
+
+function agentFieldValue(entry: AccountingEntry, field: string) {
+  switch (field) {
+    case "date": return entry.date || "Saknas";
+    case "description": return entry.description || "Saknas";
+    case "debit": return `${entry.debitAccount || "–"}${entry.debitName ? ` · ${entry.debitName}` : ""}`;
+    case "credit": return `${entry.creditAccount || "–"}${entry.creditName ? ` · ${entry.creditName}` : ""}`;
+    case "amountExVat": return entry.beloppExMoms == null ? "Saknas" : formatCurrency(entry.beloppExMoms);
+    case "vat": return `${entry.moms == null ? "Saknas" : formatCurrency(entry.moms)}${entry.momsAccount ? ` · konto ${entry.momsAccount}` : ""}`;
+    case "amount": return formatCurrency(entry.amount);
+    case "type": return entry.type || "Saknas";
+    case "source": return entry.source || "Saknas";
+    case "notes": return entry.notes || "Saknas";
+    case "status": return entry.status || "Saknas";
+    default: return "";
+  }
+}
+
+function agentChangedFields(current: AccountingEntry, proposed: AccountingEntry) {
+  const fields = [
+    ["date", "Datum"],
+    ["description", "Beskrivning"],
+    ["debit", "Debet"],
+    ["credit", "Kredit"],
+    ["amountExVat", "Exkl. moms"],
+    ["vat", "Moms"],
+    ["amount", "Totalbelopp"],
+    ["type", "Typ"],
+    ["source", "Källa"],
+    ["notes", "Anteckning"],
+    ["status", "Status"],
+  ] as const;
+  return fields
+    .map(([field, label]) => ({
+      field,
+      label,
+      before: agentFieldValue(current, field),
+      after: agentFieldValue(proposed, field),
+    }))
+    .filter((change) => change.before !== change.after);
+}
+
+function AgentProposalReview({
+  api,
+  onCancel,
+  onExpired,
+  onSaved,
+  proposal,
+}: {
+  api: AccountingApi;
+  onCancel: () => void;
+  onExpired: () => void;
+  onSaved: (message: string) => void;
+  proposal: AccountingAgentProposal;
+}) {
+  const [reviewed, setReviewed] = useState<Set<string>>(() => new Set());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const total = proposal.edits.length + proposal.deletes.length;
+  const allReviewed = reviewed.size === total;
+
+  function setChecked(key: string, checked: boolean) {
+    setReviewed((current) => {
+      const next = new Set(current);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+    setError("");
+  }
+
+  async function apply() {
+    if (!allReviewed) {
+      setError(`Kontrollera alla ändringar först. ${total - reviewed.size} återstår.`);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const result = await api.applyAgentProposal(proposal.token);
+      const count = result.updated.length + result.deleted.length;
+      onSaved(`${count} ${count === 1 ? "AI-ändring har" : "AI-ändringar har"} godkänts och sparats.`);
+    } catch (applyError) {
+      if (isUnauthorized(applyError)) onExpired();
+      else setError(displayError(applyError, "Ändringarna kunde inte sparas. Ingenting ändrades."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="ac-view ac-agent-review-view">
+      <button className="ac-back-button" disabled={saving} onClick={onCancel} type="button"><Icon.ArrowLeft /> Tillbaka utan att ändra</button>
+      <div className="ac-review-heading">
+        <div>
+          <p className="ac-eyebrow">AI-agent · godkännande</p>
+          <h1>Granska alla ändringar</h1>
+          <p>AI har förberett detta men ännu inte ändrat huvudboken. Varje punkt måste kontrolleras.</p>
+        </div>
+        <span className="ac-review-badge"><Icon.Shield size={18} /> Ej sparat</span>
+      </div>
+
+      <div className="ac-draft-stack">
+        {proposal.edits.map((edit, index) => {
+          const key = `edit-${edit.id}`;
+          const changes = agentChangedFields(edit.current, edit.proposed);
+          return (
+            <article className={`ac-card ac-agent-change-card ${reviewed.has(key) ? "is-reviewed" : ""}`} key={key}>
+              <div className="ac-draft-card-heading">
+                <div><span>{index + 1}</span><h2>{edit.current.description || "Bokföringspost"}</h2></div>
+                <span className="ac-agent-change-kind"><Icon.Edit size={16} /> Ändra</span>
+              </div>
+              <p className="ac-agent-change-reason"><Icon.Spark size={17} /> {edit.explanation}</p>
+              <div className="ac-agent-diff-list">
+                {changes.map((change) => (
+                  <div key={change.field}>
+                    <strong>{change.label}</strong>
+                    <span><del>{change.before}</del><Icon.Chevron size={16} /><ins>{change.after}</ins></span>
+                  </div>
+                ))}
+              </div>
+              <label className="ac-entry-review-check">
+                <input checked={reviewed.has(key)} disabled={saving} onChange={(event) => setChecked(key, event.target.checked)} type="checkbox" />
+                <span><Icon.Check size={17} /> Jag har kontrollerat denna ändring</span>
+              </label>
+            </article>
+          );
+        })}
+
+        {proposal.deletes.map((deletion, index) => {
+          const key = `delete-${deletion.id}`;
+          return (
+            <article className={`ac-card ac-agent-change-card is-delete ${reviewed.has(key) ? "is-reviewed" : ""}`} key={key}>
+              <div className="ac-draft-card-heading">
+                <div><span>{proposal.edits.length + index + 1}</span><h2>{deletion.current.description || "Bokföringspost"}</h2></div>
+                <span className="ac-agent-change-kind is-delete"><Icon.Trash size={16} /> Ta bort</span>
+              </div>
+              <p className="ac-agent-change-reason"><Icon.Alert size={17} /> {deletion.explanation}</p>
+              <dl className="ac-agent-delete-summary">
+                <div><dt>Datum</dt><dd>{formatDate(deletion.current.date)}</dd></div>
+                <div><dt>Belopp</dt><dd>{formatCurrency(deletion.current.amount)}</dd></div>
+                <div><dt>Konto</dt><dd>{deletion.current.debitAccount || deletion.current.creditAccount || "Saknas"}</dd></div>
+              </dl>
+              <label className="ac-entry-review-check is-danger">
+                <input checked={reviewed.has(key)} disabled={saving} onChange={(event) => setChecked(key, event.target.checked)} type="checkbox" />
+                <span><Icon.Check size={17} /> Jag godkänner att denna post tas bort</span>
+              </label>
+            </article>
+          );
+        })}
+      </div>
+
+      {error && <p className="ac-form-error ac-form-error--block" role="alert"><Icon.Alert size={18} /> {error}</p>}
+
+      <div className="ac-review-footer ac-agent-review-footer">
+        <div><span>Förberedda</span><strong>{total}</strong><small>{reviewed.size} kontrollerade</small></div>
+        <button className="ac-button ac-button--primary" disabled={saving || !allReviewed} onClick={() => void apply()} type="button">
+          {saving ? <><span className="ac-button-spinner" /> Sparar atomiskt…</> : <><Icon.Check /> Godkänn alla</>}
+        </button>
+      </div>
+      <p className="ac-review-assurance"><Icon.Shield size={16} /> Alla ändringar genomförs tillsammans. Om en post har ändrats på en annan enhet sparas ingenting.</p>
     </div>
   );
 }
@@ -850,6 +1207,7 @@ function AddView(props: ComposerProps) {
 }
 
 function AiComposer({
+  agentMode = false,
   aiError,
   compact = false,
   files,
@@ -893,17 +1251,27 @@ function AiComposer({
     <section className={`ac-ai-composer ${compact ? "is-compact" : ""}`} aria-labelledby={compact ? "quick-ai-heading" : "new-ai-heading"}>
       <div className="ac-ai-orb" aria-hidden="true"><Icon.Spark size={compact ? 24 : 28} /></div>
       <div className="ac-ai-copy">
-        <p className="ac-eyebrow">AI-assistent</p>
-        <h2 id={compact ? "quick-ai-heading" : "new-ai-heading"}>{compact ? "Ny post med AI" : "Skapa ett utkast"}</h2>
-        <p>{compact ? "Skriv eller lägg till flera kvitton samtidigt." : "AI delar upp materialet i separata, redigerbara bokföringsförslag som du kontrollerar ett i taget."}</p>
+        <p className="ac-eyebrow">{agentMode ? "AI-agent" : "AI-assistent"}</p>
+        <h2 id={compact ? "quick-ai-heading" : "new-ai-heading"}>
+          {agentMode ? "Vad vill du göra?" : compact ? "Ny post med AI" : "Skapa ett utkast"}
+        </h2>
+        <p>
+          {agentMode
+            ? "Be AI hitta, analysera, skapa eller ändra poster. Den använder verktyg i din riktiga bokföring."
+            : compact
+              ? "Skriv eller lägg till flera kvitton samtidigt."
+              : "AI delar upp materialet i separata, redigerbara bokföringsförslag som du kontrollerar ett i taget."}
+        </p>
       </div>
 
       <label className="ac-ai-textarea">
-        <span className="ac-visually-hidden">Beskriv bokföringsposten</span>
+        <span className="ac-visually-hidden">{agentMode ? "Beskriv uppdraget" : "Beskriv bokföringsposten"}</span>
         <textarea
           disabled={loading}
           onChange={(event) => onText(event.target.value)}
-          placeholder="T.ex. Adobe Creative Cloud, 742,50 kr inkl. moms, betalt med företagskort…"
+          placeholder={agentMode
+            ? "T.ex. hitta alla OpenAI-poster i år, summera dem och ändra fel konto…"
+            : "T.ex. Adobe Creative Cloud, 742,50 kr inkl. moms, betalt med företagskort…"}
           rows={compact ? 3 : 5}
           value={text}
         />
@@ -970,9 +1338,9 @@ function AiComposer({
                 ? `Laddar upp ${progress.fileIndex + 1} av ${progress.fileCount}`
                 : progress.phase === "preparing"
                   ? "Verifierar filen lokalt"
-                  : progress.phase === "finalizing"
+                : progress.phase === "finalizing"
                     ? "Registrerar underlaget säkert"
-                    : "AI analyserar underlaget"}
+                    : agentMode ? "AI-agenten använder bokföringsverktygen" : "AI analyserar underlaget"}
             </span>
             <strong>{progress.phase === "analyzing" ? "Nästan klar" : `${progress.overallPercentage} %`}</strong>
           </div>
@@ -986,14 +1354,14 @@ function AiComposer({
       <div className="ac-ai-actions">
         <button className="ac-button ac-button--ai" disabled={loading || (!text.trim() && files.length === 0)} onClick={onAnalyze} type="button">
           {loading
-            ? <><span className="ac-button-spinner" /> {progress?.phase === "preparing" ? "Förbereder…" : progress?.phase === "uploading" ? "Laddar upp…" : progress?.phase === "finalizing" ? "Registrerar…" : "AI läser underlaget…"}</>
-            : <><Icon.Spark /> Skapa förslag</>}
+            ? <><span className="ac-button-spinner" /> {progress?.phase === "preparing" ? "Förbereder…" : progress?.phase === "uploading" ? "Laddar upp…" : progress?.phase === "finalizing" ? "Registrerar…" : agentMode ? "AI arbetar…" : "AI läser underlaget…"}</>
+            : <><Icon.Spark /> {agentMode ? "Kör uppdrag" : "Skapa förslag"}</>}
         </button>
         <button className="ac-text-button" disabled={loading} onClick={onManual} type="button">
           Fyll i manuellt
         </button>
       </div>
-      <p className="ac-ai-safety"><Icon.Shield size={16} /> Inget bokförs innan du granskar och godkänner.</p>
+      <p className="ac-ai-safety"><Icon.Shield size={16} /> {agentMode ? "AI får läsa allt. Varje ändring kräver ditt godkännande." : "Inget bokförs innan du granskar och godkänner."}</p>
     </section>
   );
 }

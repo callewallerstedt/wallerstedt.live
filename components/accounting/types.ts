@@ -88,4 +88,40 @@ export type AccountingDraft = {
   manual?: boolean;
 };
 
+export type AccountingAgentMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type AccountingAgentProposalEdit = {
+  id: string;
+  version: number;
+  current: AccountingEntry;
+  proposed: AccountingEntry;
+  explanation: string;
+};
+
+export type AccountingAgentProposalDelete = {
+  id: string;
+  version: number;
+  current: AccountingEntry;
+  explanation: string;
+};
+
+export type AccountingAgentProposal = {
+  token: string;
+  expiresAt: string;
+  edits: AccountingAgentProposalEdit[];
+  deletes: AccountingAgentProposalDelete[];
+};
+
+export type AccountingAgentResult = {
+  message: string;
+  model: string;
+  tools: Array<{ name: string; label: string }>;
+  referencedEntries: AccountingEntry[];
+  draft: AccountingDraft | null;
+  proposal: AccountingAgentProposal | null;
+};
+
 export type AppTab = "home" | "add" | "ledger" | "settings";

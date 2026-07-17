@@ -2,6 +2,9 @@ import { upload } from "@vercel/blob/client";
 import type {
   AccountingDocument,
   AccountingDraft,
+  AccountingAgentMessage,
+  AccountingAgentProposal,
+  AccountingAgentResult,
   AccountingAccount,
   AccountingEntry,
   AccountingRevision,
@@ -201,6 +204,61 @@ export function normalizeDraft(value: unknown): AccountingDraft {
     status: asOptionalString(draftRecord.status) ?? undefined,
     entries,
     warnings: asArray(draftRecord.warnings ?? extracted.warnings ?? root.warnings).map((warning) => asString(warning)).filter(Boolean),
+  };
+}
+
+function normalizeAgentProposal(value: unknown): AccountingAgentProposal | null {
+  const record = asRecord(value);
+  const token = asString(record.token);
+  if (!token) return null;
+  const edits = asArray(record.edits).map((value, index) => {
+    const edit = asRecord(value);
+    const current = normalizeEntry(edit.current, index);
+    const proposed = normalizeEntry({
+      ...asRecord(edit.proposed),
+      id: asString(edit.id, current.id),
+      version: asNumber(edit.version, current.version ?? 1),
+      documents: current.documents,
+    }, index);
+    return {
+      id: asString(edit.id, current.id),
+      version: asNumber(edit.version, current.version ?? 1),
+      current,
+      proposed,
+      explanation: asString(edit.explanation),
+    };
+  });
+  const deletes = asArray(record.deletes).map((value, index) => {
+    const deletion = asRecord(value);
+    const current = normalizeEntry(deletion.current, index);
+    return {
+      id: asString(deletion.id, current.id),
+      version: asNumber(deletion.version, current.version ?? 1),
+      current,
+      explanation: asString(deletion.explanation),
+    };
+  });
+  return {
+    token,
+    expiresAt: asString(record.expiresAt),
+    edits,
+    deletes,
+  };
+}
+
+function normalizeAgentResult(value: unknown): AccountingAgentResult {
+  const root = asRecord(value);
+  const record = asRecord(root.result ?? value);
+  return {
+    message: asString(record.message, "AI-agenten är klar."),
+    model: asString(record.model),
+    tools: asArray(record.tools).map((value) => {
+      const tool = asRecord(value);
+      return { name: asString(tool.name), label: asString(tool.label, asString(tool.name)) };
+    }),
+    referencedEntries: asArray(record.referencedEntries).map(normalizeEntry),
+    draft: record.draft ? normalizeDraft(record.draft) : null,
+    proposal: normalizeAgentProposal(record.proposal),
   };
 }
 
@@ -538,6 +596,51 @@ export class AccountingApi {
       if (!(error instanceof AccountingApiError) || ![404, 405].includes(error.status)) throw error;
       return normalizeDraft(await this.request("/ai/drafts", init));
     }
+  }
+
+  async askAgent(
+    text: string,
+    files: File[],
+    messages: AccountingAgentMessage[],
+    onProgress?: (progress: AccountingUploadProgress) => void,
+  ): Promise<AccountingAgentResult> {
+    const documents = files.length ? await this.uploadDocuments(files, onProgress) : [];
+    const lastFile = files.at(-1)?.name ?? "Uppdrag";
+    onProgress?.({
+      fileName: lastFile,
+      fileIndex: Math.max(files.length - 1, 0),
+      fileCount: files.length,
+      filePercentage: 100,
+      overallPercentage: 100,
+      phase: "analyzing",
+    });
+    return normalizeAgentResult(await this.request("/ai/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: text.trim(),
+        messages: messages.slice(-12),
+        documentIds: documents.map((document) => document.id).filter(Boolean),
+        ownedDocumentIds: documents.map((document) => document.id).filter(Boolean),
+      }),
+    }));
+  }
+
+  async applyAgentProposal(token: string): Promise<{
+    updated: AccountingEntry[];
+    deleted: AccountingEntry[];
+  }> {
+    const payload = await this.request<unknown>("/ai/agent/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const root = asRecord(payload);
+    const result = asRecord(root.result ?? payload);
+    return {
+      updated: asArray(result.updated).map(normalizeEntry),
+      deleted: asArray(result.deleted).map(normalizeEntry),
+    };
   }
 
   async reviseDraft(

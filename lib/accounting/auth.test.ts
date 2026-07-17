@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { POST as createAccount } from "../../app/api/accounting/[accessKey]/accounts/route";
+import { POST as runAgent } from "../../app/api/accounting/[accessKey]/ai/agent/route";
+import { POST as applyAgent } from "../../app/api/accounting/[accessKey]/ai/agent/apply/route";
 import { GET as getDashboard } from "../../app/api/accounting/[accessKey]/dashboard/route";
 import {
   DELETE as deleteSession,
@@ -96,6 +98,26 @@ test("read and mutation routes reject a missing owner session", async () => {
   );
   assert.equal(account.status, 401);
   assert.equal((await account.json()).error, "unauthorized");
+
+  const agent = await runAgent(
+    new Request(`${origin}/api/accounting/${accessKey}/ai/agent`, {
+      method: "POST",
+      headers: { origin },
+    }),
+    params,
+  );
+  assert.equal(agent.status, 401);
+  assert.equal((await agent.json()).error, "unauthorized");
+
+  const agentApply = await applyAgent(
+    new Request(`${origin}/api/accounting/${accessKey}/ai/agent/apply`, {
+      method: "POST",
+      headers: { origin },
+    }),
+    params,
+  );
+  assert.equal(agentApply.status, 401);
+  assert.equal((await agentApply.json()).error, "unauthorized");
 });
 
 test("logout cannot clear server-side state without an owner session", async () => {

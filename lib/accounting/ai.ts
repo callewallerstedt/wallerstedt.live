@@ -28,7 +28,7 @@ const MAX_AI_TEXT = 50_000;
 const MAX_AI_TOTAL_BYTES = 40 * 1024 * 1024;
 const MAX_AI_TEXT_FILE_BYTES = 500_000;
 
-type AiInputDocument = {
+export type AiInputDocument = {
   id: string;
   name: string;
   mimeType: string;
@@ -62,7 +62,7 @@ export function unusedOwnedDocumentIds(
   );
 }
 
-async function purgeUnattachedAiDocuments(ids: string[], actor: string) {
+export async function purgeUnattachedAiDocuments(ids: string[], actor: string) {
   const uniqueIds = [...new Set(ids)].slice(0, MAX_DOCUMENTS_PER_REQUEST);
   if (!uniqueIds.length) return { purged: 0, failed: 0 };
   const db = getAccountingDb();
@@ -88,7 +88,7 @@ async function purgeUnattachedAiDocuments(ids: string[], actor: string) {
   return { purged, failed: 0 };
 }
 
-async function loadExistingDocuments(
+export async function loadExistingDocuments(
   ids: string[],
 ): Promise<AiInputDocument[]> {
   if (!ids.length) return [];
@@ -489,10 +489,29 @@ PREVIOUS LEDGER ENTRIES, NEWEST FIRST:
 ${ledgerHistory}`;
 }
 
+export async function storeAiDraft(input: {
+  model: string;
+  inputText: string;
+  documentIds: string[];
+  ownedDocumentIds: string[];
+  extracted: unknown;
+}) {
+  const draft = await getAccountingDb().accountingAiDraft.create({
+    data: {
+      status: "pending",
+      model: input.model,
+      inputText: input.inputText,
+      documentIds: json(input.documentIds),
+      ownedDocumentIds: json(input.ownedDocumentIds),
+      extracted: json(input.extracted),
+    },
+  });
+  return serializeDraft(draft);
+}
+
 export async function createAiDraft(request: Request) {
   const input = await parseDraftRequest(request);
   try {
-    const db = getAccountingDb();
     const { accountList, ledgerHistory } =
       await loadAccountingReferenceContext();
     const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -535,17 +554,13 @@ export async function createAiDraft(request: Request) {
       );
     }
 
-    const draft = await db.accountingAiDraft.create({
-      data: {
-        status: "pending",
-        model: modelId,
-        inputText: input.text,
-        documentIds: json(input.documents.map((document) => document.id)),
-        ownedDocumentIds: json(input.ownedDocumentIds),
-        extracted: json(extracted),
-      },
+    return storeAiDraft({
+      model: modelId,
+      inputText: input.text,
+      documentIds: input.documents.map((document) => document.id),
+      ownedDocumentIds: input.ownedDocumentIds,
+      extracted,
     });
-    return serializeDraft(draft);
   } catch (error) {
     await purgeUnattachedAiDocuments(
       input.ownedDocumentIds,
