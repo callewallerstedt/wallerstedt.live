@@ -30,11 +30,11 @@ type BrowserSecrets = {
   sessionSecret: string;
 };
 
-function configured(name: string, minLength: number) {
+function configured(name: string) {
   const value = process.env[name]?.trim() ?? "";
-  if (value.length < minLength) {
+  if (!value) {
     throw new AccountingError(
-      `${name} is not securely configured.`,
+      `${name} is not configured.`,
       503,
       "accounting_not_configured",
     );
@@ -44,9 +44,9 @@ function configured(name: string, minLength: number) {
 
 function browserSecrets(): BrowserSecrets {
   return {
-    accessKey: configured("ACCOUNTING_ACCESS_KEY", 16),
-    password: configured("ACCOUNTING_PASSWORD", 12),
-    sessionSecret: configured("ACCOUNTING_SESSION_SECRET", 32),
+    accessKey: configured("ACCOUNTING_ACCESS_KEY"),
+    password: configured("ACCOUNTING_PASSWORD"),
+    sessionSecret: configured("ACCOUNTING_SESSION_SECRET"),
   };
 }
 
@@ -351,7 +351,7 @@ export async function authenticatePassword(
 }
 
 export function requireSyncToken(request: Request) {
-  const expected = configured("ACCOUNTING_SYNC_TOKEN", 32);
+  const expected = configured("ACCOUNTING_SYNC_TOKEN");
   const authorization = request.headers.get("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(authorization);
   if (!match || !secretEqual(match[1], expected)) {
