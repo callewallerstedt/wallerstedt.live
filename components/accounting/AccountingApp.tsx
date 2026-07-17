@@ -1030,8 +1030,19 @@ function DraftReview({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [reviewedEntryKeys, setReviewedEntryKeys] = useState<Set<string>>(() => new Set());
+
+  function entryReviewKey(entry: DraftEntry, index: number) {
+    return entry.id || `draft-entry-${index}`;
+  }
 
   function updateEntry(index: number, patch: Partial<DraftEntry>) {
+    const key = entryReviewKey(draft.entries[index], index);
+    setReviewedEntryKeys((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
     onChange({
       ...draft,
       entries: draft.entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...patch } : entry),
@@ -1040,6 +1051,12 @@ function DraftReview({
 
   function removeEntry(index: number) {
     if (draft.entries.length === 1) return;
+    const key = entryReviewKey(draft.entries[index], index);
+    setReviewedEntryKeys((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
     onChange({ ...draft, entries: draft.entries.filter((_, entryIndex) => entryIndex !== index) });
   }
 
@@ -1059,6 +1076,15 @@ function DraftReview({
     if (invalid) {
       setError("Kontrollera att varje post har datum, beskrivning och ett giltigt belopp.");
       return;
+    }
+    if (!draft.manual) {
+      const unreviewed = draft.entries.filter(
+        (entry, index) => !reviewedEntryKeys.has(entryReviewKey(entry, index)),
+      ).length;
+      if (unreviewed > 0) {
+        setError(`Kontrollera och markera alla poster först. ${unreviewed} återstår.`);
+        return;
+      }
     }
     setSaving(true);
     setError("");
@@ -1089,6 +1115,29 @@ function DraftReview({
         <span className="ac-review-badge"><Icon.Shield size={18} /> Ej sparat</span>
       </div>
 
+      {draft.entries.length > 1 && (
+        <nav className="ac-draft-nav" aria-label="Hoppa mellan AI-förslag">
+          <strong>{draft.entries.length} separata förslag</strong>
+          <div>
+            {draft.entries.map((entry, index) => {
+              const key = entryReviewKey(entry, index);
+              const reviewed = reviewedEntryKeys.has(key);
+              return (
+                <button
+                  aria-label={`Gå till post ${index + 1}: ${entry.description || "utan beskrivning"}`}
+                  className={reviewed ? "is-reviewed" : ""}
+                  key={key}
+                  onClick={() => document.getElementById(`ac-draft-entry-${index}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  type="button"
+                >
+                  {reviewed ? <Icon.Check size={15} /> : index + 1}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+
       {draft.warnings.length > 0 && (
         <div className="ac-warning-box" role="status">
           <Icon.Alert />
@@ -1101,7 +1150,11 @@ function DraftReview({
 
       <div className="ac-draft-stack">
         {draft.entries.map((entry, index) => (
-          <article className="ac-card ac-draft-card" key={entry.id || index}>
+          <article
+            className={`ac-card ac-draft-card ${reviewedEntryKeys.has(entryReviewKey(entry, index)) ? "is-reviewed" : ""}`}
+            id={`ac-draft-entry-${index}`}
+            key={entry.id || index}
+          >
             <div className="ac-draft-card-heading">
               <div><span>{index + 1}</span><h2>{entry.description || "Ny bokföringspost"}</h2></div>
               {draft.entries.length > 1 && (
@@ -1115,6 +1168,25 @@ function DraftReview({
               </div>
             )}
             <EntryFields entry={entry} onChange={(patch) => updateEntry(index, patch)} />
+            {!draft.manual && (
+              <label className="ac-entry-review-check">
+                <input
+                  checked={reviewedEntryKeys.has(entryReviewKey(entry, index))}
+                  onChange={(event) => {
+                    const key = entryReviewKey(entry, index);
+                    setReviewedEntryKeys((current) => {
+                      const next = new Set(current);
+                      if (event.target.checked) next.add(key);
+                      else next.delete(key);
+                      return next;
+                    });
+                    setError("");
+                  }}
+                  type="checkbox"
+                />
+                <span><Icon.Check size={17} /> Jag har kontrollerat denna post</span>
+              </label>
+            )}
           </article>
         ))}
       </div>

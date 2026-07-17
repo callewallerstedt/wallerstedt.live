@@ -51,7 +51,9 @@ for row in db.execute("SELECT * FROM transactions ORDER BY id"):
     transactions.append(item)
 receipts = [dict(row) for row in db.execute("SELECT id,transaction_id,filename,path,added_at FROM receipts ORDER BY id")]
 db.close()
-print(json.dumps({"accounts": accounts, "transactions": transactions, "receipts": receipts}, ensure_ascii=False))
+# Keep the subprocess stream ASCII-only. On Windows, Python can otherwise emit
+# cp1252 bytes while Node decodes stdout as UTF-8, corrupting å/ä/ö.
+print(json.dumps({"accounts": accounts, "transactions": transactions, "receipts": receipts}, ensure_ascii=True))
 `;
 
 function readDesktopData() {

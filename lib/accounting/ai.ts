@@ -299,7 +299,9 @@ function buildUserContent(input: DraftRequest): UserContent {
     {
       type: "text",
       text:
-        "Extract draft accounting entries from the owner's note and attached documents. " +
+        "Extract every distinct accounting transaction from the owner's note and attached documents. " +
+        "Bulk input is expected: return one separate draft entry per receipt, invoice, payment, or CSV row; never merge unrelated transactions into one entry. " +
+        "When a document contains several transactions, return all of them (up to 50) and preserve their source order. " +
         "Do not invent missing values. The owner will review every result before saving.\n\n" +
         `OWNER NOTE:\n${input.text || "(No typed note; use the attached documents.)"}`,
     },
@@ -367,6 +369,8 @@ export async function createAiDraft(request: Request) {
 Return drafts only. Never claim that anything has been posted, paid, filed, or saved.
 Use exact figures and dates visible in the inputs. Use null when evidence is missing.
 Each entry needs balanced debit and credit accounts. Prefer an account in the supplied BAS account list.
+For bulk input, identify every distinct transaction and emit a separate entry for each. Do not summarize or combine separate purchases, receipts, invoice lines that are separate postings, payments, or CSV rows.
+Use sourceDocumentIndexes on every row so each uploaded document is traceable to the correct proposed entry. If one document contains multiple transactions, reuse its index on each relevant row.
 For Swedish deductible VAT, separate total, amount excluding VAT, VAT, and normally use VAT account 2641.
 Foreign reverse-charge services require caution; explain uncertainty in warnings and reasoning.
 sourceDocumentIndexes are zero-based indexes into the attached documents relevant to that row.
