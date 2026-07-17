@@ -65,7 +65,7 @@ async function purgeUnattachedAiDocuments(ids: string[], actor: string) {
   const uniqueIds = [...new Set(ids)].slice(0, MAX_DOCUMENTS_PER_REQUEST);
   if (!uniqueIds.length) return { purged: 0, failed: 0 };
   const db = getAccountingDb();
-  const rows = await db.$transaction(async (tx) => {
+  const purged = await db.$transaction(async (tx) => {
     const newlyDeleted = await tx.accountingDocument.updateManyAndReturn({
       where: {
         id: { in: uniqueIds },
@@ -74,59 +74,17 @@ async function purgeUnattachedAiDocuments(ids: string[], actor: string) {
       },
       data: {
         deletedAt: new Date(),
-        storageStatus: "purging",
         version: { increment: 1 },
       },
     });
     for (const document of newlyDeleted) {
       await writeReceiptAudit(tx, document, "delete", actor);
     }
-    const retryable = await tx.accountingDocument.findMany({
-      where: {
-        id: { in: uniqueIds },
-        entryId: null,
-        deletedAt: { not: null },
-        blobPathname: { not: null },
-        storageStatus: { in: ["purging", "delete_failed"] },
-      },
-    });
-    return retryable;
+    return newlyDeleted.length;
   });
-
-  let purged = 0;
-  let failed = 0;
-  const { del } = await import("@vercel/blob");
-  for (const document of rows) {
-    try {
-      await del(document.blobPathname!);
-      await db.accountingDocument.updateMany({
-        where: {
-          id: document.id,
-          entryId: null,
-          deletedAt: { not: null },
-        },
-        data: {
-          blobPathname: null,
-          blobUrl: null,
-          storageStatus: "purged",
-        },
-      });
-      purged += 1;
-    } catch (error) {
-      failed += 1;
-      await db.accountingDocument
-        .updateMany({
-          where: { id: document.id, entryId: null },
-          data: { storageStatus: "delete_failed" },
-        })
-        .catch(() => undefined);
-      console.error(
-        "Accounting AI document cleanup failed",
-        redactedErrorDiagnostic(error),
-      );
-    }
-  }
-  return { purged, failed };
+  // Financial evidence is hidden logically but its private Blob is retained.
+  // This keeps every previously verified snapshot restorable.
+  return { purged, failed: 0 };
 }
 
 async function loadExistingDocuments(
@@ -633,7 +591,7 @@ export async function approveAiDraft(id: string, value: unknown) {
         payload: json({
           entryIds: entries.map((entry) => entry.id),
           approvedAt: approvedAt.toISOString(),
-          unusedOwnedDocumentPolicy: "preserve-or-purge-only-if-unattached",
+          unusedOwnedDocumentPolicy: "soft-delete-unattached-retain-blob",
         }),
       },
     });
@@ -681,7 +639,7 @@ export async function rejectAiDraft(id: string) {
         payload: json({
           rejectedAt: rejectedAt.toISOString(),
           ownedDocuments: documentIdsFromJson(draft.ownedDocumentIds).length,
-          documentPolicy: "purge_unattached_owned_uploads",
+          documentPolicy: "soft_delete_unattached_retain_blob",
         }),
       },
     });

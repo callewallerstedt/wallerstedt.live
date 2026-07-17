@@ -25,7 +25,7 @@ Keep the original SQLite file and the pre-migration archive until a cloud backup
 
 ## Backups and recovery
 
-The daily cron and the owner backup action create a private JSON snapshot, read it back, and verify the SHA-256 of the snapshot and every stored document before recording `verified`. Snapshot pruning keeps recent daily copies and long-term monthly/yearly copies; document blobs are never pruned by that job.
+The daily cron and the owner backup action create a private JSON snapshot, read it back, and verify the SHA-256 of the snapshot and every stored document before recording `verified`. Snapshot pruning keeps recent daily copies and long-term monthly/yearly copies. Registered document blobs are never physically deleted, including rejected AI uploads, so an older verified snapshot cannot be invalidated by later cleanup.
 
 Use the restore command in verification mode first:
 
