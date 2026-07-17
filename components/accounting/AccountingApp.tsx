@@ -891,11 +891,42 @@ function AgentConversation({
         {messages.slice(-6).map((message, index) => (
           <div className={`ac-agent-message is-${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 20)}`}>
             <span>{message.role === "user" ? "Du" : "AI"}</span>
-            <p>{message.content}</p>
+            <AgentMessageContent content={message.content} />
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function AgentInlineText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return <code key={`${part}-${index}`}>{part.slice(1, -1)}</code>;
+        }
+        return <span key={`${part}-${index}`}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function AgentMessageContent({ content }: { content: string }) {
+  return (
+    <div className="ac-agent-message-body">
+      {content.split("\n").map((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <span className="ac-agent-message-space" key={`space-${index}`} />;
+        if (trimmed.startsWith("- ")) {
+          return <p className="is-list-item" key={`${trimmed}-${index}`}><AgentInlineText text={trimmed.slice(2)} /></p>;
+        }
+        return <p key={`${trimmed}-${index}`}><AgentInlineText text={trimmed} /></p>;
+      })}
+    </div>
   );
 }
 

@@ -1006,12 +1006,44 @@ body:has(.accounting-app) > .footer {
   text-transform: uppercase;
 }
 
-.ac-agent-message p {
+.ac-agent-message-body p {
   margin: 0;
   color: var(--ac-ink);
   font-size: 0.83rem;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.ac-agent-message-body {
+  display: grid;
+  gap: 3px;
+}
+
+.ac-agent-message-body p.is-list-item {
+  position: relative;
+  padding-left: 13px;
+}
+
+.ac-agent-message-body p.is-list-item::before {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  content: "•";
+  color: var(--ac-muted);
+}
+
+.ac-agent-message-body code {
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78em;
+  border: 1px solid var(--ac-line-strong);
+  border-radius: 5px;
+  background: #0e0e0e;
+}
+
+.ac-agent-message-space {
+  display: block;
+  height: 4px;
 }
 
 .ac-agent-result {
