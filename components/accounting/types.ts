@@ -94,9 +94,39 @@ export type AccountingDraft = {
   manual?: boolean;
 };
 
+export type AgentStep = {
+  id: string;
+  label: string;
+  detail?: string;
+  status: "running" | "done" | "error";
+  summary?: string;
+};
+
+export type AgentStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "tool-start"; callId: string; name: string; label: string; detail?: string }
+  | { type: "tool-end"; callId: string; name: string; ok: boolean; summary?: string }
+  | { type: "text-delta"; text: string };
+
+export type GmailAccount = {
+  id: string;
+  email: string;
+  status: string;
+  lastUsedAt: string | null;
+  connectedAt: string;
+};
+
+export type AgentGmailAttachment = {
+  document: AccountingDocument;
+  entryId: string;
+  account: string;
+  explanation: string;
+};
+
 export type AccountingAgentMessage = {
   role: "user" | "assistant";
   content: string;
+  steps?: AgentStep[];
 };
 
 export type AccountingAgentProposalEdit = {
@@ -126,6 +156,7 @@ export type AccountingAgentResult = {
   model: string;
   tools: Array<{ name: string; label: string }>;
   referencedEntries: AccountingEntry[];
+  gmailAttachments: AgentGmailAttachment[];
   draft: AccountingDraft | null;
   proposal: AccountingAgentProposal | null;
 };

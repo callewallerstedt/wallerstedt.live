@@ -26,9 +26,11 @@ import type {
   AccountingAgentProposal,
   AccountingAgentResult,
   AccountingRevision,
+  AgentStep,
   AppTab,
   DashboardData,
   DraftEntry,
+  GmailAccount,
 } from "./types";
 
 type SessionStatus = "checking" | "authenticated" | "unauthenticated" | "error";
@@ -192,6 +194,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [agentMessages, setAgentMessages] = useState<AccountingAgentMessage[]>([]);
   const [agentResult, setAgentResult] = useState<AccountingAgentResult | null>(null);
   const [agentProposal, setAgentProposal] = useState<AccountingAgentProposal | null>(null);
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [agentLiveText, setAgentLiveText] = useState("");
+  const [agentStatus, setAgentStatus] = useState("");
   const [ledgerDocFilter, setLedgerDocFilter] = useState<"all" | "missing">("all");
   const [toast, setToast] = useState("");
 
@@ -310,6 +315,23 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  useEffect(() => {
+    const parameters = new URLSearchParams(window.location.search);
+    const gmail = parameters.get("gmail");
+    if (!gmail) return;
+    if (gmail === "connected") {
+      const email = parameters.get("email");
+      setToast(email ? `Gmail-kontot ${email} är anslutet.` : "Gmail-kontot är anslutet.");
+      setTab("settings");
+    } else if (gmail === "denied") {
+      setToast("Gmail-anslutningen avbröts. Inget konto lades till.");
+    }
+    parameters.delete("gmail");
+    parameters.delete("email");
+    const query = parameters.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, []);
+
   async function login(password: string) {
     const authenticated = await api.login(password);
     if (!authenticated) throw new Error("Inloggningen kunde inte bekräftas.");
@@ -388,16 +410,50 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     ].slice(-12));
     setAiText("");
     setAiFiles([]);
+    const liveSteps: AgentStep[] = [];
+    setAgentSteps([]);
+    setAgentLiveText("");
+    setAgentStatus("Startar AI-agenten…");
     try {
-      const result = await api.askAgent(
+      const result = await api.askAgentStream(
         requestText,
         requestFiles,
         previousMessages,
-        setAiProgress,
+        {
+          onProgress: setAiProgress,
+          onEvent: (event) => {
+            if (event.type === "status") {
+              setAgentStatus(event.message);
+            } else if (event.type === "tool-start") {
+              liveSteps.push({
+                id: event.callId || `step-${liveSteps.length}`,
+                label: event.label,
+                detail: event.detail,
+                status: "running",
+              });
+              setAgentStatus("");
+              setAgentSteps([...liveSteps]);
+            } else if (event.type === "tool-end") {
+              const step = liveSteps.find((item) => item.id === event.callId && item.status === "running");
+              if (step) {
+                step.status = event.ok ? "done" : "error";
+                step.summary = event.summary;
+              }
+              setAgentSteps([...liveSteps]);
+            } else if (event.type === "text-delta") {
+              setAgentStatus("");
+              setAgentLiveText((current) => current + event.text);
+            }
+          },
+        },
       );
       setAgentMessages((current) => [
         ...current,
-        { role: "assistant", content: result.message } as AccountingAgentMessage,
+        {
+          role: "assistant",
+          content: result.message,
+          steps: liveSteps.length ? [...liveSteps] : undefined,
+        } as AccountingAgentMessage,
       ].slice(-12));
       setAgentResult(result);
     } catch (error) {
@@ -410,6 +466,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     } finally {
       setAiLoading(false);
       setAiProgress(null);
+      setAgentSteps([]);
+      setAgentLiveText("");
+      setAgentStatus("");
     }
   }
 
@@ -573,6 +632,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
           <ChatView
             aiError={aiError}
             files={aiFiles}
+            liveStatus={agentStatus}
+            liveSteps={agentSteps}
+            liveText={agentLiveText}
             loading={aiLoading}
             messages={agentMessages}
             onAnalyze={() => void runAgent()}
@@ -976,6 +1038,9 @@ function HomeView({
 type AgentChatProps = {
   aiError: string;
   files: File[];
+  liveStatus: string;
+  liveSteps: AgentStep[];
+  liveText: string;
   loading: boolean;
   messages: AccountingAgentMessage[];
   onAnalyze: () => void;
@@ -1002,6 +1067,9 @@ function ChatView(props: AgentChatProps) {
 function AgentChat({
   aiError,
   files,
+  liveStatus,
+  liveSteps,
+  liveText,
   loading,
   messages,
   onAnalyze,
@@ -1026,7 +1094,7 @@ function AgentChat({
   useEffect(() => {
     if (messages.length === 0 && !loading && !result) return;
     chatEndRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [loading, messages, result]);
+  }, [liveStatus, liveSteps, liveText, loading, messages, result]);
 
   function appendFiles(nextFiles: File[]) {
     const merged = [...files];
@@ -1098,7 +1166,7 @@ function AgentChat({
           <span><Icon.Spark size={19} /></span>
           <div>
             <h2 id="accounting-chat-heading">Bokförings-AI</h2>
-            <small>Kan läsa, hitta och förbereda ändringar</small>
+            <small>Kan läsa bokföringen, söka i Gmail och förbereda ändringar</small>
           </div>
         </div>
         {hasConversation && (
@@ -1115,7 +1183,7 @@ function AgentChat({
             <h3>Vad vill du göra?</h3>
             <p>Fråga om bokföringen, skapa poster eller lägg till kvitton och filer.</p>
             <div className="ac-agent-suggestions" aria-label="Förslag">
-              {["Visa vad jag behöver bokföra", "Kontrollera senaste posterna", "Hjälp mig bokföra ett kvitto"].map((suggestion) => (
+              {["Hitta saknade kvitton i min Gmail", "Visa vad jag behöver bokföra", "Kontrollera senaste posterna", "Hjälp mig bokföra ett kvitto"].map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => {
@@ -1135,6 +1203,14 @@ function AgentChat({
           <div className={`ac-agent-chat-message is-${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 20)}`}>
             {message.role === "assistant" && <span className="ac-agent-chat-avatar"><Icon.Spark size={15} /></span>}
             <div className="ac-agent-chat-bubble">
+              {message.steps && message.steps.length > 0 && (
+                <details className="ac-agent-steps-recap">
+                  <summary>
+                    <Icon.Check size={14} /> {message.steps.length} {message.steps.length === 1 ? "steg utfört" : "steg utförda"}
+                  </summary>
+                  <AgentStepList steps={message.steps} />
+                </details>
+              )}
               <AgentMessageContent content={message.content} />
             </div>
           </div>
@@ -1143,9 +1219,22 @@ function AgentChat({
         {loading && (
           <div className="ac-agent-chat-message is-assistant is-loading" role="status">
             <span className="ac-agent-chat-avatar"><Icon.Spark size={15} /></span>
-            <div className="ac-agent-chat-bubble">
-              <span className="ac-agent-thinking"><i /><i /><i /></span>
-              <small>{progress?.phase === "uploading" ? "Laddar upp underlag…" : "Arbetar med bokföringen…"}</small>
+            <div className="ac-agent-chat-bubble ac-agent-live-bubble">
+              {liveSteps.length > 0 && <AgentStepList steps={liveSteps} live />}
+              {liveText ? (
+                <AgentMessageContent content={liveText} />
+              ) : (
+                <>
+                  <span className="ac-agent-thinking"><i /><i /><i /></span>
+                  <small>
+                    {progress?.phase === "uploading"
+                      ? "Laddar upp underlag…"
+                      : liveStatus || (liveSteps.some((step) => step.status === "running")
+                        ? "Väntar på verktyget…"
+                        : "Funderar på nästa steg…")}
+                  </small>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1232,6 +1321,31 @@ function AgentChat({
   );
 }
 
+function AgentStepList({ steps, live = false }: { steps: AgentStep[]; live?: boolean }) {
+  return (
+    <ol className={`ac-agent-activity ${live ? "is-live" : ""}`} aria-label="AI-agentens steg">
+      {steps.map((step) => (
+        <li className={`ac-agent-step is-${step.status}`} key={step.id}>
+          <span className="ac-agent-step-icon" aria-hidden="true">
+            {step.status === "running" ? (
+              <span className="ac-step-spinner" />
+            ) : step.status === "error" ? (
+              <Icon.Alert size={13} />
+            ) : (
+              <Icon.Check size={13} />
+            )}
+          </span>
+          <span className="ac-agent-step-text">
+            <strong>{step.label}</strong>
+            {step.detail && <em>{step.detail}</em>}
+            {step.summary && <small>{step.summary}</small>}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function AgentInlineText({ text }: { text: string }) {
   return (
     <>
@@ -1308,6 +1422,31 @@ function AgentResultPanel({
         </div>
       )}
 
+      {result.gmailAttachments.length > 0 && (
+        <div className="ac-agent-gmail-attachments">
+          <strong>Kvitton hämtade från Gmail</strong>
+          {result.gmailAttachments.map((attachment, index) => {
+            const entry = result.referencedEntries.find((item) => item.id === attachment.entryId);
+            return (
+              <button
+                className="ac-agent-gmail-attachment"
+                disabled={!entry}
+                key={`${attachment.entryId}-${attachment.document.id ?? index}`}
+                onClick={() => entry && onOpenEntry(entry)}
+                type="button"
+              >
+                <span><Icon.Paperclip size={16} /></span>
+                <span className="ac-agent-gmail-attachment-info">
+                  <strong>{attachment.document.originalName ?? attachment.document.name ?? "Kvitto"}</strong>
+                  <small>{attachment.account}{entry ? ` · ${entry.description}` : ""}</small>
+                </span>
+                {entry && <Icon.Chevron size={17} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {result.referencedEntries.length > 0 && (
         <div className="ac-agent-references">
           <strong>Poster AI tittade på</strong>
@@ -1320,7 +1459,7 @@ function AgentResultPanel({
         </div>
       )}
 
-      <p className="ac-agent-result-safety"><Icon.Shield size={16} /> Läsverktyg körs direkt. Bokföring, ändringar och borttagning kräver alltid din granskning.</p>
+      <p className="ac-agent-result-safety"><Icon.Shield size={16} /> Läsverktyg och kvittohämtning från Gmail körs direkt. Bokföring, ändringar och borttagning kräver alltid din granskning.</p>
     </section>
   );
 }
@@ -2603,6 +2742,8 @@ function SettingsView({
             </div>
           </section>
 
+          <GmailManager api={api} onExpired={onExpired} />
+
           <AccountsManager api={api} onExpired={onExpired} />
         </div>
 
@@ -2629,6 +2770,106 @@ function SettingsView({
         </aside>
       </div>
     </div>
+  );
+}
+
+function GmailManager({ api, onExpired }: { api: AccountingApi; onExpired: () => void }) {
+  const [accounts, setAccounts] = useState<GmailAccount[]>([]);
+  const [configured, setConfigured] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.gmailAccounts();
+      setAccounts(result.accounts);
+      setConfigured(result.configured);
+    } catch (loadError) {
+      if (isUnauthorized(loadError)) onExpired();
+      else setError(displayError(loadError, "Gmail-kontona kunde inte hämtas."));
+    } finally {
+      setLoading(false);
+    }
+  }, [api, onExpired]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function disconnect(account: GmailAccount) {
+    if (!window.confirm(`Koppla bort ${account.email}? AI-agenten kan då inte längre söka i den inkorgen.`)) return;
+    setBusyId(account.id);
+    setError("");
+    try {
+      await api.disconnectGmailAccount(account.id);
+      setAccounts((current) => current.filter((item) => item.id !== account.id));
+    } catch (disconnectError) {
+      if (isUnauthorized(disconnectError)) onExpired();
+      else setError(displayError(disconnectError, "Kontot kunde inte kopplas bort."));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="ac-card ac-gmail-card" aria-labelledby="gmail-heading">
+      <div className="ac-section-heading-row">
+        <div><p className="ac-eyebrow">AI-agenten</p><h2 id="gmail-heading">Gmail-konton</h2></div>
+        {configured && (
+          <a className="ac-mini-add-button" href={api.gmailConnectUrl()}>
+            <Icon.Plus size={17} /> Anslut konto
+          </a>
+        )}
+      </div>
+      <p className="ac-account-intro">
+        Anslutna inkorgar kan AI-agenten söka i (endast läsning) för att hitta kvitton och underlag till verifikationerna.
+      </p>
+
+      {error && <p className="ac-settings-error" role="alert"><Icon.Alert size={16} /> {error}</p>}
+
+      {!configured ? (
+        <p className="ac-help-text">Gmail är inte konfigurerat på servern ännu. Lägg till GOOGLE_CLIENT_ID och GOOGLE_CLIENT_SECRET.</p>
+      ) : loading ? (
+        <div className="ac-history-loading"><span className="ac-loader" /> Hämtar Gmail-konton…</div>
+      ) : accounts.length ? (
+        <div className="ac-gmail-list">
+          {accounts.map((account) => (
+            <div className="ac-gmail-row" key={account.id}>
+              <span className="ac-gmail-row-icon"><Icon.Mail size={18} /></span>
+              <span className="ac-gmail-row-info">
+                <strong>{account.email}</strong>
+                <small>
+                  {account.status === "active"
+                    ? account.lastUsedAt ? `Senast använd ${formatDateTime(account.lastUsedAt)}` : "Ansluten"
+                    : "Behöver anslutas igen"}
+                </small>
+              </span>
+              {account.status !== "active" && (
+                <a aria-label={`Anslut ${account.email} igen`} className="ac-gmail-reconnect" href={api.gmailConnectUrl()}>
+                  <Icon.Refresh size={16} />
+                </a>
+              )}
+              <button
+                aria-label={`Koppla bort ${account.email}`}
+                className="is-danger"
+                disabled={busyId === account.id}
+                onClick={() => void disconnect(account)}
+                type="button"
+              >
+                {busyId === account.id ? <span className="ac-button-spinner" /> : <Icon.Trash size={16} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Icon.Mail />}
+          title="Ingen inkorg är ansluten"
+          description="Anslut båda dina Gmail-konton så kan AI-agenten leta kvitton åt dig."
+        />
+      )}
+    </section>
   );
 }
 

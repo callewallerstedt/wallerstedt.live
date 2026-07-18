@@ -2840,3 +2840,238 @@ body:has(.accounting-app) > .footer {
   .ac-ai-actions { flex-direction: row; align-items: center; }
   .ac-ai-actions .ac-button { width: auto; flex: 1; }
 }
+
+/* Agent activity timeline (live steps + recap) */
+.ac-agent-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ac-agent-live-bubble { min-width: min(78vw, 340px); }
+
+.ac-agent-live-bubble .ac-agent-activity { margin-bottom: 10px; }
+
+.ac-agent-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+
+.ac-agent-step-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-inset);
+  color: var(--ac-muted);
+  margin-top: 1px;
+}
+
+.ac-agent-step.is-done .ac-agent-step-icon {
+  background: var(--ac-positive-soft);
+  color: var(--ac-positive);
+}
+
+.ac-agent-step.is-error .ac-agent-step-icon {
+  background: var(--ac-warning-soft);
+  color: var(--ac-warning);
+}
+
+.ac-agent-step.is-running .ac-agent-step-icon {
+  background: var(--ac-inset-strong);
+  color: var(--ac-ink);
+}
+
+.ac-step-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: ac-spin 0.7s linear infinite;
+}
+
+.ac-agent-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ac-agent-step-text strong { font-weight: 600; color: var(--ac-ink); }
+
+.ac-agent-step.is-running .ac-agent-step-text strong { color: var(--ac-ink-dim); }
+
+.ac-agent-step-text em {
+  font-style: normal;
+  color: var(--ac-muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.ac-agent-step-text small { color: var(--ac-faint); font-size: 12px; }
+
+.ac-agent-step.is-error .ac-agent-step-text small { color: var(--ac-warning); }
+
+.ac-agent-steps-recap {
+  margin-bottom: 8px;
+  border: 1px solid var(--ac-inset-strong);
+  border-radius: 12px;
+  background: var(--ac-inset);
+  padding: 0;
+  overflow: hidden;
+}
+
+.ac-agent-steps-recap summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ac-muted);
+  user-select: none;
+}
+
+.ac-agent-steps-recap summary::-webkit-details-marker { display: none; }
+
+.ac-agent-steps-recap[open] summary { border-bottom: 1px solid var(--ac-inset-strong); }
+
+.ac-agent-steps-recap .ac-agent-activity { padding: 10px 12px; }
+
+/* Gmail receipts in the agent result panel */
+.ac-agent-gmail-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ac-agent-gmail-attachments > strong { font-size: 13.5px; color: var(--ac-muted); }
+
+.ac-agent-gmail-attachment {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: var(--ac-inset);
+  border: 1px solid var(--ac-inset-strong);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+
+.ac-agent-gmail-attachment:disabled { cursor: default; }
+
+.ac-agent-gmail-attachment > span:first-child {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-positive-soft);
+  color: var(--ac-positive);
+}
+
+.ac-agent-gmail-attachment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ac-agent-gmail-attachment-info strong {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-agent-gmail-attachment-info small {
+  color: var(--ac-muted);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Gmail account manager in Settings */
+.ac-gmail-card .ac-mini-add-button { text-decoration: none; }
+
+.ac-gmail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ac-gmail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--ac-inset);
+  border: 1px solid var(--ac-inset-strong);
+}
+
+.ac-gmail-row-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-card-soft);
+  color: var(--ac-ink-dim);
+}
+
+.ac-gmail-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ac-gmail-row-info strong {
+  font-size: 14.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-gmail-row-info small { color: var(--ac-muted); font-size: 12.5px; }
+
+.ac-gmail-row button,
+.ac-gmail-reconnect {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-card-soft);
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+
+.ac-gmail-row button.is-danger:hover { color: var(--ac-danger); background: var(--ac-danger-soft); }
+
+.ac-gmail-reconnect { color: var(--ac-warning); background: var(--ac-warning-soft); }

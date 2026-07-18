@@ -8,10 +8,13 @@ import type {
   AccountingAccount,
   AccountingEntry,
   AccountingRevision,
+  AgentGmailAttachment,
+  AgentStreamEvent,
   BackupStatus,
   DashboardData,
   DashboardSummary,
   DraftEntry,
+  GmailAccount,
 } from "./types";
 
 export type AccountingUploadProgress = {
@@ -257,6 +260,16 @@ function normalizeAgentProposal(value: unknown): AccountingAgentProposal | null 
   };
 }
 
+function normalizeGmailAttachment(value: unknown): AgentGmailAttachment {
+  const record = asRecord(value);
+  return {
+    document: normalizeDocument(record.document),
+    entryId: asString(record.entryId),
+    account: asString(record.account),
+    explanation: asString(record.explanation),
+  };
+}
+
 function normalizeAgentResult(value: unknown): AccountingAgentResult {
   const root = asRecord(value);
   const record = asRecord(root.result ?? value);
@@ -268,9 +281,49 @@ function normalizeAgentResult(value: unknown): AccountingAgentResult {
       return { name: asString(tool.name), label: asString(tool.label, asString(tool.name)) };
     }),
     referencedEntries: asArray(record.referencedEntries).map(normalizeEntry),
+    gmailAttachments: asArray(record.gmailAttachments).map(normalizeGmailAttachment),
     draft: record.draft ? normalizeDraft(record.draft) : null,
     proposal: normalizeAgentProposal(record.proposal),
   };
+}
+
+function normalizeGmailAccount(value: unknown): GmailAccount {
+  const record = asRecord(value);
+  return {
+    id: asString(record.id),
+    email: asString(record.email),
+    status: asString(record.status, "active"),
+    lastUsedAt: asOptionalString(record.lastUsedAt),
+    connectedAt: asString(record.connectedAt),
+  };
+}
+
+function normalizeAgentStreamEvent(value: unknown): AgentStreamEvent | { type: "final"; result: unknown } | { type: "error"; message: string } | null {
+  const record = asRecord(value);
+  const type = asString(record.type);
+  if (type === "status") return { type, message: asString(record.message) };
+  if (type === "tool-start") {
+    return {
+      type,
+      callId: asString(record.callId),
+      name: asString(record.name),
+      label: asString(record.label, asString(record.name)),
+      detail: asOptionalString(record.detail) ?? undefined,
+    };
+  }
+  if (type === "tool-end") {
+    return {
+      type,
+      callId: asString(record.callId),
+      name: asString(record.name),
+      ok: record.ok !== false,
+      summary: asOptionalString(record.summary) ?? undefined,
+    };
+  }
+  if (type === "text-delta") return { type, text: asString(record.text) };
+  if (type === "final") return { type: "final", result: record.result };
+  if (type === "error") return { type: "error", message: asString(record.message) };
+  return null;
 }
 
 function getErrorMessage(payload: unknown, status: number): string {
@@ -639,6 +692,138 @@ export class AccountingApi {
         ownedDocumentIds: documents.map((document) => document.id).filter(Boolean),
       }),
     }));
+  }
+
+  async askAgentStream(
+    text: string,
+    files: File[],
+    messages: AccountingAgentMessage[],
+    handlers: {
+      onProgress?: (progress: AccountingUploadProgress) => void;
+      onEvent?: (event: AgentStreamEvent) => void;
+    } = {},
+  ): Promise<AccountingAgentResult> {
+    const documents = files.length ? await this.uploadDocuments(files, handlers.onProgress) : [];
+    if (files.length) {
+      handlers.onProgress?.({
+        fileName: files.at(-1)?.name ?? "Uppdrag",
+        fileIndex: Math.max(files.length - 1, 0),
+        fileCount: files.length,
+        filePercentage: 100,
+        overallPercentage: 100,
+        phase: "analyzing",
+      });
+    }
+    const body = JSON.stringify({
+      text: text.trim(),
+      messages: messages.slice(-12).map(({ role, content }) => ({ role, content })),
+      documentIds: documents.map((document) => document.id).filter(Boolean),
+      ownedDocumentIds: documents.map((document) => document.id).filter(Boolean),
+    });
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/ai/agent/stream`, {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+        body,
+      });
+    } catch {
+      throw new AccountingApiError("Kunde inte nå servern. Kontrollera anslutningen och försök igen.", 0);
+    }
+
+    if ([404, 405].includes(response.status)) {
+      // Older deployments lack the streaming endpoint; fall back silently.
+      return normalizeAgentResult(await this.request("/ai/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }));
+    }
+    if (!response.ok || !response.body) {
+      let payload: unknown = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      throw new AccountingApiError(
+        getErrorMessage(payload, response.status || 502),
+        response.status || 502,
+        asOptionalString(asRecord(payload).error) ?? undefined,
+      );
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffered = "";
+    let finalResult: AccountingAgentResult | null = null;
+
+    const handleLine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+      const event = normalizeAgentStreamEvent(parsed);
+      if (!event) return;
+      if (event.type === "final") {
+        finalResult = normalizeAgentResult(event.result);
+      } else if (event.type === "error") {
+        throw new AccountingApiError(
+          event.message || "AI-agenten kunde inte slutföra uppdraget. Ingenting ändrades.",
+          502,
+        );
+      } else {
+        handlers.onEvent?.(event);
+      }
+    };
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      buffered += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      let newline = buffered.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffered.slice(0, newline);
+        buffered = buffered.slice(newline + 1);
+        handleLine(line);
+        newline = buffered.indexOf("\n");
+      }
+      if (done) {
+        handleLine(buffered);
+        break;
+      }
+    }
+
+    if (!finalResult) {
+      throw new AccountingApiError(
+        "Anslutningen bröts innan AI-agenten var klar. Kontrollera resultatet innan du försöker igen.",
+        502,
+      );
+    }
+    return finalResult;
+  }
+
+  async gmailAccounts(): Promise<{ configured: boolean; accounts: GmailAccount[] }> {
+    const payload = await this.request<unknown>("/gmail/accounts");
+    const record = asRecord(payload);
+    return {
+      configured: record.configured !== false,
+      accounts: asArray(record.accounts).map(normalizeGmailAccount),
+    };
+  }
+
+  gmailConnectUrl(): string {
+    return `${this.baseUrl}/gmail/connect`;
+  }
+
+  async disconnectGmailAccount(id: string): Promise<void> {
+    await this.request(`/gmail/accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   async applyAgentProposal(token: string): Promise<{
