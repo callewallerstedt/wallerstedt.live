@@ -364,6 +364,14 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     }
   }, [api, handleUnauthorized]);
 
+  // A single place to call whenever anything anywhere may have changed the ledger,
+  // the kontoplan, or an entry's documents — so no view is left showing stale data.
+  const refreshAll = useCallback(() => {
+    setEntriesLoaded(false);
+    void loadDashboard();
+    void loadAccounts();
+  }, [loadAccounts, loadDashboard]);
+
   useEffect(() => {
     const previousLanguage = document.documentElement.lang;
     document.documentElement.lang = "sv";
@@ -525,6 +533,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
         } as AccountingAgentMessage,
       ].slice(-12));
       setAgentResult(result);
+      // Some tools (attach_email_receipt, create_account) write immediately without a
+      // review step, so refresh the ledger/kontoplan/dashboard even without a draft or proposal.
+      refreshAll();
     } catch (error) {
       if (!handleUnauthorized(error)) {
         setAgentMessages(previousMessages);
@@ -567,11 +578,10 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     setDraft(null);
     setAiText("");
     setAiFiles([]);
-    setEntriesLoaded(false);
     setEditingEntry(null);
     setTab("home");
     setToast(message);
-    void loadDashboard();
+    refreshAll();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -582,11 +592,10 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       ...current,
       { role: "assistant", content: message } as AccountingAgentMessage,
     ].slice(-12));
-    setEntriesLoaded(false);
     setEditingEntry(null);
     setTab("chat");
     setToast(message);
-    void loadDashboard();
+    refreshAll();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -674,9 +683,8 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             onSaved={(entry) => {
               setEditingEntry(entry);
               setEntries((current) => current.map((item) => item.id === entry.id ? entry : item));
-              setEntriesLoaded(false);
               setToast("Ändringarna är sparade.");
-              void loadDashboard();
+              refreshAll();
             }}
           />
         ) : tab === "home" ? (

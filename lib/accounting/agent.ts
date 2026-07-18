@@ -20,8 +20,9 @@ import {
   readGmailMessage,
   searchGmail,
 } from "./gmail";
-import { serializeEntry } from "./serialize";
+import { serializeAccount, serializeEntry } from "./serialize";
 import {
+  createAccount,
   dashboard,
   deleteEntryInTransaction,
   listAccounts,
@@ -29,6 +30,7 @@ import {
   updateEntryInTransaction,
 } from "./service";
 import {
+  accountCreateSchema,
   aiExtractionSchema,
   entryPatchSchema,
   normalizeEntryInput,
@@ -269,6 +271,7 @@ function toolLabel(name: string) {
     get_post_history: "Kontrollerade ändringshistorik",
     ledger_overview: "Analyserade ekonomin",
     list_accounts: "Läste kontoplanen",
+    create_account: "Lade till konto i kontoplanen",
     search_gmail: "Sökte i Gmail",
     read_email: "Läste ett mejl",
     attach_email_receipt: "Sparade kvitto från Gmail",
@@ -325,6 +328,11 @@ function toolCallDetail(name: string, input: unknown) {
       const ids = Array.isArray(record.ids) ? record.ids.length : 0;
       return ids ? `${ids} ${ids === 1 ? "post" : "poster"}` : "";
     }
+    case "create_account": {
+      const number = typeof record.account === "number" ? record.account : "";
+      const name = typeof record.name === "string" ? record.name : "";
+      return [number, name].filter(Boolean).join(" · ");
+    }
     case "prepare_post_edits":
     case "prepare_post_deletions":
     case "prepare_new_drafts": {
@@ -377,6 +385,12 @@ function toolResultSummary(name: string, output: unknown) {
     case "list_accounts": {
       const accounts = Array.isArray(record.accounts) ? record.accounts.length : 0;
       return `${accounts} konton lästa`;
+    }
+    case "create_account": {
+      const account = asRecord(record.account);
+      return [typeof account.account === "number" ? account.account : "", typeof account.name === "string" ? account.name : ""]
+        .filter(Boolean)
+        .join(" · ") || "Kontot är tillagt";
     }
     case "prepare_new_drafts": {
       const count = typeof record.entryCount === "number" ? record.entryCount : 0;
@@ -561,6 +575,16 @@ export async function runAccountingAgent(
       execute: async () => {
         usedTools.add("list_accounts");
         return { accounts: await listAccounts() };
+      },
+    },
+    create_account: {
+      description:
+        "Add a new account to the BAS account chart (kontoplan) so it can be used on posts. Use list_accounts first to check it doesn't already exist under a different number. Only do this when the owner needs an account that genuinely isn't in the chart yet — prefer an existing matching account when one exists.",
+      inputSchema: accountCreateSchema,
+      execute: async (toolInput: z.output<typeof accountCreateSchema>) => {
+        usedTools.add("create_account");
+        const account = await createAccount(toolInput, "web-ai-agent");
+        return { created: true, account: serializeAccount(account) };
       },
     },
     search_gmail: {
@@ -756,6 +780,7 @@ Use search_gmail/read_email to find receipts, invoices, order confirmations, and
 MISSING-RECEIPT WORKFLOW: when asked to find missing receipts/verifications, (1) use search_posts with missingReceipts=true to list posts lacking evidence, (2) for each post search Gmail by counterparty, amount, and a date window around the post date, (3) read_email to verify amount, date, and seller genuinely match the post, (4) only on a confident match use attach_email_receipt to file the attachment on that exact post; if the receipt is in the email body without an attachment, or the match is uncertain, report what you found instead. Never attach evidence that does not clearly belong to the post. Report per post what was found, attached, or still missing.
 
 For any request to add/book/import a transaction, use list_accounts when account selection is needed, then prepare_new_drafts. New entries must remain drafts until the owner reviews them.
+If the owner asks to add an account to the kontoplan, or a post genuinely needs a BAS account that list_accounts shows doesn't exist yet, use create_account directly — this one action applies immediately (it only extends the account chart, it never books a transaction), so tell the owner what you added.
 For any request to change existing posts, first search/load the exact posts, then use prepare_post_edits with complete proposed posts. Preserve every field the owner did not ask to change.
 For any request to delete posts, first search/load the exact posts, then use prepare_post_deletions. If the target is ambiguous, ask a question instead of preparing a deletion.
 Never claim an edit, deletion, or new post has been applied. Prepared edits and deletions require a separate owner approval, and drafts require the existing review flow. attach_email_receipt is the only direct action and only adds evidence documents.

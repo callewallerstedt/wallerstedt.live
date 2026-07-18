@@ -501,7 +501,8 @@ export async function dashboard() {
       month.expenses = month.expenses.plus(entry.amount.abs());
       if (entry._count.documents === 0) missingReceiptCount += 1;
     } else if (typeKey.includes("skuld") || typeKey.includes("debt")) {
-      debt = debt.plus(entry.amount.abs());
+      // Signed, not abs: a positive post grows the debt, a negative post (a repayment) shrinks it.
+      debt = debt.plus(entry.amount);
     }
     if (entry.vatAmount) vat = vat.plus(entry.vatAmount);
     months.set(key, month);
