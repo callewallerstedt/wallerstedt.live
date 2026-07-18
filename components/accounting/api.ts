@@ -818,8 +818,13 @@ export class AccountingApi {
     };
   }
 
-  gmailConnectUrl(): string {
-    return `${this.baseUrl}/gmail/connect`;
+  async connectGmailAccount(email: string, appPassword: string): Promise<GmailAccount> {
+    const payload = await this.request<unknown>("/gmail/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, appPassword }),
+    });
+    return normalizeGmailAccount(asRecord(payload).account);
   }
 
   async disconnectGmailAccount(id: string): Promise<void> {

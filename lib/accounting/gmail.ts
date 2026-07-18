@@ -4,6 +4,7 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
+import type { ImapFlow, MessageStructureObject } from "imapflow";
 import { getAccountingDb } from "./db";
 import {
   inspectDocumentBytes,
@@ -12,13 +13,10 @@ import {
 import { AccountingError, redactedErrorDiagnostic } from "./errors";
 import { serializeDocument } from "./serialize";
 
-export const GMAIL_SCOPES = "https://www.googleapis.com/auth/gmail.readonly";
-export const GMAIL_STATE_COOKIE = "accounting_gmail_oauth_state";
-const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const MAX_GMAIL_ACCOUNTS = 4;
 const MAX_BODY_CHARS = 20_000;
+const MAX_TEXT_DOWNLOAD_BYTES = 600_000;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 export type GmailMessageSummary = {
   account: string;
@@ -39,23 +37,10 @@ export type GmailAttachmentInfo = {
 };
 
 export function gmailConfigured() {
-  return Boolean(
-    process.env.GOOGLE_CLIENT_ID?.trim() &&
-    process.env.GOOGLE_CLIENT_SECRET?.trim(),
-  );
-}
-
-function gmailOauthConfig() {
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-  if (!clientId || !clientSecret) {
-    throw new AccountingError(
-      "Gmail is not configured on the server yet.",
-      503,
-      "gmail_not_configured",
-    );
-  }
-  return { clientId, clientSecret };
+  const secret =
+    process.env.ACCOUNTING_GMAIL_TOKEN_SECRET?.trim() ||
+    process.env.ACCOUNTING_SESSION_SECRET?.trim();
+  return Boolean(secret && secret.length >= 32);
 }
 
 function encryptionKey() {
@@ -64,22 +49,22 @@ function encryptionKey() {
     process.env.ACCOUNTING_SESSION_SECRET?.trim();
   if (!secret || secret.length < 32) {
     throw new AccountingError(
-      "Gmail token storage is not configured.",
+      "Gmail password storage is not configured.",
       503,
       "gmail_token_secret_missing",
     );
   }
-  return createHash("sha256").update(`gmail-refresh-token:${secret}`).digest();
+  return createHash("sha256").update(`gmail-app-password:${secret}`).digest();
 }
 
-export function encryptGmailToken(plain: string) {
+export function encryptGmailSecret(plain: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return `v1.${iv.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${encrypted.toString("base64url")}`;
 }
 
-export function decryptGmailToken(stored: string) {
+export function decryptGmailSecret(stored: string) {
   const [version, iv, tag, data, ...rest] = stored.split(".");
   if (version !== "v1" || !iv || !tag || !data || rest.length) {
     throw new AccountingError(
@@ -108,187 +93,163 @@ export function decryptGmailToken(stored: string) {
   }
 }
 
-export function buildGmailAuthUrl(redirectUri: string, state: string) {
-  const { clientId } = gmailOauthConfig();
-  const parameters = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: GMAIL_SCOPES,
-    access_type: "offline",
-    prompt: "consent select_account",
-    include_granted_scopes: "true",
-    state,
-  });
-  return `${GOOGLE_AUTH_URL}?${parameters.toString()}`;
+function normalizeEmail(email: string) {
+  const normalized = email.trim().toLocaleLowerCase("en");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    throw new AccountingError(
+      "Ange en giltig Gmail-adress.",
+      400,
+      "gmail_invalid_email",
+    );
+  }
+  return normalized;
 }
 
-type GoogleTokenResponse = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  scope?: string;
-  error?: string;
-  error_description?: string;
+function normalizeAppPassword(appPassword: string) {
+  const normalized = appPassword.replace(/\s+/g, "");
+  if (normalized.length < 12 || normalized.length > 64) {
+    throw new AccountingError(
+      "App-lösenordet ser inte rätt ut. Det är 16 tecken och skapas på myaccount.google.com/apppasswords.",
+      400,
+      "gmail_invalid_app_password",
+    );
+  }
+  return normalized;
+}
+
+async function createImapClient(email: string, appPassword: string) {
+  const { ImapFlow } = await import("imapflow");
+  return new ImapFlow({
+    host: "imap.gmail.com",
+    port: 993,
+    secure: true,
+    auth: { user: email, pass: appPassword },
+    logger: false,
+    connectionTimeout: 20_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 60_000,
+  });
+}
+
+function isAuthenticationFailure(error: unknown) {
+  const record = error as { authenticationFailed?: boolean; response?: string; serverResponseCode?: string };
+  return (
+    record?.authenticationFailed === true ||
+    /invalid credentials|authenticationfailed|application-specific password/i.test(
+      String(record?.response ?? ""),
+    )
+  );
+}
+
+async function withImap<T>(
+  email: string,
+  appPassword: string,
+  fn: (client: ImapFlow) => Promise<T>,
+): Promise<T> {
+  let client: ImapFlow;
+  try {
+    client = await createImapClient(email, appPassword);
+    await client.connect();
+  } catch (error) {
+    if (isAuthenticationFailure(error)) {
+      throw new AccountingError(
+        `Gmail nekade inloggningen för ${email}. Kontrollera att app-lösenordet stämmer och fortfarande är aktivt.`,
+        409,
+        "gmail_auth_failed",
+      );
+    }
+    console.error("Gmail IMAP connection failed", redactedErrorDiagnostic(error));
+    throw new AccountingError(
+      "Gmail kunde inte nås just nu. Försök igen.",
+      502,
+      "gmail_unreachable",
+    );
+  }
+  try {
+    return await fn(client);
+  } finally {
+    await client.logout().catch(() => client.close());
+  }
+}
+
+async function openAllMail(client: ImapFlow) {
+  let path = "INBOX";
+  try {
+    const mailboxes = await client.list();
+    const allMail = mailboxes.find((mailbox) => mailbox.specialUse === "\\All");
+    if (allMail) path = allMail.path;
+  } catch {
+    // Fall back to INBOX when listing fails; searching still works there.
+  }
+  await client.mailboxOpen(path, { readOnly: true });
+}
+
+type StoredAccount = {
+  id: string;
+  email: string;
+  secret: string;
 };
 
-async function requestGoogleToken(body: URLSearchParams) {
-  let response: Response;
-  try {
-    response = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      cache: "no-store",
-    });
-  } catch {
-    throw new AccountingError(
-      "Google could not be reached. Try again.",
-      502,
-      "gmail_google_unreachable",
-    );
-  }
-  const payload = (await response.json().catch(() => ({}))) as GoogleTokenResponse;
-  if (!response.ok) {
-    const error = new AccountingError(
-      "Google rejected the Gmail authorization.",
-      response.status === 400 || response.status === 401 ? 409 : 502,
-      payload.error === "invalid_grant" ? "gmail_invalid_grant" : "gmail_token_error",
-    );
-    console.error("Gmail token request failed", {
-      status: response.status,
-      error: payload.error ?? null,
-    });
-    throw error;
-  }
-  return payload;
-}
-
-export async function exchangeGmailCode(code: string, redirectUri: string) {
-  const { clientId, clientSecret } = gmailOauthConfig();
-  const tokens = await requestGoogleToken(
-    new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  );
-  if (!tokens.access_token || !tokens.refresh_token) {
-    throw new AccountingError(
-      "Google did not return a usable Gmail authorization. Remove the app's access at myaccount.google.com/permissions and connect again.",
-      409,
-      "gmail_missing_refresh_token",
-    );
-  }
-  return {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    scope: tokens.scope ?? "",
-  };
-}
-
-export async function fetchGmailProfileEmail(accessToken: string) {
-  let response: Response;
-  try {
-    response = await fetch(`${GMAIL_API}/profile`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-  } catch {
-    throw new AccountingError("Gmail could not be reached. Try again.", 502, "gmail_unreachable");
-  }
-  const payload = (await response.json().catch(() => ({}))) as { emailAddress?: string };
-  if (!response.ok || !payload.emailAddress) {
-    throw new AccountingError(
-      "Google did not report which Gmail account was connected.",
-      502,
-      "gmail_profile_missing",
-    );
-  }
-  return payload.emailAddress;
-}
-
-const accessTokenCache = new Map<string, { token: string; expiresAt: number }>();
-
-async function accessTokenFor(account: { id: string; email: string; refreshToken: string }) {
-  const cached = accessTokenCache.get(account.email);
-  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
-  const { clientId, clientSecret } = gmailOauthConfig();
+async function withAccount<T>(
+  account: StoredAccount,
+  fn: (client: ImapFlow) => Promise<T>,
+): Promise<T> {
   const db = getAccountingDb();
-  let tokens: GoogleTokenResponse;
   try {
-    tokens = await requestGoogleToken(
-      new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: decryptGmailToken(account.refreshToken),
-        grant_type: "refresh_token",
-      }),
-    );
+    const result = await withImap(account.email, decryptGmailSecret(account.secret), fn);
+    await db.accountingGmailAccount
+      .update({
+        where: { id: account.id },
+        data: { status: "active", lastError: "", lastUsedAt: new Date() },
+      })
+      .catch(() => undefined);
+    return result;
   } catch (error) {
     if (
       error instanceof AccountingError &&
-      ["gmail_invalid_grant", "gmail_token_invalid"].includes(error.code ?? "")
+      ["gmail_auth_failed", "gmail_token_invalid"].includes(error.code)
     ) {
       await db.accountingGmailAccount
         .update({
           where: { id: account.id },
-          data: { status: "reauth_required", lastError: error.code ?? "invalid_grant" },
+          data: { status: "reauth_required", lastError: error.code },
         })
         .catch(() => undefined);
       throw new AccountingError(
-        `Access to ${account.email} has expired. Reconnect the account under Settings.`,
+        `Åtkomsten till ${account.email} fungerar inte längre. Anslut kontot igen under Inställningar.`,
         409,
         "gmail_reauth_required",
       );
     }
     throw error;
   }
-  if (!tokens.access_token) {
-    throw new AccountingError(
-      "Google did not return a Gmail access token.",
-      502,
-      "gmail_token_error",
-    );
-  }
-  accessTokenCache.set(account.email, {
-    token: tokens.access_token,
-    expiresAt: Date.now() + Math.max(60, tokens.expires_in ?? 3600) * 1000,
-  });
-  await db.accountingGmailAccount
-    .update({
-      where: { id: account.id },
-      data: { status: "active", lastError: "", lastUsedAt: new Date() },
-    })
-    .catch(() => undefined);
-  return tokens.access_token;
 }
 
-export async function upsertGmailAccount(email: string, refreshToken: string, scopes: string) {
-  const normalized = email.trim().toLocaleLowerCase("en");
-  if (!normalized || !normalized.includes("@")) {
-    throw new AccountingError("Google did not report an email address.", 502, "gmail_profile_missing");
-  }
+export async function addGmailAccount(email: string, appPassword: string) {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPassword = normalizeAppPassword(appPassword);
   const db = getAccountingDb();
-  const existing = await db.accountingGmailAccount.count({
-    where: { email: { not: normalized } },
+  const others = await db.accountingGmailAccount.count({
+    where: { email: { not: normalizedEmail } },
   });
-  if (existing >= MAX_GMAIL_ACCOUNTS) {
+  if (others >= MAX_GMAIL_ACCOUNTS) {
     throw new AccountingError(
-      `At most ${MAX_GMAIL_ACCOUNTS} Gmail accounts can be connected.`,
+      `Högst ${MAX_GMAIL_ACCOUNTS} Gmail-konton kan vara anslutna samtidigt.`,
       409,
       "gmail_account_limit",
     );
   }
-  accessTokenCache.delete(normalized);
-  const encrypted = encryptGmailToken(refreshToken);
-  return db.accountingGmailAccount.upsert({
-    where: { email: normalized },
-    create: { email: normalized, refreshToken: encrypted, scopes, status: "active" },
-    update: { refreshToken: encrypted, scopes, status: "active", lastError: "" },
+  // Prove the login works before anything is stored.
+  await withImap(normalizedEmail, normalizedPassword, async (client) => {
+    await openAllMail(client);
   });
+  const encrypted = encryptGmailSecret(normalizedPassword);
+  const account = await db.accountingGmailAccount.upsert({
+    where: { email: normalizedEmail },
+    create: { email: normalizedEmail, secret: encrypted, status: "active" },
+    update: { secret: encrypted, status: "active", lastError: "" },
+  });
+  return serializeGmailAccount(account);
 }
 
 export function serializeGmailAccount(account: {
@@ -320,7 +281,6 @@ export async function disconnectGmailAccount(id: string) {
   if (!account) {
     throw new AccountingError("The Gmail account was not found.", 404, "gmail_account_not_found");
   }
-  accessTokenCache.delete(account.email);
   await db.accountingGmailAccount.delete({ where: { id } });
   return serializeGmailAccount(account);
 }
@@ -343,61 +303,46 @@ async function resolveAccounts(email: string | null) {
   return accounts;
 }
 
-async function gmailFetch(
-  account: { id: string; email: string; refreshToken: string },
-  path: string,
-) {
-  const token = await accessTokenFor(account);
-  let response: Response;
-  try {
-    response = await fetch(`${GMAIL_API}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-  } catch {
-    throw new AccountingError("Gmail could not be reached. Try again.", 502, "gmail_unreachable");
-  }
-  if (response.status === 401 || response.status === 403) {
-    accessTokenCache.delete(account.email);
+type AddressLike = { name?: string; address?: string };
+
+function formatAddresses(addresses: AddressLike[] | undefined) {
+  if (!addresses?.length) return "";
+  return addresses
+    .map((item) =>
+      item.name && item.address
+        ? `${item.name} <${item.address}>`
+        : item.address ?? item.name ?? "",
+    )
+    .filter(Boolean)
+    .join(", ");
+}
+
+function parseUid(messageId: string) {
+  if (!/^\d{1,12}$/.test(messageId)) {
     throw new AccountingError(
-      `Gmail denied access for ${account.email}. Reconnect the account under Settings.`,
-      409,
-      "gmail_reauth_required",
+      "The email id is invalid. Search again and use a returned messageId.",
+      400,
+      "gmail_invalid_message_id",
     );
   }
-  if (response.status === 404) {
-    throw new AccountingError("The email or attachment was not found.", 404, "gmail_not_found");
-  }
-  if (!response.ok) {
-    console.error("Gmail API error", { status: response.status, path: path.split("?")[0] });
-    throw new AccountingError("Gmail returned an error. Try again.", 502, "gmail_api_error");
-  }
-  return response.json() as Promise<Record<string, unknown>>;
+  return messageId;
 }
 
-type GmailHeader = { name?: string; value?: string };
-type GmailPart = {
-  partId?: string;
-  filename?: string;
-  mimeType?: string;
-  headers?: GmailHeader[];
-  body?: { attachmentId?: string; size?: number; data?: string };
-  parts?: GmailPart[];
-};
-
-function header(headers: GmailHeader[] | undefined, name: string) {
-  return (
-    headers?.find((item) => item.name?.toLocaleLowerCase("en") === name)?.value ?? ""
-  );
+function collectParts(
+  node: MessageStructureObject | undefined,
+  into: MessageStructureObject[],
+) {
+  if (!node) return;
+  into.push(node);
+  for (const child of node.childNodes ?? []) collectParts(child, into);
 }
 
-function decodeBody(data: string | undefined) {
-  if (!data) return "";
-  try {
-    return Buffer.from(data, "base64url").toString("utf8");
-  } catch {
-    return "";
+function decodeTextBuffer(buffer: Buffer, charset: string | undefined) {
+  const normalized = (charset ?? "utf-8").toLocaleLowerCase("en");
+  if (["iso-8859-1", "latin1", "windows-1252", "cp1252"].includes(normalized)) {
+    return buffer.toString("latin1");
   }
+  return buffer.toString("utf8");
 }
 
 function stripHtml(html: string) {
@@ -417,55 +362,71 @@ function stripHtml(html: string) {
     .trim();
 }
 
-function collectParts(part: GmailPart | undefined, into: GmailPart[]) {
-  if (!part) return;
-  into.push(part);
-  for (const child of part.parts ?? []) collectParts(child, into);
-}
-
-function extractBodyText(payload: GmailPart | undefined) {
-  const parts: GmailPart[] = [];
-  collectParts(payload, parts);
-  const plain = parts
-    .filter((part) => part.mimeType === "text/plain" && part.body?.data)
-    .map((part) => decodeBody(part.body?.data))
-    .join("\n")
-    .trim();
-  if (plain) return plain.slice(0, MAX_BODY_CHARS);
-  const html = parts
-    .filter((part) => part.mimeType === "text/html" && part.body?.data)
-    .map((part) => decodeBody(part.body?.data))
-    .join("\n");
-  return stripHtml(html).slice(0, MAX_BODY_CHARS);
-}
-
-function extractAttachments(payload: GmailPart | undefined): GmailAttachmentInfo[] {
-  const parts: GmailPart[] = [];
-  collectParts(payload, parts);
+function attachmentsFromStructure(
+  structure: MessageStructureObject | undefined,
+): GmailAttachmentInfo[] {
+  const parts: MessageStructureObject[] = [];
+  collectParts(structure, parts);
   return parts
-    .filter((part) => part.filename && part.body?.attachmentId)
+    .filter((part) => {
+      if (!part.part) return false;
+      const filename =
+        part.dispositionParameters?.filename ?? part.parameters?.name ?? "";
+      return part.disposition?.toLocaleLowerCase("en") === "attachment" || Boolean(filename);
+    })
+    .filter((part) => !part.type?.startsWith("multipart/"))
     .map((part) => ({
-      attachmentId: part.body!.attachmentId!,
-      filename: part.filename!,
-      mimeType: part.mimeType ?? "application/octet-stream",
-      byteSize: part.body?.size ?? 0,
+      attachmentId: part.part!,
+      filename:
+        part.dispositionParameters?.filename ??
+        part.parameters?.name ??
+        `bilaga-${part.part}`,
+      mimeType: part.type ?? "application/octet-stream",
+      byteSize: part.size ?? 0,
     }));
 }
 
-function summarizeMessage(account: string, message: Record<string, unknown>): GmailMessageSummary {
-  const payload = message.payload as GmailPart | undefined;
-  const internalDate = Number(message.internalDate ?? 0);
+async function downloadPart(
+  client: ImapFlow,
+  uid: string,
+  part: string,
+  maxBytes: number,
+) {
+  const download = await client.download(uid, part, { uid: true, maxBytes });
+  if (!download?.content) {
+    throw new AccountingError("The email or attachment was not found.", 404, "gmail_not_found");
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of download.content) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return { buffer: Buffer.concat(chunks), meta: download.meta };
+}
+
+function summarize(
+  account: string,
+  message: {
+    uid: number;
+    threadId?: string;
+    internalDate?: Date | string;
+    envelope?: {
+      from?: AddressLike[];
+      to?: AddressLike[];
+      subject?: string;
+      date?: Date | string;
+    };
+  },
+): GmailMessageSummary {
+  const date = message.internalDate ?? message.envelope?.date;
   return {
     account,
-    messageId: String(message.id ?? ""),
-    threadId: String(message.threadId ?? ""),
-    from: header(payload?.headers, "from"),
-    to: header(payload?.headers, "to"),
-    subject: header(payload?.headers, "subject"),
-    date: internalDate
-      ? new Date(internalDate).toISOString()
-      : header(payload?.headers, "date"),
-    snippet: String(message.snippet ?? ""),
+    messageId: String(message.uid),
+    threadId: message.threadId ?? "",
+    from: formatAddresses(message.envelope?.from),
+    to: formatAddresses(message.envelope?.to),
+    subject: message.envelope?.subject ?? "",
+    date: date ? new Date(date).toISOString() : "",
+    snippet: "",
   };
 }
 
@@ -480,21 +441,21 @@ export async function searchGmail(input: {
   const searchedAccounts: Array<{ email: string; found: number; error?: string }> = [];
   for (const account of accounts) {
     try {
-      const list = await gmailFetch(
-        account,
-        `/messages?q=${encodeURIComponent(input.query)}&maxResults=${perAccount}`,
-      );
-      const ids = Array.isArray(list.messages)
-        ? (list.messages as Array<{ id?: string }>).map((item) => item.id).filter(Boolean)
-        : [];
-      for (const id of ids as string[]) {
-        const message = await gmailFetch(
-          account,
-          `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+      const messages = await withAccount(account, async (client) => {
+        await openAllMail(client);
+        const uids = await client.search({ gmailraw: input.query }, { uid: true });
+        if (!uids || !uids.length) return [];
+        const newest = uids.sort((left, right) => right - left).slice(0, perAccount);
+        return client.fetchAll(
+          newest,
+          { uid: true, envelope: true, internalDate: true, threadId: true },
+          { uid: true },
         );
-        results.push(summarizeMessage(account.email, message));
+      });
+      for (const message of messages) {
+        results.push(summarize(account.email, message));
       }
-      searchedAccounts.push({ email: account.email, found: ids.length });
+      searchedAccounts.push({ email: account.email, found: messages.length });
     } catch (error) {
       if (error instanceof AccountingError && error.code === "gmail_reauth_required") {
         searchedAccounts.push({ email: account.email, found: 0, error: error.message });
@@ -509,16 +470,48 @@ export async function searchGmail(input: {
 
 export async function readGmailMessage(email: string, messageId: string) {
   const [account] = await resolveAccounts(email);
-  const message = await gmailFetch(
-    account,
-    `/messages/${encodeURIComponent(messageId)}?format=full`,
-  );
-  const payload = message.payload as GmailPart | undefined;
-  return {
-    ...summarizeMessage(account.email, message),
-    bodyText: extractBodyText(payload),
-    attachments: extractAttachments(payload),
-  };
+  const uid = parseUid(messageId);
+  return withAccount(account, async (client) => {
+    await openAllMail(client);
+    const message = await client.fetchOne(
+      uid,
+      { uid: true, envelope: true, internalDate: true, threadId: true, bodyStructure: true },
+      { uid: true },
+    );
+    if (!message) {
+      throw new AccountingError("The email was not found.", 404, "gmail_not_found");
+    }
+    const parts: MessageStructureObject[] = [];
+    collectParts(message.bodyStructure, parts);
+    const textPart =
+      parts.find((part) => part.type === "text/plain" && part.part && !part.disposition) ??
+      parts.find((part) => part.type === "text/plain" && part.part);
+    const htmlPart =
+      parts.find((part) => part.type === "text/html" && part.part && !part.disposition) ??
+      parts.find((part) => part.type === "text/html" && part.part);
+    let bodyText = "";
+    const bodyPartId =
+      textPart?.part ??
+      htmlPart?.part ??
+      (message.bodyStructure && !message.bodyStructure.childNodes ? "1" : null);
+    if (bodyPartId) {
+      try {
+        const { buffer } = await downloadPart(client, uid, bodyPartId, MAX_TEXT_DOWNLOAD_BYTES);
+        const charset =
+          (textPart ?? htmlPart)?.parameters?.charset ??
+          message.bodyStructure?.parameters?.charset;
+        const raw = decodeTextBuffer(buffer, charset);
+        bodyText = (textPart || !htmlPart ? raw.trim() : stripHtml(raw)).slice(0, MAX_BODY_CHARS);
+      } catch {
+        bodyText = "";
+      }
+    }
+    return {
+      ...summarize(account.email, message),
+      bodyText,
+      attachments: attachmentsFromStructure(message.bodyStructure),
+    };
+  });
 }
 
 export async function fetchGmailAttachment(
@@ -527,15 +520,34 @@ export async function fetchGmailAttachment(
   attachmentId: string,
 ) {
   const [account] = await resolveAccounts(email);
-  const attachment = await gmailFetch(
-    account,
-    `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
-  );
-  const data = typeof attachment.data === "string" ? attachment.data : "";
-  if (!data) {
-    throw new AccountingError("The attachment is empty.", 404, "gmail_attachment_empty");
+  const uid = parseUid(messageId);
+  if (!/^[\d.]{1,20}$/.test(attachmentId)) {
+    throw new AccountingError(
+      "The attachment id is invalid. Use an attachmentId returned by read_email.",
+      400,
+      "gmail_invalid_attachment_id",
+    );
   }
-  return Buffer.from(data, "base64url");
+  return withAccount(account, async (client) => {
+    await openAllMail(client);
+    const { buffer, meta } = await downloadPart(
+      client,
+      uid,
+      attachmentId,
+      MAX_ATTACHMENT_BYTES + 1024,
+    );
+    if (!buffer.byteLength) {
+      throw new AccountingError("The attachment is empty.", 404, "gmail_attachment_empty");
+    }
+    if (buffer.byteLength > MAX_ATTACHMENT_BYTES) {
+      throw new AccountingError(
+        "The attachment is larger than 10 MB.",
+        413,
+        "gmail_attachment_too_large",
+      );
+    }
+    return { buffer, filename: meta.filename ?? "" };
+  });
 }
 
 export async function importGmailAttachment(input: {
@@ -545,7 +557,7 @@ export async function importGmailAttachment(input: {
   filename: string;
   entryId: string | null;
 }) {
-  const buffer = await fetchGmailAttachment(
+  const { buffer, filename } = await fetchGmailAttachment(
     input.account,
     input.messageId,
     input.attachmentId,
@@ -553,7 +565,7 @@ export async function importGmailAttachment(input: {
   let inspected;
   try {
     inspected = await inspectDocumentBytes(
-      input.filename || "gmail-bilaga",
+      input.filename || filename || "gmail-bilaga",
       "application/octet-stream",
       buffer,
     );

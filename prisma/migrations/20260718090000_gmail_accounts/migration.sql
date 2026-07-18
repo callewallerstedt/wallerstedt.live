@@ -2,8 +2,7 @@
 CREATE TABLE "AccountingGmailAccount" (
     "id" UUID NOT NULL,
     "email" TEXT NOT NULL,
-    "refreshToken" TEXT NOT NULL,
-    "scopes" TEXT NOT NULL DEFAULT '',
+    "secret" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'active',
     "lastError" TEXT NOT NULL DEFAULT '',
     "lastUsedAt" TIMESTAMP(3),

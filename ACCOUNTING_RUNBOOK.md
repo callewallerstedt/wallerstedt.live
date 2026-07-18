@@ -27,17 +27,14 @@ Keep the original SQLite file and the pre-migration archive until a cloud backup
 
 ## Gmail for the AI agent
 
-The chat agent can search connected Gmail inboxes read-only (`gmail.readonly`) to find receipts and attach them to ledger posts. Multiple accounts (up to 4) can be connected; refresh tokens are stored AES-256-GCM encrypted in `AccountingGmailAccount`.
+The chat agent can search connected Gmail inboxes read-only to find receipts and attach them to ledger posts. It uses Gmail's IMAP endpoint with per-account **Google app passwords** — no Google Cloud project, OAuth client, or API keys are required. Full Gmail search syntax still works via the `X-GM-RAW` IMAP extension.
 
-One-time Google Cloud setup:
+Connecting an inbox (done entirely in the app under *Mer → Gmail-konton* while signed in as the owner):
 
-1. Create a Google Cloud project and enable the **Gmail API**.
-2. Configure the OAuth consent screen (External, publish or add both Gmail addresses as test users) with the `.../auth/gmail.readonly` scope.
-3. Create an **OAuth client ID** of type *Web application* and register this exact redirect URI (it contains the private vault key, so treat the console entry as secret):
-   `https://<domain>/api/accounting/<accessKey>/gmail/callback`
-4. Set the environment variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in Vercel. Token encryption reuses `ACCOUNTING_SESSION_SECRET` unless a dedicated `ACCOUNTING_GMAIL_TOKEN_SECRET` (32+ chars) is set.
+1. On the Gmail account, enable 2-Step Verification (Google account → Security), then create an app password at myaccount.google.com/apppasswords.
+2. Paste the address and the 16-character app password into the connect form. The login is verified against `imap.gmail.com` before anything is stored.
 
-Connecting and disconnecting accounts is done in the app under *Mer → Gmail-konton* while signed in as the owner. If Google access is revoked externally, the account shows "Behöver anslutas igen" and can be reconnected in place. Disconnecting deletes the stored token; also revoke the grant at myaccount.google.com/permissions for completeness.
+Up to 4 accounts can be connected. App passwords are stored AES-256-GCM encrypted in `AccountingGmailAccount`; encryption reuses `ACCOUNTING_SESSION_SECRET` unless a dedicated `ACCOUNTING_GMAIL_TOKEN_SECRET` (32+ chars) is set — no other configuration is needed. If Google revokes an app password, the account shows "Behöver anslutas igen" and can be reconnected in place with a fresh password. Disconnecting deletes the stored secret; also delete the app password at myaccount.google.com/apppasswords for completeness.
 
 ## Backups and recovery
 

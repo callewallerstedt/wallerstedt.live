@@ -245,19 +245,18 @@ model AccountingAiDraft {
 }
 
 /**
- * A connected Gmail inbox the accounting agent may search read-only.
- * The refresh token is stored AES-256-GCM encrypted, never in clear text.
+ * A connected Gmail inbox the accounting agent may search read-only over IMAP.
+ * The Google app password is stored AES-256-GCM encrypted, never in clear text.
  */
 model AccountingGmailAccount {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique
-  refreshToken String
-  scopes       String    @default("")
-  status       String    @default("active")
-  lastError    String    @default("")
-  lastUsedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id         String    @id @default(uuid()) @db.Uuid
+  email      String    @unique
+  secret     String
+  status     String    @default("active")
+  lastError  String    @default("")
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([status, updatedAt])
 }

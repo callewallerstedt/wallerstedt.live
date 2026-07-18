@@ -315,23 +315,6 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  useEffect(() => {
-    const parameters = new URLSearchParams(window.location.search);
-    const gmail = parameters.get("gmail");
-    if (!gmail) return;
-    if (gmail === "connected") {
-      const email = parameters.get("email");
-      setToast(email ? `Gmail-kontot ${email} är anslutet.` : "Gmail-kontot är anslutet.");
-      setTab("settings");
-    } else if (gmail === "denied") {
-      setToast("Gmail-anslutningen avbröts. Inget konto lades till.");
-    }
-    parameters.delete("gmail");
-    parameters.delete("email");
-    const query = parameters.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, []);
-
   async function login(password: string) {
     const authenticated = await api.login(password);
     if (!authenticated) throw new Error("Inloggningen kunde inte bekräftas.");
@@ -2779,6 +2762,11 @@ function GmailManager({ api, onExpired }: { api: AccountingApi; onExpired: () =>
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [appPassword, setAppPassword] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [connectedMessage, setConnectedMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2797,10 +2785,45 @@ function GmailManager({ api, onExpired }: { api: AccountingApi; onExpired: () =>
 
   useEffect(() => { void load(); }, [load]);
 
+  function openForm(prefillEmail = "") {
+    setFormOpen(true);
+    setEmail(prefillEmail);
+    setAppPassword("");
+    setError("");
+    setConnectedMessage("");
+  }
+
+  async function connect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!email.trim() || !appPassword.trim()) {
+      setError("Fyll i både Gmail-adressen och app-lösenordet.");
+      return;
+    }
+    setConnecting(true);
+    setError("");
+    try {
+      const account = await api.connectGmailAccount(email.trim(), appPassword);
+      setAccounts((current) => [
+        ...current.filter((item) => item.id !== account.id && item.email !== account.email),
+        account,
+      ]);
+      setFormOpen(false);
+      setEmail("");
+      setAppPassword("");
+      setConnectedMessage(`${account.email} är ansluten. AI-agenten kan nu söka i inkorgen.`);
+    } catch (connectError) {
+      if (isUnauthorized(connectError)) onExpired();
+      else setError(displayError(connectError, "Kontot kunde inte anslutas. Kontrollera adressen och app-lösenordet."));
+    } finally {
+      setConnecting(false);
+    }
+  }
+
   async function disconnect(account: GmailAccount) {
     if (!window.confirm(`Koppla bort ${account.email}? AI-agenten kan då inte längre söka i den inkorgen.`)) return;
     setBusyId(account.id);
     setError("");
+    setConnectedMessage("");
     try {
       await api.disconnectGmailAccount(account.id);
       setAccounts((current) => current.filter((item) => item.id !== account.id));
@@ -2817,19 +2840,55 @@ function GmailManager({ api, onExpired }: { api: AccountingApi; onExpired: () =>
       <div className="ac-section-heading-row">
         <div><p className="ac-eyebrow">AI-agenten</p><h2 id="gmail-heading">Gmail-konton</h2></div>
         {configured && (
-          <a className="ac-mini-add-button" href={api.gmailConnectUrl()}>
-            <Icon.Plus size={17} /> Anslut konto
-          </a>
+          <button className="ac-mini-add-button" onClick={() => (formOpen ? setFormOpen(false) : openForm())} type="button">
+            {formOpen ? <Icon.Close size={17} /> : <Icon.Plus size={17} />} {formOpen ? "Stäng" : "Anslut konto"}
+          </button>
         )}
       </div>
       <p className="ac-account-intro">
         Anslutna inkorgar kan AI-agenten söka i (endast läsning) för att hitta kvitton och underlag till verifikationerna.
       </p>
 
+      {formOpen && (
+        <form className="ac-gmail-form" onSubmit={(event) => void connect(event)}>
+          <ol className="ac-gmail-howto">
+            <li>Öppna <a href="https://myaccount.google.com/apppasswords" rel="noreferrer" target="_blank">myaccount.google.com/apppasswords</a> inloggad på kontot du vill ansluta. (Kräver att 2-stegsverifiering är på — slå på den under Säkerhet om sidan säger nej.)</li>
+            <li>Skapa ett app-lösenord, döp det till t.ex. ”Bokföring”.</li>
+            <li>Kopiera det 16 tecken långa lösenordet och klistra in det här.</li>
+          </ol>
+          <label className="ac-field">
+            <span>Gmail-adress</span>
+            <input
+              autoComplete="off"
+              inputMode="email"
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="namn@gmail.com"
+              type="email"
+              value={email}
+            />
+          </label>
+          <label className="ac-field">
+            <span>App-lösenord</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => setAppPassword(event.target.value)}
+              placeholder="xxxx xxxx xxxx xxxx"
+              type="password"
+              value={appPassword}
+            />
+          </label>
+          <button className="ac-button ac-button--primary" disabled={connecting} type="submit">
+            {connecting ? <><span className="ac-button-spinner" /> Kontrollerar inloggningen…</> : <><Icon.Check size={18} /> Anslut inkorgen</>}
+          </button>
+          <p className="ac-help-text">Lösenordet testas mot Gmail direkt och sparas krypterat. Det ger bara läsåtkomst via appen och kan återkallas när som helst på samma Google-sida.</p>
+        </form>
+      )}
+
       {error && <p className="ac-settings-error" role="alert"><Icon.Alert size={16} /> {error}</p>}
+      {connectedMessage && <p className="ac-success-copy" role="status"><Icon.Check size={16} /> {connectedMessage}</p>}
 
       {!configured ? (
-        <p className="ac-help-text">Gmail är inte konfigurerat på servern ännu. Lägg till GOOGLE_CLIENT_ID och GOOGLE_CLIENT_SECRET.</p>
+        <p className="ac-help-text">Gmail-anslutningen är inte konfigurerad på servern ännu (krypteringsnyckel saknas).</p>
       ) : loading ? (
         <div className="ac-history-loading"><span className="ac-loader" /> Hämtar Gmail-konton…</div>
       ) : accounts.length ? (
@@ -2846,9 +2905,14 @@ function GmailManager({ api, onExpired }: { api: AccountingApi; onExpired: () =>
                 </small>
               </span>
               {account.status !== "active" && (
-                <a aria-label={`Anslut ${account.email} igen`} className="ac-gmail-reconnect" href={api.gmailConnectUrl()}>
+                <button
+                  aria-label={`Anslut ${account.email} igen`}
+                  className="ac-gmail-reconnect"
+                  onClick={() => openForm(account.email)}
+                  type="button"
+                >
                   <Icon.Refresh size={16} />
-                </a>
+                </button>
               )}
               <button
                 aria-label={`Koppla bort ${account.email}`}
