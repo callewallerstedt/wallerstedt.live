@@ -50,5 +50,6 @@ export const AccountingIcons = {
   Wallet: (props: IconProps) => <Icon {...props}><path d="M4 6h15v14H4a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3h12v3"/><path d="M14 11h7v5h-7a2.5 2.5 0 0 1 0-5Z"/></Icon>,
   Info: (props: IconProps) => <Icon {...props}><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></Icon>,
   Mail: (props: IconProps) => <Icon {...props}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></Icon>,
+  Clipboard: (props: IconProps) => <Icon {...props}><path d="M9 4h6v3H9V4Z"/><path d="M15 5h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3"/><path d="M9 12h6M9 16h6"/></Icon>,
   Paperclip: (props: IconProps) => <Icon {...props}><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L16 7"/></Icon>,
 };

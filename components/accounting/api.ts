@@ -10,6 +10,7 @@ import type {
   AccountingRevision,
   AgentGmailAttachment,
   AgentStreamEvent,
+  AiSettings,
   BackupStatus,
   DashboardData,
   DashboardSummary,
@@ -671,6 +672,7 @@ export class AccountingApi {
     files: File[],
     messages: AccountingAgentMessage[],
     onProgress?: (progress: AccountingUploadProgress) => void,
+    settings?: AiSettings,
   ): Promise<AccountingAgentResult> {
     const documents = files.length ? await this.uploadDocuments(files, onProgress) : [];
     const lastFile = files.at(-1)?.name ?? "Uppdrag";
@@ -690,6 +692,8 @@ export class AccountingApi {
         messages: messages.slice(-12),
         documentIds: documents.map((document) => document.id).filter(Boolean),
         ownedDocumentIds: documents.map((document) => document.id).filter(Boolean),
+        model: settings?.model ?? null,
+        reasoningEffort: settings?.reasoningEffort ?? null,
       }),
     }));
   }
@@ -702,6 +706,7 @@ export class AccountingApi {
       onProgress?: (progress: AccountingUploadProgress) => void;
       onEvent?: (event: AgentStreamEvent) => void;
     } = {},
+    settings?: AiSettings,
   ): Promise<AccountingAgentResult> {
     const documents = files.length ? await this.uploadDocuments(files, handlers.onProgress) : [];
     if (files.length) {
@@ -719,6 +724,8 @@ export class AccountingApi {
       messages: messages.slice(-12).map(({ role, content }) => ({ role, content })),
       documentIds: documents.map((document) => document.id).filter(Boolean),
       ownedDocumentIds: documents.map((document) => document.id).filter(Boolean),
+      model: settings?.model ?? null,
+      reasoningEffort: settings?.reasoningEffort ?? null,
     });
 
     let response: Response;

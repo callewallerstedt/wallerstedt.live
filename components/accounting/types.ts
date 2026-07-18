@@ -162,3 +162,12 @@ export type AccountingAgentResult = {
 };
 
 export type AppTab = "home" | "ledger" | "add" | "chat" | "settings";
+
+export type AiModelId = "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna";
+
+export type AiReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export type AiSettings = {
+  model: AiModelId;
+  reasoningEffort: AiReasoningEffort;
+};

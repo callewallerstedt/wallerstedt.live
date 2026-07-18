@@ -27,6 +27,8 @@ import type {
   AccountingAgentResult,
   AccountingRevision,
   AgentStep,
+  AiReasoningEffort,
+  AiSettings,
   AppTab,
   DashboardData,
   DraftEntry,
@@ -34,6 +36,68 @@ import type {
 } from "./types";
 
 type SessionStatus = "checking" | "authenticated" | "unauthenticated" | "error";
+
+const AI_MODEL_OPTIONS = [
+  { id: "gpt-5.6-sol", short: "Sol", label: "GPT-5.6 Sol", hint: "Smartast — bäst för svåra uppdrag" },
+  { id: "gpt-5.6-terra", short: "Terra", label: "GPT-5.6 Terra", hint: "Balanserad för vardagsuppdrag" },
+  { id: "gpt-5.6-luna", short: "Luna", label: "GPT-5.6 Luna", hint: "Snabbast och billigast" },
+] as const;
+
+const AI_EFFORT_OPTIONS = [
+  { id: "none", label: "Ingen", hint: "Svarar direkt utan betänketid" },
+  { id: "low", label: "Låg", hint: "Snabbt för enkla frågor" },
+  { id: "medium", label: "Medel", hint: "Standard för de flesta uppdrag" },
+  { id: "high", label: "Hög", hint: "Noggrannare sökning och analys" },
+  { id: "xhigh", label: "Extra hög", hint: "Svåra uppdrag i flera steg" },
+  { id: "max", label: "Max", hint: "Djupast tänkande — endast Sol" },
+] as const;
+
+const DEFAULT_AI_SETTINGS: AiSettings = { model: "gpt-5.6-sol", reasoningEffort: "medium" };
+const AI_SETTINGS_STORAGE_KEY = "ac-ai-settings";
+
+function isValidAiSettings(value: unknown): value is AiSettings {
+  const record = value as { model?: unknown; reasoningEffort?: unknown } | null;
+  return Boolean(
+    record &&
+    AI_MODEL_OPTIONS.some((option) => option.id === record.model) &&
+    AI_EFFORT_OPTIONS.some((option) => option.id === record.reasoningEffort),
+  );
+}
+
+const CLIPBOARD_MIME_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "application/pdf": "pdf",
+  "text/csv": "csv",
+};
+
+async function readClipboardFiles(): Promise<File[]> {
+  const clipboard = navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItems> };
+  if (typeof clipboard?.read !== "function") {
+    throw new Error("Webbläsaren stöder inte klistra in-knappen. Använd Välj filer i stället.");
+  }
+  let items: ClipboardItems;
+  try {
+    items = await clipboard.read();
+  } catch {
+    throw new Error("Åtkomst till urklipp nekades. Tillåt urklipp för sidan och försök igen.");
+  }
+  const files: File[] = [];
+  const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+  for (const item of items) {
+    const type = Object.keys(CLIPBOARD_MIME_EXTENSIONS).find((candidate) => item.types.includes(candidate));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    if (!blob.size) continue;
+    files.push(
+      new File([blob], `urklipp-${stamp}-${files.length + 1}.${CLIPBOARD_MIME_EXTENSIONS[type]}`, { type }),
+    );
+  }
+  if (!files.length) {
+    throw new Error("Urklippet innehåller ingen bild eller fil. Kopiera t.ex. en skärmdump, bild eller PDF först.");
+  }
+  return files;
+}
 
 const currencyFormatter = new Intl.NumberFormat("sv-SE", {
   style: "currency",
@@ -199,6 +263,27 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [agentStatus, setAgentStatus] = useState("");
   const [ledgerDocFilter, setLedgerDocFilter] = useState<"all" | "missing">("all");
   const [toast, setToast] = useState("");
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
+      if (!stored) return;
+      const parsed: unknown = JSON.parse(stored);
+      if (isValidAiSettings(parsed)) setAiSettings(parsed);
+    } catch {
+      // Ignore unreadable stored settings and keep the defaults.
+    }
+  }, []);
+
+  const updateAiSettings = useCallback((next: AiSettings) => {
+    setAiSettings(next);
+    try {
+      window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Persisting is best-effort; the in-memory choice still applies.
+    }
+  }, []);
 
   const expireSession = useCallback(() => {
     setSessionStatus("unauthenticated");
@@ -429,6 +514,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             }
           },
         },
+        aiSettings,
       );
       setAgentMessages((current) => [
         ...current,
@@ -633,9 +719,11 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             }}
             onOpenEntry={(entry) => void openEntry(entry)}
             onReviewProposal={setAgentProposal}
+            onSettings={updateAiSettings}
             onText={setAiText}
             progress={aiProgress}
             result={agentResult}
+            settings={aiSettings}
             text={aiText}
           />
         ) : tab === "add" ? (
@@ -1033,9 +1121,11 @@ type AgentChatProps = {
   onOpenDraft: (draft: AccountingDraft) => void;
   onOpenEntry: (entry: AccountingEntry) => void;
   onReviewProposal: (proposal: AccountingAgentProposal) => void;
+  onSettings: (settings: AiSettings) => void;
   onText: (text: string) => void;
   progress: AccountingUploadProgress | null;
   result: AccountingAgentResult | null;
+  settings: AiSettings;
   text: string;
 };
 
@@ -1062,17 +1152,21 @@ function AgentChat({
   onOpenDraft,
   onOpenEntry,
   onReviewProposal,
+  onSettings,
   onText,
   progress,
   result,
+  settings,
   text,
 }: AgentChatProps) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
+  const modelMenuRef = useRef<HTMLDetailsElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [pasteError, setPasteError] = useState("");
 
   useEffect(() => {
     if (messages.length === 0 && !loading && !result) return;
@@ -1094,6 +1188,17 @@ function AgentChat({
     event.target.value = "";
     if (menuRef.current) menuRef.current.open = false;
     textareaRef.current?.focus();
+  }
+
+  async function pasteFromClipboard() {
+    if (menuRef.current) menuRef.current.open = false;
+    setPasteError("");
+    try {
+      appendFiles(await readClipboardFiles());
+      textareaRef.current?.focus();
+    } catch (error) {
+      setPasteError(error instanceof Error ? error.message : "Kunde inte läsa urklippet.");
+    }
   }
 
   function pasted(event: ClipboardEvent<HTMLTextAreaElement>) {
@@ -1152,11 +1257,60 @@ function AgentChat({
             <small>Kan läsa bokföringen, söka i Gmail och förbereda ändringar</small>
           </div>
         </div>
-        {hasConversation && (
-          <button className="ac-agent-new-chat" disabled={loading} onClick={onClear} type="button">
-            Nytt samtal
-          </button>
-        )}
+        <div className="ac-agent-header-actions">
+          <details className="ac-agent-model-picker" ref={modelMenuRef}>
+            <summary aria-label="Välj AI-modell och tankekraft">
+              {AI_MODEL_OPTIONS.find((option) => option.id === settings.model)?.short}
+              <i aria-hidden="true">·</i>
+              {AI_EFFORT_OPTIONS.find((option) => option.id === settings.reasoningEffort)?.label}
+            </summary>
+            <div className="ac-agent-model-menu">
+              <p>Modell</p>
+              {AI_MODEL_OPTIONS.map((option) => (
+                <button
+                  className={settings.model === option.id ? "is-active" : ""}
+                  disabled={loading}
+                  key={option.id}
+                  onClick={() => onSettings({
+                    model: option.id,
+                    reasoningEffort:
+                      settings.reasoningEffort === "max" && option.id !== "gpt-5.6-sol"
+                        ? "xhigh"
+                        : settings.reasoningEffort,
+                  })}
+                  type="button"
+                >
+                  <span><strong>{option.label}</strong><small>{option.hint}</small></span>
+                  {settings.model === option.id && <Icon.Check size={16} />}
+                </button>
+              ))}
+              <p>Tankekraft</p>
+              {AI_EFFORT_OPTIONS.map((option) => {
+                const solOnly = option.id === "max" && settings.model !== "gpt-5.6-sol";
+                return (
+                  <button
+                    className={settings.reasoningEffort === option.id ? "is-active" : ""}
+                    disabled={loading || solOnly}
+                    key={option.id}
+                    onClick={() => {
+                      onSettings({ ...settings, reasoningEffort: option.id as AiReasoningEffort });
+                      if (modelMenuRef.current) modelMenuRef.current.open = false;
+                    }}
+                    type="button"
+                  >
+                    <span><strong>{option.label}</strong><small>{option.hint}</small></span>
+                    {settings.reasoningEffort === option.id && <Icon.Check size={16} />}
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+          {hasConversation && (
+            <button className="ac-agent-new-chat" disabled={loading} onClick={onClear} type="button">
+              Nytt samtal
+            </button>
+          )}
+        </div>
       </header>
 
       <div className={`ac-agent-chat-thread ${hasConversation ? "has-conversation" : "is-empty"}`} aria-live="polite">
@@ -1256,6 +1410,7 @@ function AgentChat({
         )}
 
         {aiError && <p className="ac-form-error" role="alert"><Icon.Alert size={18} /> {aiError}</p>}
+        {pasteError && <p className="ac-form-error" role="alert"><Icon.Alert size={18} /> {pasteError}</p>}
 
         <div className="ac-agent-chat-input-row">
           <details className="ac-agent-attach" ref={menuRef}>
@@ -1263,6 +1418,7 @@ function AgentChat({
             <div className="ac-agent-attach-menu">
               <button disabled={loading} onClick={() => cameraRef.current?.click()} type="button"><Icon.Camera size={19} /><span><strong>Ta foto</strong><small>Använd kameran</small></span></button>
               <button disabled={loading} onClick={() => filesRef.current?.click()} type="button"><Icon.Upload size={19} /><span><strong>Välj filer</strong><small>Bild, PDF, text eller CSV</small></span></button>
+              <button disabled={loading} onClick={() => void pasteFromClipboard()} type="button"><Icon.Clipboard size={19} /><span><strong>Klistra in</strong><small>Bild eller fil från urklipp</small></span></button>
               <button disabled={loading} onClick={() => { if (menuRef.current) menuRef.current.open = false; onManual(); }} type="button"><Icon.Edit size={19} /><span><strong>Manuell post</strong><small>Fyll i själv</small></span></button>
             </div>
           </details>
@@ -1645,6 +1801,7 @@ function AiComposer({
   const cameraRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [pasteError, setPasteError] = useState("");
 
   function appendFiles(nextFiles: File[]) {
     const allowed = nextFiles.filter((file) => file.size > 0);
@@ -1660,6 +1817,27 @@ function AiComposer({
   function picked(event: ChangeEvent<HTMLInputElement>) {
     appendFiles(Array.from(event.target.files ?? []));
     event.target.value = "";
+  }
+
+  function pastedInTextarea(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const directFiles = Array.from(event.clipboardData.files);
+    const itemFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const pastedFiles = directFiles.length > 0 ? directFiles : itemFiles;
+    if (pastedFiles.length === 0) return;
+    event.preventDefault();
+    appendFiles(pastedFiles);
+  }
+
+  async function pasteFromClipboard() {
+    setPasteError("");
+    try {
+      appendFiles(await readClipboardFiles());
+    } catch (error) {
+      setPasteError(error instanceof Error ? error.message : "Kunde inte läsa urklippet.");
+    }
   }
 
   function dropped(event: DragEvent<HTMLDivElement>) {
@@ -1692,6 +1870,7 @@ function AiComposer({
         <textarea
           disabled={loading}
           onChange={(event) => onText(event.target.value)}
+          onPaste={pastedInTextarea}
           placeholder={agentMode
             ? "T.ex. hitta alla OpenAI-poster i år, summera dem och ändra fel konto…"
             : "T.ex. Adobe Creative Cloud, 742,50 kr inkl. moms, betalt med företagskort…"}
@@ -1733,7 +1912,14 @@ function AiComposer({
           <strong>Välj underlag</strong>
           <small>Bild, PDF eller fil</small>
         </button>
+        <button className="ac-upload-button" disabled={loading} onClick={() => void pasteFromClipboard()} type="button">
+          <span><Icon.Clipboard /></span>
+          <strong>Klistra in</strong>
+          <small>Från urklipp</small>
+        </button>
       </div>
+
+      {pasteError && <p className="ac-form-error" role="alert"><Icon.Alert size={18} /> {pasteError}</p>}
 
       {files.length > 0 && (
         <div className="ac-file-section">
@@ -2454,9 +2640,7 @@ function EntryEditor({
     }
   }
 
-  async function addDocuments(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
+  async function addDocuments(files: File[]) {
     if (!files.length) return;
     setUploadingDocuments(true);
     setDocumentProgress(null);
@@ -2474,6 +2658,25 @@ function EntryEditor({
       setUploadingDocuments(false);
       setDocumentProgress(null);
     }
+  }
+
+  function pickedDocuments(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    void addDocuments(files);
+  }
+
+  async function pasteDocuments() {
+    setError("");
+    setDocumentStatus("");
+    let files: File[];
+    try {
+      files = await readClipboardFiles();
+    } catch (pasteError) {
+      setError(pasteError instanceof Error ? pasteError.message : "Kunde inte läsa urklippet.");
+      return;
+    }
+    await addDocuments(files);
   }
 
   async function deleteDocument(document: AccountingDocument) {
@@ -2533,10 +2736,19 @@ function EntryEditor({
                   accept="image/jpeg,image/png,.pdf,.txt,.csv"
                   className="ac-visually-hidden"
                   multiple
-                  onChange={(event) => void addDocuments(event)}
+                  onChange={pickedDocuments}
                   ref={documentInputRef}
                   type="file"
                 />
+                <button
+                  aria-label="Klistra in underlag från urklipp"
+                  className="ac-mini-add-button"
+                  disabled={uploadingDocuments}
+                  onClick={() => void pasteDocuments()}
+                  type="button"
+                >
+                  <Icon.Clipboard size={17} /> Klistra in
+                </button>
                 <button
                   aria-label="Lägg till underlag"
                   className="ac-mini-add-button"

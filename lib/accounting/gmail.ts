@@ -27,6 +27,7 @@ export type GmailMessageSummary = {
   subject: string;
   date: string;
   snippet: string;
+  attachments?: Array<Pick<GmailAttachmentInfo, "filename" | "mimeType" | "byteSize">>;
 };
 
 export type GmailAttachmentInfo = {
@@ -403,6 +404,43 @@ async function downloadPart(
   return { buffer: Buffer.concat(chunks), meta: download.meta };
 }
 
+const MAX_SNIPPET_CHARS = 320;
+const MAX_SNIPPET_DOWNLOAD_BYTES = 16_000;
+
+function findBodyPart(structure: MessageStructureObject | undefined) {
+  const parts: MessageStructureObject[] = [];
+  collectParts(structure, parts);
+  const textPart =
+    parts.find((part) => part.type === "text/plain" && part.part && !part.disposition) ??
+    parts.find((part) => part.type === "text/plain" && part.part);
+  const htmlPart =
+    parts.find((part) => part.type === "text/html" && part.part && !part.disposition) ??
+    parts.find((part) => part.type === "text/html" && part.part);
+  const partId =
+    textPart?.part ??
+    htmlPart?.part ??
+    (structure && !structure.childNodes ? "1" : null);
+  return { textPart, htmlPart, partId };
+}
+
+async function fetchBodySnippet(
+  client: ImapFlow,
+  uid: string,
+  structure: MessageStructureObject | undefined,
+) {
+  const { textPart, htmlPart, partId } = findBodyPart(structure);
+  if (!partId) return "";
+  try {
+    const { buffer } = await downloadPart(client, uid, partId, MAX_SNIPPET_DOWNLOAD_BYTES);
+    const charset = (textPart ?? htmlPart)?.parameters?.charset ?? structure?.parameters?.charset;
+    const raw = decodeTextBuffer(buffer, charset);
+    const text = textPart || !htmlPart ? raw : stripHtml(raw);
+    return text.replace(/\s+/g, " ").trim().slice(0, MAX_SNIPPET_CHARS);
+  } catch {
+    return "";
+  }
+}
+
 function summarize(
   account: string,
   message: {
@@ -446,15 +484,24 @@ export async function searchGmail(input: {
         const uids = await client.search({ gmailraw: input.query }, { uid: true });
         if (!uids || !uids.length) return [];
         const newest = uids.sort((left, right) => right - left).slice(0, perAccount);
-        return client.fetchAll(
+        const fetched = await client.fetchAll(
           newest,
-          { uid: true, envelope: true, internalDate: true, threadId: true },
+          { uid: true, envelope: true, internalDate: true, threadId: true, bodyStructure: true },
           { uid: true },
         );
+        const summaries: GmailMessageSummary[] = [];
+        for (const message of fetched) {
+          summaries.push({
+            ...summarize(account.email, message),
+            snippet: await fetchBodySnippet(client, String(message.uid), message.bodyStructure),
+            attachments: attachmentsFromStructure(message.bodyStructure).map(
+              ({ filename, mimeType, byteSize }) => ({ filename, mimeType, byteSize }),
+            ),
+          });
+        }
+        return summaries;
       });
-      for (const message of messages) {
-        results.push(summarize(account.email, message));
-      }
+      results.push(...messages);
       searchedAccounts.push({ email: account.email, found: messages.length });
     } catch (error) {
       if (error instanceof AccountingError && error.code === "gmail_reauth_required") {
@@ -481,19 +528,8 @@ export async function readGmailMessage(email: string, messageId: string) {
     if (!message) {
       throw new AccountingError("The email was not found.", 404, "gmail_not_found");
     }
-    const parts: MessageStructureObject[] = [];
-    collectParts(message.bodyStructure, parts);
-    const textPart =
-      parts.find((part) => part.type === "text/plain" && part.part && !part.disposition) ??
-      parts.find((part) => part.type === "text/plain" && part.part);
-    const htmlPart =
-      parts.find((part) => part.type === "text/html" && part.part && !part.disposition) ??
-      parts.find((part) => part.type === "text/html" && part.part);
+    const { textPart, htmlPart, partId: bodyPartId } = findBodyPart(message.bodyStructure);
     let bodyText = "";
-    const bodyPartId =
-      textPart?.part ??
-      htmlPart?.part ??
-      (message.bodyStructure && !message.bodyStructure.childNodes ? "1" : null);
     if (bodyPartId) {
       try {
         const { buffer } = await downloadPart(client, uid, bodyPartId, MAX_TEXT_DOWNLOAD_BYTES);
