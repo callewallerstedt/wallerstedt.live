@@ -581,7 +581,7 @@ export default async function AdminPage({
                 <h3>{formatTimestamp(analytics.updatedAt)}</h3>
                 <p>
                   {analytics.source === "database"
-                    ? "Stored in Postgres via Prisma."
+                    ? "Legacy totals stored directly in Postgres. New traffic uses Vercel Analytics."
                     : "Stored in the local JSON fallback."}
                 </p>
               </article>
@@ -661,7 +661,7 @@ export default async function AdminPage({
                   ))}
                 </div>
               ) : (
-                <p className="status-copy">No analytics data yet. Open the public pages once and it will start filling in.</p>
+                <p className="status-copy">No legacy analytics data. Current public traffic is available in Vercel Analytics.</p>
               )}
             </section>
           </section>

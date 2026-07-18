@@ -1,29 +1,19 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "@prisma/client";
-import { withAccelerate } from "@prisma/extension-accelerate";
+
+import { getDirectDatabaseUrl } from "./database-url";
 
 declare global {
   var __wallerstedtPrisma: ReturnType<typeof createPrismaClient> | undefined;
 }
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-
-function isAccelerateUrl(value: string) {
-  return value.startsWith("prisma://") || value.startsWith("prisma+postgres://");
-}
+const databaseUrl = getDirectDatabaseUrl();
 
 function getPrismaLogLevels(): Prisma.LogLevel[] {
   return process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"];
 }
 
 function createPrismaClient(connectionString: string) {
-  if (isAccelerateUrl(connectionString)) {
-    return new PrismaClient({
-      accelerateUrl: connectionString,
-      log: getPrismaLogLevels(),
-    }).$extends(withAccelerate());
-  }
-
   const adapter = new PrismaPg({
     connectionString,
   });

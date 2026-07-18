@@ -86,7 +86,7 @@ export type TeslaSettings = {
   keepAwake: boolean;
   haptics: boolean;
   demo: boolean;
-  refreshMs: 1000 | 1500 | 3000;
+  refreshMs: 3000 | 5000 | 10000;
 };
 
 export type DataSource = "car" | "iphone" | "cached" | "demo";

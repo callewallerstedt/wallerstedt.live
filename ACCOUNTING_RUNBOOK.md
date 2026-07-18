@@ -13,6 +13,8 @@ npm.cmd run prisma:deploy:local
 
 Do not use `prisma db push` for routine production releases. It was used once to bootstrap the empty database; the matching baseline migration was then marked as applied.
 
+The runtime accepts only direct `postgres://` or `postgresql://` connections. Prisma Accelerate/Data Proxy URLs are deliberately ignored so ordinary application traffic cannot consume a separate Prisma transfer quota. Public traffic is recorded by Vercel Analytics; the legacy `/api/collect` and `/api/analytics` database writers are permanent no-ops.
+
 ## One-time desktop import
 
 The importer reads SQLite in read-only mode, pushes deterministic UUIDv5 records, uploads receipts privately, and refuses to finish unless the cloud copy reconciles:

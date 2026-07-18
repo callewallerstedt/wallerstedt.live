@@ -86,7 +86,7 @@ export function SettingsSheet({ open, settings, onClose, onSave }: SettingsSheet
 
         <div className="settings-section">
           <h3>Driving display</h3>
-          <label className="settings-field"><span>Dashboard refresh</span><select value={draft.refreshMs} onChange={(event) => update("refreshMs", Number(event.target.value) as TeslaSettings["refreshMs"])}><option value={1000}>Every second</option><option value={1500}>Every 1.5 seconds</option><option value={3000}>Every 3 seconds</option></select><small>This reads your own Postgres-backed API. It does not poll Tesla.</small></label>
+          <label className="settings-field"><span>Dashboard refresh</span><select value={draft.refreshMs} onChange={(event) => update("refreshMs", Number(event.target.value) as TeslaSettings["refreshMs"])}><option value={3000}>Every 3 seconds</option><option value={5000}>Every 5 seconds</option><option value={10000}>Every 10 seconds</option></select><small>This reads your own Postgres-backed API. Slower refresh uses less database transfer.</small></label>
           <div className="settings-toggles">{toggles.map((item) => <label key={item.key}><span><strong>{item.title}</strong><small>{item.note}</small></span><input type="checkbox" checked={draft[item.key]} onChange={(event) => update(item.key, event.target.checked)} /><i /></label>)}</div>
         </div>
 

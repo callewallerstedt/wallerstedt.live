@@ -52,10 +52,6 @@ export async function GET(request: Request) {
     take: 40,
     include: {
       chargeEvents: { orderBy: { startedAt: "asc" } },
-      samples: {
-        orderBy: { sampledAt: "asc" },
-        take: 1,
-      },
     },
   });
 

@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: TeslaSettings = {
   keepAwake: true,
   haptics: true,
   demo: false,
-  refreshMs: 1500,
+  refreshMs: 3000,
 };
 
 export const DEMO_LIVE: LiveState = {
