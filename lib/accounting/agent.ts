@@ -175,9 +175,17 @@ function buildPostsWhere(toolInput: PostsFilter): Prisma.AccountingEntryWhereInp
     });
   }
   if (toolInput.missingReceipts === true) {
-    and.push({ documents: { none: { deletedAt: null } } });
+    and.push({
+      receiptRequired: true,
+      documents: { none: { deletedAt: null } },
+    });
   } else if (toolInput.missingReceipts === false) {
-    and.push({ documents: { some: { deletedAt: null } } });
+    and.push({
+      OR: [
+        { receiptRequired: false },
+        { documents: { some: { deletedAt: null } } },
+      ],
+    });
   }
   if (toolInput.nearAmount != null) {
     const tolerance = Math.max(1, Math.abs(toolInput.nearAmount) * 0.02);

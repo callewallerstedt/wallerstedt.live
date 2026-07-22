@@ -185,6 +185,146 @@ function documentName(document: AccountingDocument, index: number) {
   return document.name || document.originalName || document.fileName || `Underlag ${index + 1}`;
 }
 
+function documentUrl(document: AccountingDocument, accessKey: string) {
+  const suppliedUrl = document.downloadUrl || document.url;
+  const fallbackUrl = document.id
+    ? `/api/accounting/${encodeURIComponent(accessKey)}/documents/${encodeURIComponent(document.id)}/download`
+    : "";
+  if (!suppliedUrl) return fallbackUrl;
+  if (suppliedUrl.startsWith("http://") || suppliedUrl.startsWith("https://") || suppliedUrl.startsWith("/")) {
+    return suppliedUrl;
+  }
+  return `/api/accounting/${encodeURIComponent(accessKey)}/${suppliedUrl.replace(/^\/+/, "")}`;
+}
+
+function isImageDocument(document: AccountingDocument) {
+  const name = document.originalName || document.name || document.fileName || "";
+  return (document.mimeType || document.contentType || "").startsWith("image/") || /\.(jpe?g|png)$/i.test(name);
+}
+
+function isPdfDocument(document: AccountingDocument) {
+  const name = document.originalName || document.name || document.fileName || "";
+  return (document.mimeType || document.contentType) === "application/pdf" || /\.pdf$/i.test(name);
+}
+
+function DocumentViewer({
+  document,
+  name,
+  onClose,
+  url,
+}: {
+  document: AccountingDocument;
+  name: string;
+  onClose: () => void;
+  url: string;
+}) {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ distance: number; center: { x: number; y: number } } | null>(null);
+  const image = isImageDocument(document);
+
+  const resetView = useCallback(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }, []);
+
+  const changeScale = useCallback((nextScale: number) => {
+    setScale(Math.min(6, Math.max(1, nextScale)));
+    if (nextScale <= 1) setOffset({ x: 0, y: 0 });
+  }, []);
+
+  useEffect(() => {
+    const previousOverflow = globalThis.document.body.style.overflow;
+    globalThis.document.body.style.overflow = "hidden";
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      globalThis.document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div aria-label={`Förhandsvisning av ${name}`} aria-modal="true" className="ac-document-viewer" role="dialog">
+      <div className="ac-document-viewer-toolbar">
+        <strong>{name}</strong>
+        <div>
+          {image && (
+            <>
+              <button aria-label="Zooma ut" disabled={scale <= 1} onClick={() => changeScale(scale - 0.5)} type="button">−</button>
+              <span>{Math.round(scale * 100)} %</span>
+              <button aria-label="Zooma in" disabled={scale >= 6} onClick={() => changeScale(scale + 0.5)} type="button"><Icon.Plus size={18} /></button>
+              <button aria-label="Återställ vy" onClick={resetView} type="button"><Icon.Refresh size={18} /></button>
+            </>
+          )}
+          <a aria-label="Öppna originalfil" href={url} rel="noopener noreferrer" target="_blank"><Icon.Download size={18} /></a>
+          <button aria-label="Stäng förhandsvisning" onClick={onClose} type="button"><Icon.Close size={20} /></button>
+        </div>
+      </div>
+      {image ? (
+        <div
+          className={`ac-document-viewer-canvas ${scale > 1 ? "is-zoomed" : ""}`}
+          onDoubleClick={() => scale > 1 ? resetView() : changeScale(2.5)}
+          onPointerCancel={(event) => {
+            pointers.current.delete(event.pointerId);
+            gesture.current = null;
+          }}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            gesture.current = null;
+          }}
+          onPointerMove={(event) => {
+            const previous = pointers.current.get(event.pointerId);
+            if (!previous) return;
+            pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            const active = [...pointers.current.values()];
+            if (active.length === 1 && scale > 1) {
+              setOffset((current) => ({
+                x: current.x + event.clientX - previous.x,
+                y: current.y + event.clientY - previous.y,
+              }));
+              return;
+            }
+            if (active.length >= 2) {
+              const [first, second] = active;
+              const distance = Math.hypot(second.x - first.x, second.y - first.y);
+              const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+              if (gesture.current) {
+                changeScale(scale * (distance / Math.max(gesture.current.distance, 1)));
+                setOffset((current) => ({
+                  x: current.x + center.x - gesture.current!.center.x,
+                  y: current.y + center.y - gesture.current!.center.y,
+                }));
+              }
+              gesture.current = { distance, center };
+            }
+          }}
+          onPointerUp={(event) => {
+            pointers.current.delete(event.pointerId);
+            gesture.current = null;
+          }}
+          onWheel={(event) => {
+            event.preventDefault();
+            changeScale(scale + (event.deltaY < 0 ? 0.35 : -0.35));
+          }}
+        >
+          {/* Protected receipt URLs cannot use the server-side Next image optimizer. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img alt={name} draggable={false} src={url} style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }} />
+        </div>
+      ) : isPdfDocument(document) ? (
+        <iframe className="ac-document-viewer-frame" src={url} title={name} />
+      ) : (
+        <iframe className="ac-document-viewer-frame" src={url} title={name} />
+      )}
+    </div>
+  );
+}
+
 function createManualDraft(): AccountingDraft {
   return {
     id: `manual-${Date.now()}`,
@@ -206,6 +346,7 @@ function createManualDraft(): AccountingDraft {
       source: "manual",
       notes: "",
       status: "draft",
+      receiptRequired: true,
       version: null,
       documentCount: 0,
       documents: [],
@@ -228,6 +369,7 @@ function withoutReadOnlyFields(entry: DraftEntry | AccountingEntry) {
     type: entry.type || null,
     source: entry.source || null,
     notes: entry.notes || null,
+    receiptRequired: entry.receiptRequired,
     version: entry.version,
   };
 }
@@ -1983,9 +2125,10 @@ function AiComposer({
   );
 }
 
-function entryAttachmentStatus(entry: AccountingEntry): "has" | "missing" | "none" {
+function entryAttachmentStatus(entry: AccountingEntry): "has" | "missing" | "ignored" | "none" {
   const count = entry.documentCount ?? entry.documents.length;
   if (count > 0) return "has";
+  if (!entry.receiptRequired) return "ignored";
   return entryTone(entry) === "expense" ? "missing" : "none";
 }
 
@@ -2012,6 +2155,11 @@ function EntryRow({ entry, onClick }: { entry: AccountingEntry; onClick: () => v
           {attachment === "missing" && (
             <span className="ac-entry-tag is-missing">
               <Icon.Alert size={13} /> Underlag saknas
+            </span>
+          )}
+          {attachment === "ignored" && (
+            <span className="ac-entry-tag is-ignored">
+              <Icon.Check size={13} /> Underlag behövs inte
             </span>
           )}
         </span>
@@ -2594,6 +2742,8 @@ function EntryEditor({
   const [revisionsError, setRevisionsError] = useState("");
   const [confirmDocumentId, setConfirmDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<AccountingDocument | null>(null);
+  const [savingReceiptRequirement, setSavingReceiptRequirement] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -2705,6 +2855,27 @@ function EntryEditor({
     }
   }
 
+  async function setReceiptNotRequired(checked: boolean) {
+    setSavingReceiptRequirement(true);
+    setDocumentStatus("");
+    setError("");
+    try {
+      const refreshed = await api.updateEntry(entry.id, {
+        receiptRequired: !checked,
+        version: entry.version,
+      });
+      onSaved(refreshed);
+      setDocumentStatus(checked
+        ? "Posten ignoreras nu i listan över saknade underlag."
+        : "Posten räknas åter som att underlag saknas.");
+    } catch (requirementError) {
+      if (isUnauthorized(requirementError)) onExpired();
+      else setError(displayError(requirementError, "Kunde inte ändra kravet på underlag."));
+    } finally {
+      setSavingReceiptRequirement(false);
+    }
+  }
+
   return (
     <div className="ac-view ac-entry-detail-view">
       <button className="ac-back-button" onClick={onBack} type="button"><Icon.ArrowLeft /> Alla poster</button>
@@ -2737,11 +2908,11 @@ function EntryEditor({
         <aside className="ac-detail-sidebar">
           <section className="ac-card ac-documents-card" aria-labelledby="documents-heading">
             <div className="ac-section-heading-row">
-              <div><p className="ac-eyebrow">Underlag</p><h2 id="documents-heading">Dokument</h2></div>
+              <div><p className="ac-eyebrow">Underlag</p><h2 id="documents-heading">Bilagor</h2></div>
               <div className="ac-document-actions">
                 <span className="ac-count-badge">{entry.documents.length}</span>
                 <input
-                  accept="image/jpeg,image/png,.pdf,.txt,.csv"
+                  accept="image/*,.pdf,.txt,.csv"
                   className="ac-visually-hidden"
                   multiple
                   onChange={pickedDocuments}
@@ -2757,15 +2928,6 @@ function EntryEditor({
                 >
                   <Icon.Clipboard size={17} /> Klistra in
                 </button>
-                <button
-                  aria-label="Lägg till underlag"
-                  className="ac-mini-add-button"
-                  disabled={uploadingDocuments}
-                  onClick={() => documentInputRef.current?.click()}
-                  type="button"
-                >
-                  <Icon.Plus size={17} /> Lägg till
-                </button>
               </div>
             </div>
             {uploadingDocuments && documentProgress && (
@@ -2775,48 +2937,82 @@ function EntryEditor({
               </div>
             )}
             {documentStatus && <p className="ac-document-success" role="status"><Icon.Check size={16} /> {documentStatus}</p>}
-            {entry.documents.length ? (
-              <ul className="ac-document-list">
-                {entry.documents.map((document, index) => {
-                  const suppliedUrl = document.downloadUrl || document.url;
-                  const fallbackUrl = document.id
-                    ? `/api/accounting/${encodeURIComponent(accessKey)}/documents/${encodeURIComponent(document.id)}/download`
-                    : "";
-                  const url = suppliedUrl
-                    ? suppliedUrl.startsWith("http://") || suppliedUrl.startsWith("https://") || suppliedUrl.startsWith("/")
-                      ? suppliedUrl
-                      : `/api/accounting/${encodeURIComponent(accessKey)}/${suppliedUrl.replace(/^\/+/, "")}`
-                    : fallbackUrl;
-                  return (
-                    <li key={document.id || `${documentName(document, index)}-${index}`}>
-                      <span><Icon.File size={20} /></span>
-                      <span><strong>{documentName(document, index)}</strong><small>{document.contentType || document.mimeType || "Underlag"}</small></span>
-                      {url && <a aria-label={`Öppna ${documentName(document, index)}`} href={url} target="_blank" rel="noopener noreferrer"><Icon.Download size={19} /></a>}
-                      {document.id && document.version != null && (
-                        <button
-                          aria-label={`Ta bort ${documentName(document, index)}`}
-                          className="ac-document-delete-button"
-                          disabled={deletingDocumentId === document.id}
-                          onClick={() => setConfirmDocumentId(document.id!)}
-                          type="button"
-                        >
-                          <Icon.Trash size={17} />
-                        </button>
+            <div className="ac-document-preview-grid">
+              {entry.documents.map((document, index) => {
+                const url = documentUrl(document, accessKey);
+                const name = documentName(document, index);
+                return (
+                  <div className="ac-document-preview" key={document.id || `${name}-${index}`}>
+                    <button
+                      aria-label={`Förhandsvisa ${name}`}
+                      disabled={!url}
+                      onClick={() => setPreviewDocument(document)}
+                      type="button"
+                    >
+                      {isImageDocument(document) && url ? (
+                        <>
+                          {/* Protected receipt URLs cannot use the server-side Next image optimizer. */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img alt="" loading="lazy" src={url} />
+                        </>
+                      ) : (
+                        <span className="ac-document-file-preview">
+                          <Icon.File size={28} />
+                          <small>{isPdfDocument(document) ? "PDF" : (document.mimeType || "FIL").split("/").pop()?.toLocaleUpperCase("sv-SE")}</small>
+                        </span>
                       )}
-                      {confirmDocumentId === document.id && (
-                        <div className="ac-document-delete-confirm" role="alert">
-                          <span>Ta bort detta underlag?</span>
-                          <button disabled={deletingDocumentId === document.id} onClick={() => void deleteDocument(document)} type="button">Ja, ta bort</button>
-                          <button disabled={deletingDocumentId === document.id} onClick={() => setConfirmDocumentId(null)} type="button">Avbryt</button>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="ac-muted-copy">Inget dokument är kopplat till posten.</p>
+                      <span className="ac-document-preview-name">{name}</span>
+                    </button>
+                    {document.id && document.version != null && (
+                      <button
+                        aria-label={`Ta bort ${name}`}
+                        className="ac-document-preview-delete"
+                        disabled={deletingDocumentId === document.id}
+                        onClick={() => setConfirmDocumentId(document.id!)}
+                        type="button"
+                      >
+                        <Icon.Trash size={15} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                aria-label="Lägg till bilagor från filer, bilder eller kamera"
+                className="ac-document-add-preview"
+                disabled={uploadingDocuments}
+                onClick={() => documentInputRef.current?.click()}
+                type="button"
+              >
+                <span><Icon.Plus size={28} /></span>
+                <small>Lägg till</small>
+              </button>
+            </div>
+            {entry.documents.length === 0 && entryTone(entry) === "expense" && (
+              <label className="ac-receipt-not-required">
+                <input
+                  checked={!entry.receiptRequired}
+                  disabled={savingReceiptRequirement}
+                  onChange={(event) => void setReceiptNotRequired(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>Underlag behövs inte för denna post</strong>
+                  <small>Posten ignoreras i Saknar underlag.</small>
+                </span>
+              </label>
             )}
+            {confirmDocumentId && (() => {
+              const document = entry.documents.find((item) => item.id === confirmDocumentId);
+              if (!document) return null;
+              return (
+                <div className="ac-document-delete-confirm" role="alert">
+                  <span>Ta bort {documentName(document, 0)}?</span>
+                  <button disabled={deletingDocumentId === document.id} onClick={() => void deleteDocument(document)} type="button">Ja, ta bort</button>
+                  <button disabled={deletingDocumentId === document.id} onClick={() => setConfirmDocumentId(null)} type="button">Avbryt</button>
+                </div>
+              );
+            })()}
           </section>
 
           <section className="ac-card ac-history-card" aria-labelledby="history-heading">
@@ -2867,6 +3063,14 @@ function EntryEditor({
           </section>
         </aside>
       </div>
+      {previewDocument && documentUrl(previewDocument, accessKey) && (
+        <DocumentViewer
+          document={previewDocument}
+          name={documentName(previewDocument, Math.max(entry.documents.indexOf(previewDocument), 0))}
+          onClose={() => setPreviewDocument(null)}
+          url={documentUrl(previewDocument, accessKey)}
+        />
+      )}
     </div>
   );
 }

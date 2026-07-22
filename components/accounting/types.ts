@@ -29,6 +29,7 @@ export type AccountingEntry = {
   source?: string | null;
   notes?: string | null;
   status?: string | null;
+  receiptRequired: boolean;
   version?: number | null;
   documentCount: number;
   documents: AccountingDocument[];

@@ -145,6 +145,7 @@ export function normalizeEntry(value: unknown, index = 0): AccountingEntry {
     source: asOptionalString(record.source ?? record.kalla),
     notes: asOptionalString(record.notes ?? record.note ?? record.anteckningar),
     status: asOptionalString(record.status),
+    receiptRequired: record.receiptRequired !== false && record.receipt_required !== false,
     version: record.version == null ? null : asNumber(record.version),
     documentCount: asNumber(
       record.documentCount ?? record.document_count,
@@ -234,6 +235,7 @@ function normalizeAgentProposal(value: unknown): AccountingAgentProposal | null 
       id: asString(edit.id, current.id),
       version: asNumber(edit.version, current.version ?? 1),
       documents: current.documents,
+      receiptRequired: current.receiptRequired,
     }, index);
     return {
       id: asString(edit.id, current.id),

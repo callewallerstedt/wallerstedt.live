@@ -72,6 +72,7 @@ const entryFields = {
   source: optionalText(300),
   notes: optionalText(10_000),
   status: optionalText(100),
+  receiptRequired: z.boolean().optional(),
 } as const;
 
 export const entryCreateSchema = z
@@ -111,6 +112,7 @@ type EntryFieldInput = {
   source?: string | null;
   notes?: string | null;
   status?: string | null;
+  receiptRequired?: boolean;
 };
 
 export type NormalizedEntryInput = {
@@ -129,6 +131,7 @@ export type NormalizedEntryInput = {
   source?: string | null;
   notes?: string | null;
   status?: string | null;
+  receiptRequired?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -162,6 +165,7 @@ export function normalizeEntryInput(
     source: input.source,
     notes: input.notes,
     status: input.status,
+    receiptRequired: input.receiptRequired,
   };
 }
 

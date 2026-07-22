@@ -217,6 +217,7 @@ export function equivalentBootstrapTransaction(
     server.type === (incoming.type ?? "Utbetalning") &&
     server.source === (incoming.source ?? null) &&
     server.notes === (incoming.notes ?? "") &&
+    (server.receiptRequired ?? true) === (incoming.receiptRequired ?? true) &&
     server.status ===
       (incoming.status === undefined ? "Bokförd" : incoming.status)
   );
@@ -1215,6 +1216,7 @@ function transactionChange(payload: Record<string, unknown>) {
     source: payload.source ?? null,
     notes: payload.notes ?? "",
     status: payload.status ?? null,
+    receiptRequired: payload.receiptRequired ?? true,
     createdAt: payload.createdAt ?? null,
     updatedAt: payload.updatedAt ?? null,
     deletedAt: payload.deletedAt ?? null,

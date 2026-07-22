@@ -149,6 +149,7 @@ model AccountingEntry {
   source         String?
   notes          String                    @default("")
   status         String?                   @default("Bokförd")
+  receiptRequired Boolean                  @default(true)
   version        Int                       @default(1)
   deletedAt      DateTime?
   createdAt      DateTime                  @default(now())

@@ -61,6 +61,7 @@ function entryUpdateData(input: NormalizedEntryInput) {
     input.notes ?? (input.notes === null ? "" : undefined),
   );
   setIfPresent(data, "status", input.status);
+  setIfPresent(data, "receiptRequired", input.receiptRequired);
   setIfPresent(data, "updatedAt", input.updatedAt);
   return data;
 }
@@ -89,6 +90,7 @@ function entryCreateData(
     source: input.source ?? null,
     notes: input.notes ?? "",
     status: input.status === undefined ? "Bokförd" : input.status,
+    receiptRequired: input.receiptRequired ?? true,
     ...(input.createdAt ? { createdAt: input.createdAt } : {}),
     ...(input.updatedAt ? { updatedAt: input.updatedAt } : {}),
   };
@@ -499,7 +501,7 @@ export async function dashboard() {
     } else if (typeKey.includes("utbetal") || typeKey === "expense") {
       expenses = expenses.plus(entry.amount.abs());
       month.expenses = month.expenses.plus(entry.amount.abs());
-      if (entry._count.documents === 0) missingReceiptCount += 1;
+      if (entry.receiptRequired && entry._count.documents === 0) missingReceiptCount += 1;
     } else if (typeKey.includes("skuld") || typeKey.includes("debt")) {
       // Signed, not abs: a positive post grows the debt, a negative post (a repayment) shrinks it.
       debt = debt.plus(entry.amount);

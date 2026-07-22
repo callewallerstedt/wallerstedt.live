@@ -80,6 +80,7 @@ export function serializeEntry(entry: EntryWithDocuments) {
     source: entry.source,
     notes: entry.notes,
     status: entry.status,
+    receiptRequired: entry.receiptRequired,
     version: entry.version,
     deletedAt: entry.deletedAt?.toISOString() ?? null,
     createdAt: entry.createdAt.toISOString(),
