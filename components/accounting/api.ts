@@ -223,7 +223,7 @@ export function normalizeDraft(value: unknown): AccountingDraft {
   };
 }
 
-function normalizeAgentProposal(value: unknown): AccountingAgentProposal | null {
+export function normalizeAgentProposal(value: unknown): AccountingAgentProposal | null {
   const record = asRecord(value);
   const token = asString(record.token);
   if (!token) return null;
@@ -235,7 +235,6 @@ function normalizeAgentProposal(value: unknown): AccountingAgentProposal | null 
       id: asString(edit.id, current.id),
       version: asNumber(edit.version, current.version ?? 1),
       documents: current.documents,
-      receiptRequired: current.receiptRequired,
     }, index);
     return {
       id: asString(edit.id, current.id),

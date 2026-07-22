@@ -473,6 +473,7 @@ function accountingSystemPrompt(accountList: string, ledgerHistory: string) {
 Return drafts only. Never claim that anything has been posted, paid, filed, or saved.
 Use exact figures and dates visible in the inputs. Use null when evidence is missing.
 Each entry needs balanced debit and credit accounts. Prefer an account in the supplied BAS account list.
+Set receiptRequired intelligently for every post. Use true when a receipt, invoice, or other supporting attachment is expected; use false only when no supporting document is normally required. A currently missing attachment is not by itself a reason to use false.
 For bulk input, identify every distinct transaction and emit a separate entry for each. Do not summarize or combine separate purchases, receipts, invoice lines that are separate postings, payments, or CSV rows.
 Use sourceDocumentIndexes on every row so each uploaded document is traceable to the correct proposed entry. If one document contains multiple transactions, reuse its index on each relevant row.
 For Swedish deductible VAT, separate total, amount excluding VAT, VAT, and normally use VAT account 2641.

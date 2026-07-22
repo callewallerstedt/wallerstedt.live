@@ -75,6 +75,19 @@ const entryFields = {
   receiptRequired: z.boolean().optional(),
 } as const;
 
+const entryFieldAliases = new Set(["beloppExMoms", "moms", "momsAccount"]);
+
+/**
+ * Canonical post fields that every AI edit proposal must support.
+ * Derived from the API's writable schema so adding a future field makes the
+ * agent schema-sync test fail until that field is deliberately exposed.
+ */
+export const agentEditableEntryFieldNames = Object.freeze(
+  Object.keys(entryFields).filter(
+    (field) => field !== "legacyId" && !entryFieldAliases.has(field),
+  ),
+);
+
 export const entryCreateSchema = z
   .object(entryFields)
   .refine((value) => value.amount !== undefined && value.amount !== null, {
@@ -217,6 +230,9 @@ export const aiEntrySchema = z.object({
   source: z.string().max(300).nullable(),
   notes: z.string().max(2_000).nullable(),
   status: z.string().max(100),
+  receiptRequired: z.boolean().describe(
+    "Bilaga behövs: true when supporting evidence is required, false when it is not",
+  ),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().max(2_000),
   sourceDocumentIndexes: z.array(z.number().int().min(0)).max(10),

@@ -669,7 +669,7 @@ export async function runAccountingAgent(
     },
     prepare_post_edits: {
       description:
-        "Prepare edits to existing posts. Supply the complete proposed post and preserve every current field that should not change. This creates an approval preview only and never changes the ledger immediately.",
+        "Prepare edits to existing posts. Supply the complete proposed post and preserve every current field that should not change. receiptRequired is the 'Bilaga behövs' toggle: true means evidence is required, false means no attachment is needed. This creates an approval preview only and never changes the ledger immediately.",
       inputSchema: prepareEditsSchema,
       execute: async (toolInput: z.output<typeof prepareEditsSchema>) => {
         usedTools.add("prepare_post_edits");
@@ -790,6 +790,7 @@ MISSING-RECEIPT WORKFLOW: when asked to find missing receipts/verifications, (1)
 For any request to add/book/import a transaction, use list_accounts when account selection is needed, then prepare_new_drafts. New entries must remain drafts until the owner reviews them.
 If the owner asks to add an account to the kontoplan, or a post genuinely needs a BAS account that list_accounts shows doesn't exist yet, use create_account directly — this one action applies immediately (it only extends the account chart, it never books a transaction), so tell the owner what you added.
 For any request to change existing posts, first search/load the exact posts, then use prepare_post_edits with complete proposed posts. Preserve every field the owner did not ask to change.
+The receiptRequired field is the editable "Bilaga behövs" toggle on each post. Set it intelligently when the owner asks whether a post needs supporting evidence: true means a receipt/attachment is required and missing-document tracking applies; false means no attachment is required. Never infer false merely because a receipt is currently missing. Treat every editable field exposed by prepare_post_edits as writable through the same review-and-approval flow, including fields added in the future.
 For any request to delete posts, first search/load the exact posts, then use prepare_post_deletions. If the target is ambiguous, ask a question instead of preparing a deletion.
 Never claim an edit, deletion, or new post has been applied. Prepared edits and deletions require a separate owner approval, and drafts require the existing review flow. attach_email_receipt is the only direct action and only adds evidence documents.
 Use only IDs and figures returned by tools. Do not invent posts, account numbers, dates, evidence, totals, or tool results.

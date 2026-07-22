@@ -17,6 +17,7 @@ export const agentProposedEntrySchema = z.object({
   source: z.string().trim().max(300).nullable(),
   notes: z.string().trim().max(10_000).nullable(),
   status: z.string().trim().min(1).max(100),
+  receiptRequired: z.boolean(),
 });
 
 const agentProposalEditSchema = z.object({

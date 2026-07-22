@@ -1766,6 +1766,7 @@ function agentFieldValue(entry: AccountingEntry, field: string) {
     case "source": return entry.source || "Saknas";
     case "notes": return entry.notes || "Saknas";
     case "status": return entry.status || "Saknas";
+    case "receiptRequired": return entry.receiptRequired ? "Ja" : "Nej";
     default: return "";
   }
 }
@@ -1783,6 +1784,7 @@ function agentChangedFields(current: AccountingEntry, proposed: AccountingEntry)
     ["source", "Källa"],
     ["notes", "Anteckning"],
     ["status", "Status"],
+    ["receiptRequired", "Bilaga behövs"],
   ] as const;
   return fields
     .map(([field, label]) => ({
