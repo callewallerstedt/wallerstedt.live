@@ -1,8 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { unstable_noStore as noStore } from "next/cache";
-
 import { artist, playlists as defaultPlaylists, socialLinks as defaultSocialLinks, type PlaylistCard, type SocialLink } from "./site-data";
 
 const siteContentPath = path.join(process.cwd(), "data", "site-content.json");
@@ -71,8 +69,6 @@ function normalizeSiteContent(input: Partial<SiteContent>): SiteContent {
 }
 
 export async function getSiteContent() {
-  noStore();
-
   try {
     const raw = await readFile(siteContentPath, "utf8");
     return normalizeSiteContent(JSON.parse(raw) as Partial<SiteContent>);

@@ -42,6 +42,16 @@ async function verifyBlob(pathname: string, byteSize: number, sha256: string) {
   }
 }
 
+async function verifyDocumentMetadata(
+  pathname: string,
+  byteSize: number,
+) {
+  const metadata = await head(pathname);
+  if (metadata.pathname !== pathname || metadata.size !== byteSize) {
+    throw new Error(`Private document blob metadata differs: ${pathname}`);
+  }
+}
+
 async function verifyDocumentBlobs(
   documents: Array<{
     id: string;
@@ -49,11 +59,16 @@ async function verifyDocumentBlobs(
     blobPathname: string | null;
     sha256: string | null;
     byteSize: number | null;
+    createdAt: Date;
+    updatedAt: Date;
   }>,
+  now: Date,
   concurrency = 4,
 ) {
   const stored = documents.filter((document) => document.storageStatus === "stored");
+  const recentCutoff = now.getTime() - 48 * 60 * 60 * 1000;
   let nextIndex = 0;
+
   async function worker() {
     for (;;) {
       const index = nextIndex++;
@@ -62,13 +77,23 @@ async function verifyDocumentBlobs(
       if (!document.blobPathname || !document.sha256 || document.byteSize === null) {
         throw new Error(`Stored document metadata is incomplete: ${document.id}`);
       }
-      await verifyBlob(
-        document.blobPathname,
-        document.byteSize,
-        document.sha256.toLocaleLowerCase("en"),
+
+      const lastChangedAt = Math.max(
+        document.createdAt.getTime(),
+        document.updatedAt.getTime(),
       );
+      if (lastChangedAt >= recentCutoff) {
+        await verifyBlob(
+          document.blobPathname,
+          document.byteSize,
+          document.sha256.toLocaleLowerCase("en"),
+        );
+      } else {
+        await verifyDocumentMetadata(document.blobPathname, document.byteSize);
+      }
     }
   }
+
   await Promise.all(
     Array.from({ length: Math.min(concurrency, Math.max(1, stored.length)) }, () => worker()),
   );
@@ -194,7 +219,7 @@ export async function createAccountingBackup(createdBy = "cron") {
 
   try {
     await verifyBlob(blob.pathname, bytes.byteLength, sha256);
-    await verifyDocumentBlobs(documents);
+    await verifyDocumentBlobs(documents, createdAt);
     await db.accountingBackup.update({
       where: { id: backup.id },
       data: { status: "verified" },

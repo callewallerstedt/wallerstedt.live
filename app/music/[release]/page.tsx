@@ -5,7 +5,14 @@ import { notFound } from "next/navigation";
 
 import { PlatformIcon } from "@/components/icons";
 import { ReleaseCountdown } from "@/components/ReleaseCountdown";
-import { getReleaseBySlug } from "@/lib/site-data";
+import { getCatalogReleases, getReleaseBySlug } from "@/lib/site-data";
+
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  const releases = await getCatalogReleases();
+  return releases.map((release) => ({ release: release.slug }));
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ release: string }> }): Promise<Metadata> {
   const { release: slug } = await params;
