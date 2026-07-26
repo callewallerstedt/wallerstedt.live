@@ -1,5 +1,6 @@
 export type AccountingDocument = {
   id?: string;
+  entryId?: string | null;
   name?: string;
   originalName?: string;
   fileName?: string;

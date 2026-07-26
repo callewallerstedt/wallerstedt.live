@@ -76,6 +76,7 @@ function normalizeDocument(value: unknown): AccountingDocument {
   const record = asRecord(value);
   return {
     id: asOptionalString(record.id) ?? undefined,
+    entryId: asOptionalString(record.entryId ?? record.entry_id) ?? null,
     name: asOptionalString(record.name ?? record.originalName) ?? undefined,
     originalName: asOptionalString(record.originalName ?? record.name) ?? undefined,
     fileName: asOptionalString(record.fileName ?? record.filename) ?? undefined,
@@ -507,6 +508,24 @@ export class AccountingApi {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ version }),
     });
+  }
+
+  async assignDocument(
+    id: string,
+    entryId: string,
+    version: number,
+  ): Promise<AccountingDocument> {
+    const payload = await this.request<unknown>(`/documents/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entryId, version }),
+    });
+    const record = asRecord(payload);
+    const document = normalizeDocument(record.document ?? payload);
+    if (!document.id) {
+      throw new AccountingApiError("Underlaget kunde inte kopplas till posten. Försök igen.", 500);
+    }
+    return document;
   }
 
   async accounts(): Promise<AccountingAccount[]> {

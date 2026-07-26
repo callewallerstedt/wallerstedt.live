@@ -1,4 +1,5 @@
 import { Prisma, type AccountingEntry } from "@prisma/client";
+import { writeReceiptAudit } from "./audit";
 import { calculateAccountBalances, centsToMoney } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError, AccountingError } from "./errors";
@@ -608,6 +609,65 @@ export async function softDeleteDocument(
         payload: json(serializeDocument(document)),
       },
     });
+    return document;
+  });
+}
+
+/**
+ * Attach an unassigned document to a ledger post, or move an existing
+ * attachment from one post to another. Blob bytes stay put; only the link changes.
+ */
+export async function assignDocument(
+  id: string,
+  entryId: string,
+  expectedVersion: number,
+  actor = "web",
+) {
+  const db = getAccountingDb();
+  return db.$transaction(async (tx) => {
+    const current = await tx.accountingDocument.findUnique({ where: { id } });
+    if (!current || current.deletedAt || current.storageStatus !== "stored") {
+      throw new AccountingError(
+        "Document not found.",
+        404,
+        "document_not_found",
+      );
+    }
+    if (current.version !== expectedVersion) {
+      throw new AccountingConflictError(
+        "The document changed on another device.",
+        {
+          server: serializeDocument(current),
+          serverVersion: current.version,
+        },
+      );
+    }
+    if (current.entryId === entryId) {
+      return current;
+    }
+    const entry = await tx.accountingEntry.findFirst({
+      where: { id: entryId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!entry) {
+      throw new AccountingError("Entry not found.", 404, "entry_not_found");
+    }
+    const result = await tx.accountingDocument.updateMany({
+      where: {
+        id,
+        version: expectedVersion,
+        deletedAt: null,
+        storageStatus: "stored",
+      },
+      data: { entryId, version: { increment: 1 } },
+    });
+    if (result.count !== 1) {
+      throw new AccountingConflictError("The document changed.");
+    }
+    const document = await tx.accountingDocument.findUniqueOrThrow({
+      where: { id },
+    });
+    await writeReceiptAudit(tx, document, "upsert", actor);
     return document;
   });
 }

@@ -675,8 +675,8 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
         } as AccountingAgentMessage,
       ].slice(-12));
       setAgentResult(result);
-      // Some tools (attach_email_receipt, create_account) write immediately without a
-      // review step, so refresh the ledger/kontoplan/dashboard even without a draft or proposal.
+      // Some tools (assign_document, attach_email_receipt, create_account) write immediately
+      // without a review step, so refresh the ledger even without a draft or proposal.
       refreshAll();
     } catch (error) {
       if (!handleUnauthorized(error)) {
@@ -708,7 +708,11 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     setEntriesError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
     try {
-      setEditingEntry(await api.entry(entry.id));
+      const [fullEntry] = await Promise.all([
+        api.entry(entry.id),
+        entriesLoaded ? Promise.resolve() : loadEntries(),
+      ]);
+      setEditingEntry(fullEntry);
     } catch (error) {
       if (!handleUnauthorized(error)) setEntriesError(displayError(error, "Kunde inte läsa hela posten."));
     } finally {
@@ -817,6 +821,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             accounts={accounts}
             api={api}
             entry={editingEntry}
+            ledgerEntries={entries}
             loading={entryLoading}
             onBack={() => setEditingEntry(null)}
             onChange={setEditingEntry}
@@ -1713,7 +1718,11 @@ function AgentResultPanel({
 
       {result.gmailAttachments.length > 0 && (
         <div className="ac-agent-gmail-attachments">
-          <strong>Kvitton hämtade från Gmail</strong>
+          <strong>
+            {result.gmailAttachments.every((item) => item.account.includes("@"))
+              ? "Kvitton hämtade från Gmail"
+              : "Underlag kopplade till poster"}
+          </strong>
           {result.gmailAttachments.map((attachment, index) => {
             const entry = result.referencedEntries.find((item) => item.id === attachment.entryId);
             return (
@@ -2716,6 +2725,7 @@ function EntryEditor({
   accounts,
   api,
   entry,
+  ledgerEntries,
   loading,
   onBack,
   onChange,
@@ -2727,6 +2737,7 @@ function EntryEditor({
   accounts: AccountingAccount[];
   api: AccountingApi;
   entry: AccountingEntry;
+  ledgerEntries: AccountingEntry[];
   loading: boolean;
   onBack: () => void;
   onChange: (entry: AccountingEntry) => void;
@@ -2743,12 +2754,35 @@ function EntryEditor({
   const [revisionsLoading, setRevisionsLoading] = useState(true);
   const [revisionsError, setRevisionsError] = useState("");
   const [confirmDocumentId, setConfirmDocumentId] = useState<string | null>(null);
+  const [movingDocumentId, setMovingDocumentId] = useState<string | null>(null);
+  const [moveQuery, setMoveQuery] = useState("");
+  const [assigningDocumentId, setAssigningDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [previewDocument, setPreviewDocument] = useState<AccountingDocument | null>(null);
   const [savingReceiptRequirement, setSavingReceiptRequirement] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const documentInputRef = useRef<HTMLInputElement>(null);
+
+  const moveTargets = useMemo(() => {
+    const query = moveQuery.trim().toLocaleLowerCase("sv-SE");
+    return ledgerEntries
+      .filter((item) => item.id !== entry.id)
+      .filter((item) => {
+        if (!query) return true;
+        return [
+          item.description,
+          item.date,
+          item.legacyId,
+          item.debitName,
+          item.creditName,
+          String(item.amount),
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLocaleLowerCase("sv-SE").includes(query));
+      })
+      .slice(0, 12);
+  }, [entry.id, ledgerEntries, moveQuery]);
 
   useEffect(() => {
     let active = true;
@@ -2854,6 +2888,26 @@ function EntryEditor({
       else setError(displayError(deleteError, "Kunde inte ta bort underlaget."));
     } finally {
       setDeletingDocumentId(null);
+    }
+  }
+
+  async function moveDocument(document: AccountingDocument, target: AccountingEntry) {
+    if (!document.id || document.version == null) return;
+    setAssigningDocumentId(document.id);
+    setError("");
+    setDocumentStatus("");
+    try {
+      await api.assignDocument(document.id, target.id, document.version);
+      const refreshed = await api.entry(entry.id);
+      onSaved(refreshed);
+      setMovingDocumentId(null);
+      setMoveQuery("");
+      setDocumentStatus(`Underlaget flyttades till “${target.description || "Bokföringspost"}”.`);
+    } catch (moveError) {
+      if (isUnauthorized(moveError)) onExpired();
+      else setError(displayError(moveError, "Kunde inte flytta underlaget."));
+    } finally {
+      setAssigningDocumentId(null);
     }
   }
 
@@ -2966,15 +3020,33 @@ function EntryEditor({
                       <span className="ac-document-preview-name">{name}</span>
                     </button>
                     {document.id && document.version != null && (
-                      <button
-                        aria-label={`Ta bort ${name}`}
-                        className="ac-document-preview-delete"
-                        disabled={deletingDocumentId === document.id}
-                        onClick={() => setConfirmDocumentId(document.id!)}
-                        type="button"
-                      >
-                        <Icon.Trash size={15} />
-                      </button>
+                      <div className="ac-document-preview-actions">
+                        <button
+                          aria-label={`Flytta ${name}`}
+                          className="ac-document-preview-move"
+                          disabled={assigningDocumentId === document.id || ledgerEntries.length < 2}
+                          onClick={() => {
+                            setConfirmDocumentId(null);
+                            setMovingDocumentId((current) => current === document.id ? null : document.id!);
+                            setMoveQuery("");
+                          }}
+                          type="button"
+                        >
+                          <Icon.Move size={15} />
+                        </button>
+                        <button
+                          aria-label={`Ta bort ${name}`}
+                          className="ac-document-preview-delete"
+                          disabled={deletingDocumentId === document.id}
+                          onClick={() => {
+                            setMovingDocumentId(null);
+                            setConfirmDocumentId(document.id!);
+                          }}
+                          type="button"
+                        >
+                          <Icon.Trash size={15} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -3004,6 +3076,63 @@ function EntryEditor({
                 </span>
               </label>
             )}
+            {movingDocumentId && (() => {
+              const document = entry.documents.find((item) => item.id === movingDocumentId);
+              if (!document) return null;
+              return (
+                <div className="ac-document-move-panel" role="dialog" aria-label="Flytta underlag">
+                  <div className="ac-document-move-heading">
+                    <strong>Flytta {documentName(document, 0)}</strong>
+                    <button
+                      aria-label="Avbryt flytt"
+                      disabled={assigningDocumentId === document.id}
+                      onClick={() => {
+                        setMovingDocumentId(null);
+                        setMoveQuery("");
+                      }}
+                      type="button"
+                    >
+                      <Icon.Close size={16} />
+                    </button>
+                  </div>
+                  <label className="ac-document-move-search">
+                    <Icon.Search size={16} />
+                    <input
+                      autoComplete="off"
+                      disabled={assigningDocumentId === document.id}
+                      onChange={(event) => setMoveQuery(event.target.value)}
+                      placeholder="Sök målpost…"
+                      value={moveQuery}
+                    />
+                  </label>
+                  {moveTargets.length === 0 ? (
+                    <p className="ac-muted-copy">
+                      {ledgerEntries.length < 2
+                        ? "Det finns ingen annan post att flytta till ännu. Öppna Poster-fliken en gång så laddas listan."
+                        : "Ingen post matchar sökningen."}
+                    </p>
+                  ) : (
+                    <ul className="ac-document-move-list">
+                      {moveTargets.map((target) => (
+                        <li key={target.id}>
+                          <button
+                            disabled={assigningDocumentId === document.id}
+                            onClick={() => void moveDocument(document, target)}
+                            type="button"
+                          >
+                            <span>
+                              <strong>{target.description || "Bokföringspost"}</strong>
+                              <small>{formatDate(target.date)} · {formatCurrency(target.amount)}</small>
+                            </span>
+                            {assigningDocumentId === document.id ? <span className="ac-button-spinner" /> : <Icon.Move size={16} />}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })()}
             {confirmDocumentId && (() => {
               const document = entry.documents.find((item) => item.id === confirmDocumentId);
               if (!document) return null;

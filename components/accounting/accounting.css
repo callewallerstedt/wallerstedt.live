@@ -2525,11 +2525,17 @@ body:has(.accounting-app) > .footer {
   white-space: nowrap;
 }
 
-.ac-document-preview-delete {
+.ac-document-preview-actions {
   position: absolute;
   top: 6px;
   right: 6px;
   z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+
+.ac-document-preview-delete,
+.ac-document-preview-move {
   display: grid;
   place-items: center;
   width: 30px;
@@ -2538,6 +2544,106 @@ body:has(.accounting-app) > .footer {
   background: rgba(20, 20, 20, 0.75);
   color: #fff;
   backdrop-filter: blur(8px);
+}
+
+.ac-document-preview-move:disabled,
+.ac-document-preview-delete:disabled {
+  opacity: 0.45;
+}
+
+.ac-document-move-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--ac-inset);
+}
+
+.ac-document-move-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ac-document-move-heading strong {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.ac-document-move-heading button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--ac-muted);
+}
+
+.ac-document-move-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  min-height: 42px;
+  border-radius: 12px;
+  background: var(--ac-card);
+  color: var(--ac-muted);
+}
+
+.ac-document-move-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ac-document-move-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.ac-document-move-list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ac-card);
+  text-align: left;
+}
+
+.ac-document-move-list button span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ac-document-move-list strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-document-move-list small {
+  color: var(--ac-muted);
+  font-size: 12px;
 }
 
 .ac-document-add-preview {

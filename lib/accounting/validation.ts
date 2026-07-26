@@ -104,6 +104,11 @@ export const versionSchema = z.object({
   version: z.number().int().positive(),
 });
 
+export const documentAssignSchema = z.object({
+  version: z.number().int().positive(),
+  entryId: z.string().uuid(),
+});
+
 export type AccountInput = z.output<typeof accountCreateSchema>;
 
 type EntryFieldInput = {

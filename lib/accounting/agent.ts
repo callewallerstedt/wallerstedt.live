@@ -20,8 +20,9 @@ import {
   readGmailMessage,
   searchGmail,
 } from "./gmail";
-import { serializeAccount, serializeEntry } from "./serialize";
+import { serializeAccount, serializeDocument, serializeEntry } from "./serialize";
 import {
+  assignDocument,
   createAccount,
   dashboard,
   deleteEntryInTransaction,
@@ -100,6 +101,12 @@ const gmailAttachSchema = z.object({
   messageId: z.string().trim().min(1).max(200),
   attachmentId: z.string().trim().min(1).max(3000),
   filename: z.string().trim().min(1).max(200),
+  entryId: z.string().uuid(),
+  explanation: z.string().trim().min(1).max(500),
+});
+
+const assignDocumentSchema = z.object({
+  documentId: z.string().uuid(),
   entryId: z.string().uuid(),
   explanation: z.string().trim().min(1).max(500),
 });
@@ -239,12 +246,21 @@ function buildAgentContent(
         .map((message) => `${message.role === "user" ? "OWNER" : "ASSISTANT"}: ${message.content}`)
         .join("\n\n")
     : "(No earlier conversation in this session.)";
+  const documentCatalog = documents.length
+    ? documents
+        .map(
+          (document, index) =>
+            `${index}. id=${document.id} name=${JSON.stringify(document.name)} mime=${document.mimeType}`,
+        )
+        .join("\n")
+    : "(No files attached to this request.)";
   const content: Exclude<UserContent, string> = [
     {
       type: "text",
       text:
         `RECENT CONVERSATION:\n${transcript}\n\n` +
-        `CURRENT OWNER REQUEST:\n${text || "Inspect the attached accounting documents and help me with them."}`,
+        `CURRENT OWNER REQUEST:\n${text || "Inspect the attached accounting documents and help me with them."}\n\n` +
+        `ATTACHED DOCUMENTS FOR THIS REQUEST (use these exact document IDs with assign_document, or zero-based indexes with prepare_new_drafts):\n${documentCatalog}`,
     },
   ];
   for (const document of documents) {
@@ -257,7 +273,7 @@ function buildAgentContent(
     } else if (["text/plain", "text/csv"].includes(document.mimeType)) {
       content.push({
         type: "text",
-        text: `ATTACHED FILE ${document.name}:\n${document.buffer.toString("utf8")}`,
+        text: `ATTACHED FILE id=${document.id} ${document.name}:\n${document.buffer.toString("utf8")}`,
       });
     } else {
       content.push({
@@ -283,6 +299,7 @@ function toolLabel(name: string) {
     search_gmail: "Sökte i Gmail",
     read_email: "Läste ett mejl",
     attach_email_receipt: "Sparade kvitto från Gmail",
+    assign_document: "Kopplade underlag till post",
     prepare_new_drafts: "Förberedde nya utkast",
     prepare_post_edits: "Förberedde ändringar",
     prepare_post_deletions: "Förberedde borttagning",
@@ -332,6 +349,8 @@ function toolCallDetail(name: string, input: unknown) {
       return typeof record.account === "string" ? record.account : "";
     case "attach_email_receipt":
       return typeof record.filename === "string" ? record.filename : "";
+    case "assign_document":
+      return typeof record.explanation === "string" ? record.explanation.slice(0, 80) : "";
     case "get_posts": {
       const ids = Array.isArray(record.ids) ? record.ids.length : 0;
       return ids ? `${ids} ${ids === 1 ? "post" : "poster"}` : "";
@@ -388,6 +407,15 @@ function toolResultSummary(name: string, output: unknown) {
         ? `${document.originalName} kopplad till posten`
         : "Kvittot är kopplat till posten";
     }
+    case "assign_document": {
+      const document = asRecord(record.document);
+      const moved = record.moved === true;
+      const name =
+        typeof document.originalName === "string"
+          ? document.originalName
+          : "Underlaget";
+      return moved ? `${name} flyttad till annan post` : `${name} sparad under posten`;
+    }
     case "ledger_overview":
       return "Saldon och nyckeltal lästa";
     case "list_accounts": {
@@ -441,7 +469,7 @@ export async function runAccountingAgent(
     current: null,
   };
   const attachedReceipts: Array<{
-    document: Awaited<ReturnType<typeof importGmailAttachment>>;
+    document: unknown;
     entryId: string;
     account: string;
     explanation: string;
@@ -652,6 +680,58 @@ export async function runAccountingAgent(
         return { attached: true, document, entryId: toolInput.entryId };
       },
     },
+    assign_document: {
+      description:
+        "Attach a chat-uploaded file to an existing ledger post, or move an existing receipt/attachment from one post to another. Use the exact documentId from ATTACHED DOCUMENTS or from get_posts.documents. First find the target post with search_posts/get_posts. This only changes which post owns the file; it never edits amounts. Do not reuse the same documentId in prepare_new_drafts after assigning it.",
+      inputSchema: assignDocumentSchema,
+      execute: async (toolInput: z.output<typeof assignDocumentSchema>) => {
+        usedTools.add("assign_document");
+        const current = await db.accountingDocument.findFirst({
+          where: {
+            id: toolInput.documentId,
+            deletedAt: null,
+            storageStatus: "stored",
+          },
+        });
+        if (!current) {
+          throw new AccountingError(
+            "The document was not found. Use an id from ATTACHED DOCUMENTS or get_posts.",
+            409,
+            "agent_document_not_found",
+          );
+        }
+        const previousEntryId = current.entryId;
+        const document = await assignDocument(
+          toolInput.documentId,
+          toolInput.entryId,
+          current.version,
+          "web-ai-agent",
+        );
+        attachedReceipts.push({
+          document: serializeDocument(document),
+          entryId: toolInput.entryId,
+          account: previousEntryId ? "flyttad bilaga" : "uppladdning",
+          explanation: toolInput.explanation,
+        });
+        const entryIds = [...new Set([previousEntryId, toolInput.entryId].filter(Boolean))] as string[];
+        if (entryIds.length) {
+          const updated = await db.accountingEntry.findMany({
+            where: { id: { in: entryIds }, deletedAt: null },
+            include: {
+              documents: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },
+            },
+          });
+          rememberEntries(updated.map(serializeEntry));
+        }
+        return {
+          attached: true,
+          moved: Boolean(previousEntryId) && previousEntryId !== toolInput.entryId,
+          document: serializeDocument(document),
+          entryId: toolInput.entryId,
+          previousEntryId,
+        };
+      },
+    },
     prepare_new_drafts: {
       description:
         "Prepare one or more new accounting posts as pending drafts for owner review. This never posts to the ledger. Use this for every request to add, create, import, or book new transactions.",
@@ -788,11 +868,12 @@ Use search_gmail/read_email to find receipts, invoices, order confirmations, and
 MISSING-RECEIPT WORKFLOW: when asked to find missing receipts/verifications, (1) use search_posts with missingReceipts=true to list posts lacking evidence, (2) for each post search Gmail by counterparty, amount, and a date window around the post date, (3) read_email to verify amount, date, and seller genuinely match the post, (4) only on a confident match use attach_email_receipt to file the attachment on that exact post; if the receipt is in the email body without an attachment, or the match is uncertain, report what you found instead. Never attach evidence that does not clearly belong to the post. Report per post what was found, attached, or still missing.
 
 For any request to add/book/import a transaction, use list_accounts when account selection is needed, then prepare_new_drafts. New entries must remain drafts until the owner reviews them.
+CHAT ATTACHMENTS: when the owner attaches files in chat and wants them saved under an existing post, find that post with search_posts/get_posts, then use assign_document with the exact documentId from ATTACHED DOCUMENTS. When they ask to move a receipt/bilaga from one post to another, load both posts, take the documentId from get_posts.documents, and use assign_document on the target post. assign_document applies immediately (it only changes which post owns the file). Never put the same documentId into prepare_new_drafts after assigning it, and never claim a file is saved under a post unless assign_document or draft approval actually did that.
 If the owner asks to add an account to the kontoplan, or a post genuinely needs a BAS account that list_accounts shows doesn't exist yet, use create_account directly — this one action applies immediately (it only extends the account chart, it never books a transaction), so tell the owner what you added.
 For any request to change existing posts, first search/load the exact posts, then use prepare_post_edits with complete proposed posts. Preserve every field the owner did not ask to change.
 The receiptRequired field is the editable "Bilaga behövs" toggle on each post. Set it intelligently when the owner asks whether a post needs supporting evidence: true means a receipt/attachment is required and missing-document tracking applies; false means no attachment is required. Never infer false merely because a receipt is currently missing. Treat every editable field exposed by prepare_post_edits as writable through the same review-and-approval flow, including fields added in the future.
 For any request to delete posts, first search/load the exact posts, then use prepare_post_deletions. If the target is ambiguous, ask a question instead of preparing a deletion.
-Never claim an edit, deletion, or new post has been applied. Prepared edits and deletions require a separate owner approval, and drafts require the existing review flow. attach_email_receipt is the only direct action and only adds evidence documents.
+Never claim an edit, deletion, or new post has been applied. Prepared edits and deletions require a separate owner approval, and drafts require the existing review flow. Direct evidence actions are assign_document and attach_email_receipt — they only add or reassign attachment documents.
 Use only IDs and figures returned by tools. Do not invent posts, account numbers, dates, evidence, totals, or tool results.
 For attached receipts or files, inspect every distinct transaction. Use zero-based sourceDocumentIndexes and keep unrelated transactions separate.
 Today is ${new Date().toISOString().slice(0, 10)}. Currency is SEK and bookkeeping context is Swedish BAS accounting. State uncertainty clearly and do not provide tax or legal certainty.`,
@@ -888,7 +969,9 @@ Today is ${new Date().toISOString().slice(0, 10)}. Currency is SEK and bookkeepi
       : edits.length || deletes.length
         ? `${edits.length + deletes.length} ändringar är förberedda och väntar på ditt godkännande.`
         : attachedReceipts.length
-          ? `${attachedReceipts.length} kvitton från Gmail är nu kopplade till bokföringen.`
+          ? attachedReceipts.length === 1
+            ? "1 underlag är nu kopplat till bokföringen."
+            : `${attachedReceipts.length} underlag är nu kopplade till bokföringen.`
           : "Jag har kontrollerat bokföringen enligt din fråga.";
 
     return {
