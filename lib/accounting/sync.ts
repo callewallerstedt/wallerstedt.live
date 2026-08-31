@@ -19,6 +19,7 @@ import {
   serializeDocument,
   serializeEntry,
 } from "./serialize";
+import { classifyEntryPatch, safeNotifyAccountingPosts, type LedgerPostAction } from "../push";
 import {
   createEntryInTransaction,
   deleteEntryInTransaction,
@@ -79,6 +80,10 @@ const syncRequestSchema = z.object({
 type SyncOperation = z.output<typeof syncOperationSchema>;
 type TransactionClient = Prisma.TransactionClient;
 type Ack = { opId: string; remoteId: string; version: number };
+type LedgerNotify = {
+  action: LedgerPostAction;
+  post: { id: string; description: string | null; amount: unknown; type: string | null; status: string | null };
+};
 type Conflict = {
   opId: string;
   remoteId: string | null;
@@ -86,6 +91,23 @@ type Conflict = {
   server: unknown;
   reason: string;
 };
+type OperationResult = { ack?: Ack; conflict?: Conflict; notify?: LedgerNotify };
+
+function toLedgerNotify(
+  action: LedgerPostAction,
+  entry: { id: string; description: string | null; amount: unknown; type: string | null; status: string | null },
+): LedgerNotify {
+  return {
+    action,
+    post: {
+      id: entry.id,
+      description: entry.description,
+      amount: entry.amount,
+      type: entry.type,
+      status: entry.status,
+    },
+  };
+}
 
 function json(value: unknown) {
   return value as Prisma.InputJsonValue;
@@ -403,7 +425,7 @@ async function applyTransaction(
   tx: TransactionClient,
   operation: SyncOperation,
   deviceId: string,
-): Promise<Ack> {
+): Promise<{ ack: Ack; notify?: LedgerNotify }> {
   if (!operation.remoteId || operation.baseVersion === 0) {
     if (operation.operation === "delete") {
       throw new AccountingError(
@@ -423,9 +445,11 @@ async function applyTransaction(
       equivalentBootstrapTransaction(serializeEntry(existingById), input)
     ) {
       return {
-        opId: operation.opId,
-        remoteId: existingById.id,
-        version: existingById.version,
+        ack: {
+          opId: operation.opId,
+          remoteId: existingById.id,
+          version: existingById.version,
+        },
       };
     }
     const existingByLegacyId = input.legacyId
@@ -452,9 +476,11 @@ async function applyTransaction(
       equivalentBootstrapTransaction(serializeEntry(existing), input)
     ) {
       return {
-        opId: operation.opId,
-        remoteId: existing.id,
-        version: existing.version,
+        ack: {
+          opId: operation.opId,
+          remoteId: existing.id,
+          version: existing.version,
+        },
       };
     }
     if (existing) {
@@ -472,7 +498,10 @@ async function applyTransaction(
       actor(deviceId),
       operation.remoteId ? { id: operation.remoteId } : {},
     );
-    return { opId: operation.opId, remoteId: entry.id, version: entry.version };
+    return {
+      ack: { opId: operation.opId, remoteId: entry.id, version: entry.version },
+      notify: toLedgerNotify("create", entry),
+    };
   }
   if (operation.baseVersion === null || operation.baseVersion === undefined) {
     const current = await tx.accountingEntry.findUnique({
@@ -520,7 +549,13 @@ async function applyTransaction(
           updateInput!,
           actor(deviceId),
         );
-  return { opId: operation.opId, remoteId: entry.id, version: entry.version };
+  return {
+    ack: { opId: operation.opId, remoteId: entry.id, version: entry.version },
+    notify: toLedgerNotify(
+      operation.operation === "delete" ? "delete" : classifyEntryPatch(updateInput),
+      entry,
+    ),
+  };
 }
 
 function receiptData(value: Record<string, unknown>) {
@@ -1085,7 +1120,7 @@ async function applyReceipt(
   };
 }
 
-function storedResult(value: Prisma.JsonValue) {
+function storedResult(value: Prisma.JsonValue): OperationResult | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const object = value as Record<string, unknown>;
   if (object.kind === "ack") return { ack: object.value as Ack };
@@ -1145,16 +1180,19 @@ async function applyOperation(operation: SyncOperation, deviceId: string) {
         if (result) return result;
       }
 
-      let result: { ack?: Ack; conflict?: Conflict };
+      let result: OperationResult;
       try {
         if (preparationError) throw preparationError;
-        const ack =
-          operation.entityType === "account"
-            ? await applyAccount(tx, operation, deviceId)
-            : operation.entityType === "transaction"
-              ? await applyTransaction(tx, operation, deviceId)
+        if (operation.entityType === "transaction") {
+          const applied = await applyTransaction(tx, operation, deviceId);
+          result = { ack: applied.ack, notify: applied.notify };
+        } else {
+          const ack =
+            operation.entityType === "account"
+              ? await applyAccount(tx, operation, deviceId)
               : await applyReceipt(tx, operation, deviceId, preparedReceipt!);
-        result = { ack };
+          result = { ack };
+        }
       } catch (error) {
         if (!isPersistableSyncConflict(error)) throw error;
         result = { conflict: conflictFromError(operation, error) };
@@ -1315,10 +1353,21 @@ export async function synchronizeAccounting(body: unknown, request: Request) {
 
   const acked: Ack[] = [];
   const conflicts: Conflict[] = [];
+  const notifications: LedgerNotify[] = [];
   for (const operation of parsed.operations) {
     const result = await applyOperation(operation, deviceId);
     if (result.ack) acked.push(result.ack);
     if (result.conflict) conflicts.push(result.conflict);
+    if (result.notify) notifications.push(result.notify);
+  }
+  const grouped = new Map<LedgerPostAction, LedgerNotify["post"][]>();
+  for (const item of notifications) {
+    const posts = grouped.get(item.action) ?? [];
+    posts.push(item.post);
+    grouped.set(item.action, posts);
+  }
+  for (const [action, posts] of grouped) {
+    await safeNotifyAccountingPosts(action, posts);
   }
 
   const cursor = BigInt(parsed.cursor ?? "0");

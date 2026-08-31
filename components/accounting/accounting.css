@@ -1117,6 +1117,7 @@ body:has(.accounting-app) > .footer {
 
 .ac-empty-state strong { font-size: 15.5px; }
 .ac-empty-state p { margin: 0; color: var(--ac-muted); font-size: 13.5px; max-width: 300px; }
+.ac-empty-state .ac-loader { margin-bottom: 4px; }
 
 .ac-error-state {
   display: flex;

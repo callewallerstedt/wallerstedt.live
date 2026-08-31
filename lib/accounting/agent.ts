@@ -20,6 +20,7 @@ import {
   readGmailMessage,
   searchGmail,
 } from "./gmail";
+import { safeNotifyAccountingPosts } from "../push";
 import { serializeAccount, serializeDocument, serializeEntry } from "./serialize";
 import {
   assignDocument,
@@ -1016,7 +1017,7 @@ export async function applyAccountingAgentProposal(token: string) {
       "empty_agent_proposal",
     );
   }
-  return getAccountingDb().$transaction(async (tx) => {
+  const result = await getAccountingDb().$transaction(async (tx) => {
     const updated = [];
     const deleted = [];
     for (const edit of proposal.edits) {
@@ -1046,4 +1047,7 @@ export async function applyAccountingAgentProposal(token: string) {
     }
     return { updated, deleted };
   });
+  await safeNotifyAccountingPosts("update", result.updated);
+  await safeNotifyAccountingPosts("delete", result.deleted);
+  return result;
 }

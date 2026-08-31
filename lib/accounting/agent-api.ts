@@ -5,7 +5,7 @@ import { calculateSelectedAccountBalances, centsToMoney } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError } from "./errors";
 import { serializeEntry } from "./serialize";
-import { safeNotifyNewAccountingPosts } from "../push";
+import { classifyEntryPatch, safeNotifyAccountingPosts } from "../push";
 import {
   createEntryInTransaction,
   getEntry,
@@ -115,7 +115,7 @@ export async function createIdempotentAgentEntry(
       });
       return created;
     });
-    await safeNotifyNewAccountingPosts([entry]);
+    await safeNotifyAccountingPosts("create", [entry]);
     return { entry: serializeEntry(entry), created: true, deduplicatedBy: null };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -176,6 +176,7 @@ export async function updateAgentEntry(
       }
       return updated;
     });
+    await safeNotifyAccountingPosts(classifyEntryPatch(input), [entry]);
     return serializeEntry(entry);
   } catch (error) {
     if (
