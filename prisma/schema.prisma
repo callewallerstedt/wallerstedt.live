@@ -346,3 +346,15 @@ model AccountingBackup {
 
   @@index([createdAt])
 }
+
+/** Web Push subscription for the public artist PWA. */
+model WebPushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}

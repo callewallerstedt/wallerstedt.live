@@ -16,6 +16,7 @@
     "prisma:deploy:local": "node scripts/prisma-local.mjs migrate deploy",
     "prisma:status:local": "node scripts/prisma-local.mjs migrate status",
     "test:accounting": "tsx --test lib/accounting/*.test.ts",
+    "test:push": "tsx --test lib/push.test.ts",
     "accounting:import": "node scripts/import-accounting.mjs",
     "accounting:restore": "tsx scripts/restore-accounting.ts"
   },
@@ -32,12 +33,14 @@
     "prisma": "^7.8.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "web-push": "^3.6.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.5.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9.35.0",
     "eslint-config-next": "^16.2.10",
     "tsx": "^4.20.0",

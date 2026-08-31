@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { notifyNewSong } from "@/lib/push";
 import { saveSiteContent, type SiteContent } from "@/lib/site-content";
 import { addSong } from "@/lib/site-data";
 import {
@@ -110,6 +111,12 @@ export async function addSongAction(formData: FormData) {
   revalidatePath("/random");
   revalidatePath("/admin");
   revalidatePath(`/${result.song.slug}`);
+
+  try {
+    await notifyNewSong(result.song);
+  } catch (error) {
+    console.error("Failed to send new-song push notifications", error);
+  }
 
   return result;
 }

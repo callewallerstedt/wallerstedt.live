@@ -1,3 +1,4 @@
+import { NotificationOptIn } from "@/components/NotificationOptIn";
 import { UpdatesSignupForm } from "@/components/UpdatesSignupForm";
 
 export default function UpdatesPage() {
@@ -11,6 +12,7 @@ export default function UpdatesPage() {
         </p>
         <UpdatesSignupForm />
         <p className="updates-note">No spam. Unsubscribe anytime. I only send emails when there is something worth sharing.</p>
+        <NotificationOptIn />
       </section>
     </main>
   );

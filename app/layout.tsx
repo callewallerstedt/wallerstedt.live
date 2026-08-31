@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 
 import { AnalyticsTracker } from "@/components/AnalyticsTracker";
 import { Footer } from "@/components/Footer";
 import { MotionEffects } from "@/components/MotionEffects";
 import { PrivacyAwareAnalytics } from "@/components/PrivacyAwareAnalytics";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { SiteHeader } from "@/components/SiteHeader";
 import { artist } from "@/lib/artist";
 import { getSiteContent } from "@/lib/site-content";
@@ -29,7 +30,21 @@ export const metadata: Metadata = {
   },
   description: "hi! I make piano music :)",
   icons: {
-    icon: "/favicon.svg",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: artist.shortName,
+    statusBarStyle: "black-translucent",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
   openGraph: {
     title: artist.shortName,
@@ -47,12 +62,17 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#0e0e0e",
+};
+
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const siteContent = await getSiteContent();
 
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable}`}>
+        <ServiceWorkerRegister />
         <AnalyticsTracker />
         <MotionEffects />
         <SiteHeader />
