@@ -406,6 +406,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [ledgerDocFilter, setLedgerDocFilter] = useState<"all" | "missing">("all");
   const [toast, setToast] = useState("");
   const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+  const openedQueryPost = useRef("");
 
   useEffect(() => {
     try {
@@ -514,6 +515,36 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     void loadAccounts();
   }, [loadAccounts, loadDashboard]);
 
+  const openRequestedPost = useCallback(async (postId: string) => {
+    const id = postId.trim();
+    if (!id) return;
+    setTab("ledger");
+    setEditingEntry({
+      id,
+      date: "",
+      description: "",
+      amount: 0,
+      receiptRequired: true,
+      documentCount: 0,
+      documents: [],
+    });
+    setEntryLoading(true);
+    setEntriesError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      const [fullEntry] = await Promise.all([
+        api.entry(id),
+        entriesLoaded ? Promise.resolve() : loadEntries(),
+      ]);
+      setEditingEntry(fullEntry);
+    } catch (error) {
+      if (!handleUnauthorized(error)) setEntriesError(displayError(error, "Kunde inte läsa hela posten."));
+      setEditingEntry(null);
+    } finally {
+      setEntryLoading(false);
+    }
+  }, [api, entriesLoaded, handleUnauthorized, loadEntries]);
+
   useEffect(() => {
     const previousLanguage = document.documentElement.lang;
     document.documentElement.lang = "sv";
@@ -522,6 +553,9 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     const goOffline = () => setOnline(false);
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/accounting-sw.js", { scope: "/vault/", updateViaCache: "none" });
+    }
     void checkSession();
     return () => {
       window.removeEventListener("online", goOnline);
@@ -549,6 +583,29 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     const timeout = window.setTimeout(() => setToast(""), 4200);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") return;
+    const postId = new URLSearchParams(window.location.search).get("post")?.trim() || "";
+    if (!postId || openedQueryPost.current === postId) return;
+    openedQueryPost.current = postId;
+    void openRequestedPost(postId);
+  }, [openRequestedPost, sessionStatus]);
+
+  useEffect(() => {
+    if (sessionStatus !== "authenticated" || !("serviceWorker" in navigator)) return;
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type !== "open-accounting-post" || typeof event.data.url !== "string") return;
+      try {
+        const postId = new URL(event.data.url, window.location.origin).searchParams.get("post");
+        if (postId) void openRequestedPost(postId);
+      } catch {
+        // Ignore malformed service-worker messages.
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [openRequestedPost, sessionStatus]);
 
   async function login(password: string) {
     const authenticated = await api.login(password);
@@ -3265,7 +3322,7 @@ function SettingsView({
             </div>
           </section>
 
-          <PwaRegistration visible />
+          <PwaRegistration api={api} visible />
 
           <section className="ac-card ac-security-card" aria-labelledby="security-heading">
             <div className="ac-section-icon"><Icon.Shield /></div>

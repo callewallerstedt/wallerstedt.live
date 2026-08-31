@@ -457,6 +457,28 @@ export class AccountingApi {
     return normalizeEntry(record.entry ?? payload);
   }
 
+  async pushPublicKey(): Promise<string> {
+    const payload = await this.request<unknown>("/push/public-key");
+    const record = asRecord(payload);
+    return record.configured === true ? asString(record.publicKey) : "";
+  }
+
+  async savePushSubscription(subscription: PushSubscriptionJSON): Promise<void> {
+    await this.request("/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription),
+    });
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await this.request("/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    });
+  }
+
   async createEntry(entry: Partial<AccountingEntry>): Promise<AccountingEntry> {
     const payload = await this.request<unknown>("/entries", {
       method: "POST",
