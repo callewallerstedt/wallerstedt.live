@@ -65,7 +65,7 @@ allow only PDF/JPEG/PNG/TXT/CSV, and enforce the same 10 MB file limit as the va
 
 ## iPhone notifications
 
-New ledger posts can ping the Home Screen PWA. Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (generate with `npx web-push generate-vapid-keys`), then apply migrations. In the app: **Mer → Slå på aviseringar**. iOS 16.4+ only, and only after Add to Home Screen. See `README.md` for the test steps.
+Ledger post create, edit, and delete can ping the Home Screen PWA. Tapping the notice opens that post (`?post=<id>`); a deleted post shows “Posten är raderad”. Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (generate with `npx web-push generate-vapid-keys`), then apply migrations. In the app: **Mer → Slå på aviseringar**. iOS 16.4+ only, and only after Add to Home Screen. See `README.md` for the test steps.
 
 ## Backups and recovery
 

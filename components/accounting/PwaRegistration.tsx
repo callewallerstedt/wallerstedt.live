@@ -199,11 +199,11 @@ export function PwaRegistration({ api, visible }: { api: AccountingApi; visible:
         )}
 
         {notifyState === "needs-install" ? (
-          <p className="ac-help-text">När appen är öppnad från hemskärmen kan du slå på aviseringar för nya poster.</p>
+          <p className="ac-help-text">När appen är öppnad från hemskärmen kan du slå på aviseringar för poster.</p>
         ) : null}
         {notifyState === "prompt" ? (
           <>
-            <p>Få en kort notis när en ny post bokförs. Inget pop-up-fönster visas förrän du själv trycker.</p>
+            <p>Få en kort notis när en post bokförs, ändras eller tas bort. Inget pop-up-fönster visas förrän du själv trycker.</p>
             <button className="ac-button ac-button--secondary" type="button" onClick={() => void enableNotifications()}>
               <Icon.Bell /> Slå på aviseringar
             </button>
@@ -211,7 +211,7 @@ export function PwaRegistration({ api, visible }: { api: AccountingApi; visible:
         ) : null}
         {notifyState === "enabled" ? (
           <>
-            <p className="ac-success-copy"><Icon.Check size={18} /> Aviseringar är på för nya poster.</p>
+            <p className="ac-success-copy"><Icon.Check size={18} /> Aviseringar är på för nya, ändrade och raderade poster.</p>
             <button className="ac-button ac-button--ghost" type="button" onClick={() => void disableNotifications()}>
               Stäng av aviseringar
             </button>

@@ -149,6 +149,77 @@ function isUnauthorized(error: unknown) {
   return error instanceof AccountingApiError && error.status === 401;
 }
 
+function isMissingEntryError(error: unknown) {
+  return error instanceof AccountingApiError
+    && (error.status === 404 || error.code === "entry_not_found");
+}
+
+const PENDING_POST_STORAGE_KEY = "ac-pending-post";
+const PUSH_OPEN_MESSAGE = "open-accounting-post";
+const PUSH_PENDING_CACHE = "wallerstedt-accounting-push-open";
+const PUSH_PENDING_PATH = "/__accounting-pending-open";
+
+type PendingPostOpen = { postId: string; action?: string };
+
+function postIdFromHref(value: string) {
+  try {
+    return new URL(value, window.location.origin).searchParams.get("post")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function pendingPostFromUnknown(input: unknown): PendingPostOpen | null {
+  if (!input || typeof input !== "object") return null;
+  const record = input as { type?: unknown; url?: unknown; postId?: unknown; action?: unknown };
+  const postId = (typeof record.postId === "string" ? record.postId.trim() : "")
+    || (typeof record.url === "string" ? postIdFromHref(record.url) : "");
+  if (!postId) return null;
+  return {
+    postId,
+    action: typeof record.action === "string" ? record.action : undefined,
+  };
+}
+
+function readStoredPendingPost(): PendingPostOpen | null {
+  try {
+    return pendingPostFromUnknown(JSON.parse(sessionStorage.getItem(PENDING_POST_STORAGE_KEY) || "null"));
+  } catch {
+    return null;
+  }
+}
+
+function storePendingPost(pending: PendingPostOpen | null) {
+  try {
+    if (pending?.postId) sessionStorage.setItem(PENDING_POST_STORAGE_KEY, JSON.stringify(pending));
+    else sessionStorage.removeItem(PENDING_POST_STORAGE_KEY);
+  } catch {
+    // Private mode can block sessionStorage; the in-memory ref still works.
+  }
+}
+
+function writePostQuery(postId: string | null) {
+  const url = new URL(window.location.href);
+  if (postId) url.searchParams.set("post", postId);
+  else url.searchParams.delete("post");
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (next !== current) window.history.replaceState(null, "", next);
+}
+
+async function readCachedPendingPost(): Promise<PendingPostOpen | null> {
+  if (!("caches" in window)) return null;
+  try {
+    const cache = await caches.open(PUSH_PENDING_CACHE);
+    const response = await cache.match(PUSH_PENDING_PATH);
+    if (!response) return null;
+    await cache.delete(PUSH_PENDING_PATH);
+    return pendingPostFromUnknown(await response.json());
+  } catch {
+    return null;
+  }
+}
+
 function entryTypeLabel(entry: AccountingEntry) {
   const type = (entry.type ?? "").toLocaleLowerCase("sv-SE");
   if (type.includes("inkomst") || type.includes("inbetal") || type.includes("income") || type.includes("intäkt")) return "Intäkt";
@@ -406,7 +477,15 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const [ledgerDocFilter, setLedgerDocFilter] = useState<"all" | "missing">("all");
   const [toast, setToast] = useState("");
   const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+  const [deepLink, setDeepLink] = useState<
+    | { status: "idle" }
+    | { status: "loading"; postId: string }
+    | { status: "missing"; postId: string }
+    | { status: "error"; postId: string; message: string }
+  >({ status: "idle" });
   const openedQueryPost = useRef("");
+  const pendingOpenRef = useRef<PendingPostOpen | null>(null);
+  const consumePendingPostRef = useRef<(pending: PendingPostOpen | null) => void>(() => undefined);
 
   useEffect(() => {
     try {
@@ -515,19 +594,23 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     void loadAccounts();
   }, [loadAccounts, loadDashboard]);
 
+  const queuePendingPost = useCallback((pending: PendingPostOpen | null) => {
+    if (!pending?.postId) return null;
+    pendingOpenRef.current = pending;
+    storePendingPost(pending);
+    return pending;
+  }, []);
+
   const openRequestedPost = useCallback(async (postId: string) => {
     const id = postId.trim();
     if (!id) return;
+    openedQueryPost.current = id;
+    pendingOpenRef.current = { postId: id, action: pendingOpenRef.current?.action };
+    storePendingPost(null);
+    writePostQuery(id);
     setTab("ledger");
-    setEditingEntry({
-      id,
-      date: "",
-      description: "",
-      amount: 0,
-      receiptRequired: true,
-      documentCount: 0,
-      documents: [],
-    });
+    setEditingEntry(null);
+    setDeepLink({ status: "loading", postId: id });
     setEntryLoading(true);
     setEntriesError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -537,13 +620,39 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
         entriesLoaded ? Promise.resolve() : loadEntries(),
       ]);
       setEditingEntry(fullEntry);
+      setDeepLink({ status: "idle" });
     } catch (error) {
-      if (!handleUnauthorized(error)) setEntriesError(displayError(error, "Kunde inte läsa hela posten."));
+      if (handleUnauthorized(error)) return;
       setEditingEntry(null);
+      if (isMissingEntryError(error)) {
+        setDeepLink({ status: "missing", postId: id });
+        return;
+      }
+      setDeepLink({
+        status: "error",
+        postId: id,
+        message: displayError(error, "Kunde inte läsa hela posten."),
+      });
     } finally {
       setEntryLoading(false);
     }
   }, [api, entriesLoaded, handleUnauthorized, loadEntries]);
+
+  const consumePendingPost = useCallback((pending: PendingPostOpen | null) => {
+    const next = queuePendingPost(pending);
+    if (!next || sessionStatus !== "authenticated") return;
+    void openRequestedPost(next.postId);
+  }, [openRequestedPost, queuePendingPost, sessionStatus]);
+  consumePendingPostRef.current = consumePendingPost;
+
+  const closeOpenedPost = useCallback(() => {
+    openedQueryPost.current = "";
+    pendingOpenRef.current = null;
+    storePendingPost(null);
+    writePostQuery(null);
+    setEditingEntry(null);
+    setDeepLink({ status: "idle" });
+  }, []);
 
   useEffect(() => {
     const previousLanguage = document.documentElement.lang;
@@ -585,27 +694,39 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   }, [toast]);
 
   useEffect(() => {
+    const fromUrl = postIdFromHref(window.location.href);
+    if (fromUrl) queuePendingPost({ postId: fromUrl });
+    const stored = readStoredPendingPost();
+    if (stored) queuePendingPost(stored);
+    void readCachedPendingPost().then((cached) => {
+      if (cached) consumePendingPostRef.current(cached);
+    });
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.ready.then((registration) => {
+        registration.active?.postMessage({ type: "consume-pending-open" });
+      });
+    }
+  }, [queuePendingPost]);
+
+  useEffect(() => {
     if (sessionStatus !== "authenticated") return;
-    const postId = new URLSearchParams(window.location.search).get("post")?.trim() || "";
+    const pending = pendingOpenRef.current || readStoredPendingPost();
+    const fromUrl = postIdFromHref(window.location.href);
+    const postId = pending?.postId || fromUrl;
     if (!postId || openedQueryPost.current === postId) return;
-    openedQueryPost.current = postId;
     void openRequestedPost(postId);
   }, [openRequestedPost, sessionStatus]);
 
   useEffect(() => {
-    if (sessionStatus !== "authenticated" || !("serviceWorker" in navigator)) return;
+    if (!("serviceWorker" in navigator)) return;
     function onMessage(event: MessageEvent) {
-      if (event.data?.type !== "open-accounting-post" || typeof event.data.url !== "string") return;
-      try {
-        const postId = new URL(event.data.url, window.location.origin).searchParams.get("post");
-        if (postId) void openRequestedPost(postId);
-      } catch {
-        // Ignore malformed service-worker messages.
-      }
+      if (event.data?.type !== PUSH_OPEN_MESSAGE) return;
+      const pending = pendingPostFromUnknown(event.data);
+      if (pending) consumePendingPost(pending);
     }
     navigator.serviceWorker.addEventListener("message", onMessage);
     return () => navigator.serviceWorker.removeEventListener("message", onMessage);
-  }, [openRequestedPost, sessionStatus]);
+  }, [consumePendingPost]);
 
   async function login(password: string) {
     const authenticated = await api.login(password);
@@ -624,7 +745,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   }
 
   function changeTab(next: AppTab) {
-    setEditingEntry(null);
+    closeOpenedPost();
     setTab(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -781,7 +902,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     setDraft(null);
     setAiText("");
     setAiFiles([]);
-    setEditingEntry(null);
+    closeOpenedPost();
     setTab("home");
     setToast(message);
     refreshAll();
@@ -795,7 +916,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       ...current,
       { role: "assistant", content: message } as AccountingAgentMessage,
     ].slice(-12));
-    setEditingEntry(null);
+    closeOpenedPost();
     setTab("chat");
     setToast(message);
     refreshAll();
@@ -872,6 +993,16 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             onExpired={expireSession}
             onSaved={completeSave}
           />
+        ) : deepLink.status === "loading" ? (
+          <OpeningPostState />
+        ) : deepLink.status === "missing" ? (
+          <MissingPostState onBack={closeOpenedPost} />
+        ) : deepLink.status === "error" ? (
+          <DeepLinkErrorState
+            message={deepLink.message}
+            onBack={closeOpenedPost}
+            onRetry={() => void openRequestedPost(deepLink.postId)}
+          />
         ) : editingEntry ? (
           <EntryEditor
             accessKey={accessKey}
@@ -880,7 +1011,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             entry={editingEntry}
             ledgerEntries={entries}
             loading={entryLoading}
-            onBack={() => setEditingEntry(null)}
+            onBack={closeOpenedPost}
             onChange={setEditingEntry}
             onDeleted={() => completeSave("Posten har tagits bort.")}
             onExpired={expireSession}
@@ -2255,6 +2386,52 @@ function EmptyState({ icon, title, description }: { icon: ReactNode; title: stri
       <span>{icon}</span>
       <strong>{title}</strong>
       <p>{description}</p>
+    </div>
+  );
+}
+
+function OpeningPostState() {
+  return (
+    <div className="ac-view" aria-busy="true">
+      <div className="ac-empty-state">
+        <div className="ac-loader" aria-hidden="true" />
+        <strong>Öppnar posten…</strong>
+        <p>Hämtar bokföringsposten från aviseringen.</p>
+      </div>
+    </div>
+  );
+}
+
+function MissingPostState({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="ac-view">
+      <button className="ac-back-button" onClick={onBack} type="button">
+        <Icon.ArrowLeft /> Tillbaka till listan
+      </button>
+      <EmptyState
+        icon={<Icon.Trash />}
+        title="Posten är raderad"
+        description="Den här bokföringsposten finns inte längre. Den kan ha tagits bort från en annan enhet."
+      />
+    </div>
+  );
+}
+
+function DeepLinkErrorState({
+  message,
+  onBack,
+  onRetry,
+}: {
+  message: string;
+  onBack: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="ac-view">
+      <button className="ac-back-button" onClick={onBack} type="button">
+        <Icon.ArrowLeft /> Tillbaka till listan
+      </button>
+      <ErrorState message={message} onRetry={onRetry} />
     </div>
   );
 }

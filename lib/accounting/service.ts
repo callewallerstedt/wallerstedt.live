@@ -9,7 +9,7 @@ import {
   serializeEntry,
   serializeRevision,
 } from "./serialize";
-import { safeNotifyNewAccountingPosts } from "../push";
+import { classifyEntryPatch, safeNotifyAccountingPosts } from "../push";
 import type { NormalizedEntryInput } from "./validation";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -142,7 +142,7 @@ export async function createEntryInTransaction(
 export async function createEntry(input: NormalizedEntryInput, actor = "web") {
   const db = getAccountingDb();
   const entry = await db.$transaction((tx) => createEntryInTransaction(tx, input, actor));
-  await safeNotifyNewAccountingPosts([entry]);
+  await safeNotifyAccountingPosts("create", [entry]);
   return entry;
 }
 
@@ -199,9 +199,11 @@ export async function updateEntry(
   actor = "web",
 ) {
   const db = getAccountingDb();
-  return db.$transaction((tx) =>
+  const entry = await db.$transaction((tx) =>
     updateEntryInTransaction(tx, id, expectedVersion, input, actor),
   );
+  await safeNotifyAccountingPosts(classifyEntryPatch(input), [entry]);
+  return entry;
 }
 
 export async function deleteEntryInTransaction(
@@ -242,9 +244,11 @@ export async function deleteEntry(
   actor = "web",
 ) {
   const db = getAccountingDb();
-  return db.$transaction((tx) =>
+  const entry = await db.$transaction((tx) =>
     deleteEntryInTransaction(tx, id, expectedVersion, actor),
   );
+  await safeNotifyAccountingPosts("delete", [entry]);
+  return entry;
 }
 
 export async function getEntry(id: string) {
