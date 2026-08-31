@@ -193,6 +193,35 @@ export async function requireOwnerSession(
   return session;
 }
 
+export async function requireAgentOrOwnerSession(
+  request: Request,
+  accessKey: string,
+  mutation = false,
+) {
+  assertAccessKey(accessKey);
+  const authorization = request.headers.get("authorization") ?? "";
+  const bearer = /^Bearer\s+(.+)$/i.exec(authorization)?.[1]?.trim();
+  if (bearer) {
+    const expected = process.env.ACCOUNTING_AGENT_API_TOKEN?.trim() ?? "";
+    if (!expected || expected.length < 32) {
+      throw new AccountingError(
+        "The accounting agent API is not configured.",
+        503,
+        "agent_api_not_configured",
+      );
+    }
+    if (!secretEqual(bearer, expected)) {
+      throw new AccountingError("Unauthorized.", 401, "unauthorized");
+    }
+    return { kind: "agent" as const };
+  }
+
+  return {
+    kind: "owner" as const,
+    session: await requireOwnerSession(request, accessKey, mutation),
+  };
+}
+
 async function getOwnerSession(request: Request, accessKey: string) {
   assertAccessKey(accessKey);
   const token = parseCookies(request.headers.get("cookie")).get(

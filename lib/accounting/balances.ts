@@ -13,6 +13,14 @@ export type AccountBalances = {
   asOf: string | null;
 };
 
+export type SelectedAccountBalance = {
+  account: number;
+  balanceCents: number;
+  debitCents: number;
+  creditCents: number;
+  entryCount: number;
+};
+
 function moneyToCents(value: MoneyLike) {
   const parsed = Number(typeof value === "object" ? value.toString() : value);
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
@@ -47,4 +55,48 @@ export function calculateAccountBalances(entries: BalanceEntry[]): AccountBalanc
 
 export function centsToMoney(cents: number) {
   return (cents / 100).toFixed(2);
+}
+
+export function calculateSelectedAccountBalances(
+  entries: BalanceEntry[],
+  accounts: number[],
+) {
+  const selected = new Map<number, SelectedAccountBalance>();
+  for (const account of accounts) {
+    selected.set(account, {
+      account,
+      balanceCents: 0,
+      debitCents: 0,
+      creditCents: 0,
+      entryCount: 0,
+    });
+  }
+  let asOf: string | null = null;
+
+  for (const entry of entries) {
+    const amount = moneyToCents(entry.amount);
+    const touched = new Set<number>();
+    if (entry.debitAccount != null) {
+      const balance = selected.get(entry.debitAccount);
+      if (balance) {
+        balance.debitCents += amount;
+        balance.balanceCents += amount;
+        touched.add(entry.debitAccount);
+      }
+    }
+    if (entry.creditAccount != null) {
+      const balance = selected.get(entry.creditAccount);
+      if (balance) {
+        balance.creditCents += amount;
+        balance.balanceCents -= amount;
+        touched.add(entry.creditAccount);
+      }
+    }
+    for (const account of touched) selected.get(account)!.entryCount += 1;
+
+    const date = ledgerDate(entry.date);
+    if (date && touched.size > 0 && (!asOf || date > asOf)) asOf = date;
+  }
+
+  return { balances: [...selected.values()], asOf };
 }

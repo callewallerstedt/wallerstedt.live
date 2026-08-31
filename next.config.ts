@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
         headers: privateHeaders,
       },
       {
+        source: "/agent/:path*",
+        headers: privateHeaders,
+      },
+      {
         source: "/accounting-sw.js",
         headers: [
           { key: "Content-Type", value: "application/javascript; charset=utf-8" },

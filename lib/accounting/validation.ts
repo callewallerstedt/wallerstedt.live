@@ -100,6 +100,33 @@ export const entryPatchSchema = z.object({
   version: z.number().int().positive(),
 });
 
+const requiredAgentDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "Date must be a real calendar date.");
+
+export const agentEntryCreateSchema = entryCreateSchema.and(z.object({
+  bankText: z.string().trim().min(1).max(500),
+  date: requiredAgentDate,
+  amount: moneyValue,
+}));
+
+export const agentEntryPatchSchema = entryPatchSchema
+  .and(z.object({ bankText: z.string().trim().min(1).max(500).optional() }))
+  .superRefine((value, context) => {
+    if ((value.date !== undefined || value.amount !== undefined) && !value.bankText) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "bankText is required when changing date or amount.",
+        path: ["bankText"],
+      });
+    }
+  });
+
 export const versionSchema = z.object({
   version: z.number().int().positive(),
 });

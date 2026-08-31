@@ -36,6 +36,33 @@ Connecting an inbox (done entirely in the app under *Mer → Gmail-konton* while
 
 Up to 4 accounts can be connected. App passwords are stored AES-256-GCM encrypted in `AccountingGmailAccount`; encryption reuses `ACCOUNTING_SESSION_SECRET` unless a dedicated `ACCOUNTING_GMAIL_TOKEN_SECRET` (32+ chars) is set — no other configuration is needed. If Google revokes an app password, the account shows "Behöver anslutas igen" and can be reconnected in place with a fresh password. Disconnecting deletes the stored secret; also delete the app password at myaccount.google.com/apppasswords for completeness.
 
+## Agent workspace and API
+
+The agent-first workspace is available at `/agent/<ACCOUNTING_ACCESS_KEY>`. When
+`agent.wallerstedt.live` is attached to the same Vercel project, the shorter
+`https://agent.wallerstedt.live/<ACCOUNTING_ACCESS_KEY>` URL is rewritten to it.
+Set `ACCOUNTING_AGENT_HOST` if the production hostname differs.
+
+The versioned JSON API lives under:
+
+```text
+/api/accounting/<ACCOUNTING_ACCESS_KEY>/agent/v1
+```
+
+An active owner browser session can use it directly. Non-browser agents use
+`Authorization: Bearer <ACCOUNTING_AGENT_API_TOKEN>`; generate a separate random
+token of at least 32 characters and do not reuse the desktop sync token. The API
+root advertises its endpoints, and `/schema` returns the writable field contract.
+
+Agent-created posts require `bankText`, `date`, and `amount`. Those three values
+are normalized into a database-unique fingerprint, so an identical bank row is
+returned rather than inserted again. Updates still require the current `version`
+and are recorded in the existing revision and audit logs.
+
+The attachment endpoint accepts multipart files or JSON containing a public HTTPS
+`url`. Remote downloads reject private/internal addresses, re-check redirects,
+allow only PDF/JPEG/PNG/TXT/CSV, and enforce the same 10 MB file limit as the vault.
+
 ## Backups and recovery
 
 The daily cron and the owner backup action create a private JSON snapshot, read it back, and verify the SHA-256 of the snapshot and every stored document before recording `verified`. Snapshot pruning keeps recent daily copies and long-term monthly/yearly copies. Registered document blobs are never physically deleted, including rejected AI uploads, so an older verified snapshot cannot be invalidated by later cleanup.
