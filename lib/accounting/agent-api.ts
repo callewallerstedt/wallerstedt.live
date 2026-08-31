@@ -5,6 +5,7 @@ import { calculateSelectedAccountBalances, centsToMoney } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError } from "./errors";
 import { serializeEntry } from "./serialize";
+import { safeNotifyNewAccountingPosts } from "../push";
 import {
   createEntryInTransaction,
   getEntry,
@@ -114,6 +115,7 @@ export async function createIdempotentAgentEntry(
       });
       return created;
     });
+    await safeNotifyNewAccountingPosts([entry]);
     return { entry: serializeEntry(entry), created: true, deduplicatedBy: null };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

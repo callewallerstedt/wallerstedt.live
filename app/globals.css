@@ -1881,22 +1881,6 @@ main > .section:last-child {
   cursor: default;
 }
 
-.footer__links {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px 22px;
-}
-
-.footer__updates {
-  color: inherit;
-  text-decoration: none;
-}
-
-.footer__updates:hover {
-  color: var(--accent-soft);
-}
-
 .footer__contact {
   display: inline-flex;
   align-items: center;
@@ -2441,44 +2425,6 @@ main > .section:last-child {
   max-width: 34rem;
   color: var(--muted);
   font-size: 0.98rem;
-}
-
-.notify-optin {
-  margin: 32px auto 0;
-  padding-top: 28px;
-  max-width: 34rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  text-align: center;
-}
-
-.notify-optin h2 {
-  margin: 0;
-  font-family: var(--font-display), serif;
-  font-size: 1.45rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-
-.notify-optin p {
-  margin: 12px 0 0;
-  color: var(--muted);
-}
-
-.notify-optin .button {
-  margin-top: 18px;
-}
-
-.notify-optin__steps {
-  margin: 16px auto 0;
-  padding: 0;
-  max-width: 24rem;
-  color: var(--muted);
-  text-align: left;
-  list-style: decimal;
-}
-
-.notify-optin__steps li {
-  margin: 0 0 8px 1.2rem;
 }
 
 [data-reveal] {
@@ -3042,10 +2988,6 @@ main > .section:last-child {
   .catalog-card__actions {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .footer__links {
-    width: 100%;
   }
 
   .catalog-card__top {

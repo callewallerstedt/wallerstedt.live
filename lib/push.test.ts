@@ -2,43 +2,60 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildNewSongNotification,
-  DEFAULT_SITE_ORIGIN,
+  buildNewPostNotification,
+  buildNewPostsNotification,
   getVapidPublicKey,
   isGonePushStatus,
   isWebPushConfigured,
   parsePushSubscription,
   shortenNotificationBody,
+  vaultPostPath,
 } from "./push";
 
-test("builds a notification that opens the new song page", () => {
-  assert.deepEqual(
-    buildNewSongNotification(
-      {
-        title: "emergence",
-        blurb: "A quiet piano piece.",
-        slug: "emergence",
-      },
-      "https://wallerstedt.live",
-    ),
+const accessKey = "test-accounting-access-key";
+
+test("builds a notification that opens the new ledger post", () => {
+  const payload = buildNewPostNotification(
     {
-      title: "emergence",
-      body: "A quiet piano piece.",
-      url: "https://wallerstedt.live/emergence",
+      id: "11111111-1111-4111-8111-111111111111",
+      description: "ICA Maxi Kungsbacka",
+      amount: "234.50",
+      type: "Utbetalning",
     },
+    { origin: "https://wallerstedt.live", accessKey },
+  );
+
+  assert.equal(payload.title, "ICA Maxi Kungsbacka");
+  assert.match(payload.body, /234,50/);
+  assert.match(payload.body, /Utbetalning/);
+  assert.equal(
+    payload.url,
+    `https://wallerstedt.live/vault/${accessKey}?post=11111111-1111-4111-8111-111111111111`,
   );
 });
 
-test("falls back to a short default body and trims long blurbs", () => {
-  assert.equal(
-    buildNewSongNotification({ title: "dusk", blurb: "", slug: "dusk" }).body,
-    "New piano music is out.",
+test("summarizes several new posts into one notification", () => {
+  const payload = buildNewPostsNotification(
+    [
+      { id: "a", description: "ICA", amount: "10", type: "Utbetalning" },
+      { id: "b", description: "Hyra", amount: "20", type: "Utbetalning" },
+    ],
+    { origin: "https://wallerstedt.live", accessKey },
   );
-  assert.equal(
-    shortenNotificationBody("A".repeat(140)).endsWith("…"),
-    true,
+
+  assert.equal(payload?.title, "2 nya poster");
+  assert.equal(payload?.body, "ICA · Hyra");
+  assert.equal(payload?.url, `https://wallerstedt.live${vaultPostPath("a", accessKey)}`);
+});
+
+test("falls back to a short default body and trims long copy", () => {
+  const payload = buildNewPostNotification(
+    { id: "post-1", description: "  ", amount: "not-a-number", type: "" },
+    { origin: "https://wallerstedt.live", accessKey },
   );
-  assert.ok(shortenNotificationBody("A".repeat(140)).length <= 110);
+  assert.equal(payload.title, "Ny bokföringspost");
+  assert.equal(payload.body, "En ny post har bokförts.");
+  assert.equal(shortenNotificationBody("A".repeat(140)).endsWith("…"), true);
 });
 
 test("accepts only https push subscriptions with VAPID keys", () => {
@@ -68,13 +85,13 @@ test("treats expired push endpoints as gone", () => {
   assert.equal(isGonePushStatus(500), false);
 });
 
-test("requires VAPID keys before treating push as configured", () => {
+test("requires VAPID keys and the vault access key before treating push as configured", () => {
   const environment = {
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: "public",
-    VAPID_PRIVATE_KEY: "",
+    VAPID_PRIVATE_KEY: "private",
+    ACCOUNTING_ACCESS_KEY: "",
   } as unknown as NodeJS.ProcessEnv;
 
   assert.equal(getVapidPublicKey(environment), "public");
   assert.equal(isWebPushConfigured(environment), false);
-  assert.equal(DEFAULT_SITE_ORIGIN, "https://wallerstedt.live");
 });

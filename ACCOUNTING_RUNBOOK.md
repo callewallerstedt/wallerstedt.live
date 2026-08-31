@@ -63,6 +63,10 @@ The attachment endpoint accepts multipart files or JSON containing a public HTTP
 `url`. Remote downloads reject private/internal addresses, re-check redirects,
 allow only PDF/JPEG/PNG/TXT/CSV, and enforce the same 10 MB file limit as the vault.
 
+## iPhone notifications
+
+New ledger posts can ping the Home Screen PWA. Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (generate with `npx web-push generate-vapid-keys`), then apply migrations. In the app: **Mer → Slå på aviseringar**. iOS 16.4+ only, and only after Add to Home Screen. See `README.md` for the test steps.
+
 ## Backups and recovery
 
 The daily cron and the owner backup action create a private JSON snapshot, read it back, and verify the SHA-256 of the snapshot and every stored document before recording `verified`. Snapshot pruning keeps recent daily copies and long-term monthly/yearly copies. Registered document blobs are never physically deleted, including rejected AI uploads, so an older verified snapshot cannot be invalidated by later cleanup.

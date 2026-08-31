@@ -42,6 +42,7 @@ export const AccountingIcons = {
   Shield: (props: IconProps) => <Icon {...props}><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></Icon>,
   Logout: (props: IconProps) => <Icon {...props}><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10"/></Icon>,
   Download: (props: IconProps) => <Icon {...props}><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 20h16"/></Icon>,
+  Bell: (props: IconProps) => <Icon {...props}><path d="M6 9a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></Icon>,
   Eye: (props: IconProps) => <Icon {...props}><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon>,
   EyeOff: (props: IconProps) => <Icon {...props}><path d="m3 3 18 18M10.6 6.2c.45-.13.92-.2 1.4-.2 6.5 0 10 6 10 6a15 15 0 0 1-2.1 2.8M6.1 7.2A15 15 0 0 0 2 12s3.5 6 10 6c1.25 0 2.36-.22 3.35-.57"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></Icon>,
   Alert: (props: IconProps) => <Icon {...props}><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></Icon>,

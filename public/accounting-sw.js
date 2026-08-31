@@ -1,4 +1,4 @@
-const STATIC_CACHE = "wallerstedt-accounting-static-v2";
+const STATIC_CACHE = "wallerstedt-accounting-static-v3";
 const SAFE_STATIC_ASSETS = [
   "/accounting-logo.png",
   "/accounting-icon-180.png",
@@ -53,4 +53,51 @@ self.addEventListener("fetch", (event) => {
       caches.match(event.request).then((cached) => cached || fetch(event.request)),
     );
   }
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+
+  const title = String(payload.title || "Ny bokföringspost");
+  event.waitUntil(self.registration.showNotification(title, {
+    body: String(payload.body || "En ny post har bokförts."),
+    icon: "/accounting-icon-192.png",
+    badge: "/accounting-icon-192.png",
+    data: { url: String(payload.url || "/vault/") },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = event.notification.data && event.notification.data.url
+    ? event.notification.data.url
+    : "/vault/";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          const clientUrl = new URL(client.url);
+          if (clientUrl.pathname.startsWith("/vault/")) {
+            return client.focus().then(() => {
+              client.postMessage({ type: "open-accounting-post", url: target });
+              if ("navigate" in client) {
+                return client.navigate(target);
+              }
+              return client;
+            });
+          }
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(target);
+      }
+      return undefined;
+    }),
+  );
 });

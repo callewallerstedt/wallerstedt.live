@@ -9,6 +9,7 @@ import {
   serializeEntry,
   serializeRevision,
 } from "./serialize";
+import { safeNotifyNewAccountingPosts } from "../push";
 import type { NormalizedEntryInput } from "./validation";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -140,7 +141,9 @@ export async function createEntryInTransaction(
 
 export async function createEntry(input: NormalizedEntryInput, actor = "web") {
   const db = getAccountingDb();
-  return db.$transaction((tx) => createEntryInTransaction(tx, input, actor));
+  const entry = await db.$transaction((tx) => createEntryInTransaction(tx, input, actor));
+  await safeNotifyNewAccountingPosts([entry]);
+  return entry;
 }
 
 export async function updateEntryInTransaction(

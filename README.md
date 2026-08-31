@@ -1,16 +1,14 @@
 # wallerstedt.live
 
-Artist site for [Wallerstedt](https://wallerstedt.live). The public catalog is edited in `/admin`. Adding a song there is what publishes a new piece.
+Artist site for [Wallerstedt](https://wallerstedt.live), plus a private bookkeeping PWA at `/vault/<ACCOUNTING_ACCESS_KEY>`.
 
-## Web Push (iPhone Home Screen PWA)
+## Bookkeeping web push (iPhone Home Screen)
 
-Visitors who add the site to their iPhone Home Screen can opt in to a notification when a new song is published. There is no permission prompt on first visit. The opt-in lives on `/updates`.
-
-iOS 16.4+ only delivers Web Push to a real Home Screen app (`display: standalone`, a service worker, and permission from a tap). Safari tabs cannot subscribe.
+The accounting app can send a notification when a new ledger post is saved (from the vault, AI approval, or the agent API). iOS 16.4+ only delivers Web Push to a Home Screen PWA (`display: standalone`, a service worker, and permission from a tap). Safari tabs cannot subscribe. There is no permission prompt on first visit; the opt-in lives under **Mer**.
 
 ### Environment variables
 
-Set these in Vercel (Production and Preview). Do not commit the keys.
+Set these in Vercel. Do not commit the keys.
 
 ```bash
 # Generate once: npx web-push generate-vapid-keys
@@ -19,7 +17,7 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:contact.wallerstedt@gmail.com
 ```
 
-`VAPID_SUBJECT` can be a `mailto:` address or `https://wallerstedt.live`. Optional: `NEXT_PUBLIC_SITE_URL` if notification links should point somewhere other than `https://wallerstedt.live` (local/preview).
+`VAPID_SUBJECT` can be a `mailto:` address or `https://wallerstedt.live`. Optional: `NEXT_PUBLIC_SITE_URL` if notification links should point somewhere other than production.
 
 Subscriptions are stored in Postgres (`WebPushSubscription`). After deploy, apply the migration:
 
@@ -27,13 +25,17 @@ Subscriptions are stored in Postgres (`WebPushSubscription`). After deploy, appl
 npm run prisma:deploy
 ```
 
+On Windows against the linked production database:
+
+```powershell
+npm.cmd run prisma:deploy:local
+```
+
 ### Test on iPhone
 
 1. Deploy with the VAPID variables and the migration applied.
-2. Open https://wallerstedt.live in Safari (not in-app browsers).
+2. Open the bookkeeping vault in Safari (not in-app browsers).
 3. Share → **Add to Home Screen** → Add.
-4. Open **Wallerstedt** from the Home Screen (not from Safari).
-5. Go to **Updates** (footer) and tap **Enable notifications**. Allow the prompt.
-6. In `/admin`, add a song. The phone should show the song title, a short body, and open that song when tapped.
-
-Desktop Chrome can also enable notifications from `/updates` without installing, which is useful for a smoke test of subscribe + send.
+4. Open **Bokföring** from the Home Screen (not from Safari) and sign in.
+5. Go to **Mer** and tap **Slå på aviseringar**. Allow the prompt.
+6. Create a new post (or approve an AI draft). The phone should show the description, amount, and open that post when tapped.

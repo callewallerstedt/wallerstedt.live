@@ -1,7 +1,7 @@
 import webpush from "web-push";
+import type { AccountingEntry } from "@prisma/client";
 
-import { hasPrismaDatabase, prisma } from "./prisma";
-import type { Song } from "./site-data";
+import { getAccountingDb } from "./accounting/db";
 
 export const DEFAULT_SITE_ORIGIN = "https://wallerstedt.live";
 export const NOTIFICATION_BODY_MAX_LENGTH = 110;
@@ -16,7 +16,7 @@ export interface StoredPushSubscription {
   keys: PushSubscriptionKeys;
 }
 
-export interface SongNotificationPayload {
+export interface PostNotificationPayload {
   title: string;
   body: string;
   url: string;
@@ -28,7 +28,13 @@ export interface PushSendResult {
   removed: number;
 }
 
+export type AccountingPostNotificationInput = Pick<
+  AccountingEntry,
+  "id" | "description" | "amount" | "type"
+>;
+
 const GONE_PUSH_STATUS_CODES = new Set([404, 410]);
+const emptyResult: PushSendResult = { sent: 0, failed: 0, removed: 0 };
 
 function trimEnv(value: string | undefined) {
   return value?.trim() || "";
@@ -36,6 +42,10 @@ function trimEnv(value: string | undefined) {
 
 export function getSiteOrigin(environment: NodeJS.ProcessEnv = process.env) {
   return trimEnv(environment.NEXT_PUBLIC_SITE_URL) || DEFAULT_SITE_ORIGIN;
+}
+
+export function getAccountingAccessKey(environment: NodeJS.ProcessEnv = process.env) {
+  return trimEnv(environment.ACCOUNTING_ACCESS_KEY);
 }
 
 export function getVapidPublicKey(environment: NodeJS.ProcessEnv = process.env) {
@@ -51,7 +61,11 @@ export function getVapidSubject(environment: NodeJS.ProcessEnv = process.env) {
 }
 
 export function isWebPushConfigured(environment: NodeJS.ProcessEnv = process.env) {
-  return Boolean(getVapidPublicKey(environment) && getVapidPrivateKey(environment) && hasPrismaDatabase());
+  return Boolean(
+    getVapidPublicKey(environment)
+    && getVapidPrivateKey(environment)
+    && getAccountingAccessKey(environment),
+  );
 }
 
 export function isGonePushStatus(statusCode: number | undefined) {
@@ -66,17 +80,61 @@ export function shortenNotificationBody(value: string, maxLength = NOTIFICATION_
   return `${compact.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-export function buildNewSongNotification(
-  song: Pick<Song, "title" | "blurb" | "slug">,
-  origin = getSiteOrigin(),
-): SongNotificationPayload {
-  const title = song.title.trim() || "Wallerstedt";
-  const body = shortenNotificationBody(song.blurb?.trim() || "New piano music is out.");
-  const path = `/${String(song.slug || "").replace(/^\/+/, "")}`;
+export function formatAccountingAmount(amount: unknown) {
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric)) {
+    return "";
+  }
+  return new Intl.NumberFormat("sv-SE", {
+    style: "currency",
+    currency: "SEK",
+  }).format(numeric);
+}
+
+export function vaultPostPath(postId: string, accessKey = getAccountingAccessKey()) {
+  const id = String(postId || "").trim();
+  const key = encodeURIComponent(accessKey);
+  if (!id || !key) {
+    return "/vault/";
+  }
+  return `/vault/${key}?post=${encodeURIComponent(id)}`;
+}
+
+export function buildNewPostNotification(
+  post: { id: string; description?: string | null; amount?: unknown; type?: string | null },
+  options: { origin?: string; accessKey?: string } = {},
+): PostNotificationPayload {
+  const title = post.description?.trim() || "Ny bokföringspost";
+  const amount = formatAccountingAmount(post.amount);
+  const type = post.type?.trim() || "";
+  const body = shortenNotificationBody([amount, type].filter(Boolean).join(" · ") || "En ny post har bokförts.");
+  const origin = (options.origin ?? getSiteOrigin()).replace(/\/+$/, "");
   return {
     title,
     body,
-    url: new URL(path, `${origin.replace(/\/+$/, "")}/`).toString(),
+    url: `${origin}${vaultPostPath(post.id, options.accessKey ?? getAccountingAccessKey())}`,
+  };
+}
+
+export function buildNewPostsNotification(
+  posts: Array<{ id: string; description?: string | null; amount?: unknown; type?: string | null }>,
+  options: { origin?: string; accessKey?: string } = {},
+): PostNotificationPayload | null {
+  if (!posts.length) {
+    return null;
+  }
+  if (posts.length === 1) {
+    return buildNewPostNotification(posts[0], options);
+  }
+  const names = posts
+    .map((post) => post.description?.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(" · ");
+  return {
+    title: `${posts.length} nya poster`,
+    body: shortenNotificationBody(names || "Nya bokföringsposter har sparats."),
+    url: buildNewPostNotification(posts[0], options).url,
   };
 }
 
@@ -113,15 +171,8 @@ export function parsePushSubscription(input: unknown): StoredPushSubscription | 
   return { endpoint, keys: { p256dh, auth } };
 }
 
-function requirePushDatabase() {
-  if (!prisma) {
-    throw new Error("A Postgres database is required to store push subscriptions.");
-  }
-  return prisma;
-}
-
 export async function savePushSubscription(subscription: StoredPushSubscription) {
-  const db = requirePushDatabase();
+  const db = getAccountingDb();
   await db.webPushSubscription.upsert({
     where: { endpoint: subscription.endpoint },
     create: {
@@ -137,7 +188,7 @@ export async function savePushSubscription(subscription: StoredPushSubscription)
 }
 
 export async function deletePushSubscription(endpoint: string) {
-  const db = requirePushDatabase();
+  const db = getAccountingDb();
   await db.webPushSubscription.deleteMany({
     where: { endpoint },
   });
@@ -154,28 +205,17 @@ function configureWebPush(environment: NodeJS.ProcessEnv = process.env) {
   return true;
 }
 
-async function removeGoneSubscription(endpoint: string) {
-  if (!prisma) {
-    return;
-  }
-  await prisma.webPushSubscription.deleteMany({ where: { endpoint } });
-}
-
-export async function notifyNewSong(song: Pick<Song, "title" | "blurb" | "slug">): Promise<PushSendResult> {
-  const empty = { sent: 0, failed: 0, removed: 0 };
-  if (!isWebPushConfigured() || !prisma) {
-    return empty;
-  }
-  if (!configureWebPush()) {
-    return empty;
+async function sendPayload(payload: PostNotificationPayload): Promise<PushSendResult> {
+  if (!isWebPushConfigured() || !configureWebPush()) {
+    return emptyResult;
   }
 
-  const payload = JSON.stringify(buildNewSongNotification(song));
-  const subscriptions = await prisma.webPushSubscription.findMany({
+  const db = getAccountingDb();
+  const subscriptions = await db.webPushSubscription.findMany({
     select: { endpoint: true, p256dh: true, auth: true },
   });
-
   const result: PushSendResult = { sent: 0, failed: 0, removed: 0 };
+  const body = JSON.stringify(payload);
 
   await Promise.all(
     subscriptions.map(async (subscription) => {
@@ -185,7 +225,7 @@ export async function notifyNewSong(song: Pick<Song, "title" | "blurb" | "slug">
             endpoint: subscription.endpoint,
             keys: { p256dh: subscription.p256dh, auth: subscription.auth },
           },
-          payload,
+          body,
         );
         result.sent += 1;
       } catch (error) {
@@ -194,15 +234,42 @@ export async function notifyNewSong(song: Pick<Song, "title" | "blurb" | "slug">
             ? Number((error as { statusCode?: number }).statusCode)
             : undefined;
         if (isGonePushStatus(statusCode)) {
-          await removeGoneSubscription(subscription.endpoint);
+          await db.webPushSubscription.deleteMany({ where: { endpoint: subscription.endpoint } });
           result.removed += 1;
           return;
         }
         result.failed += 1;
-        console.error("Web push send failed", statusCode ?? error);
+        console.error("Accounting web push send failed", statusCode ?? error);
       }
     }),
   );
 
   return result;
+}
+
+export async function notifyNewAccountingPosts(
+  posts: Array<{ id: string; description?: string | null; amount?: unknown; type?: string | null }>,
+): Promise<PushSendResult> {
+  const payload = buildNewPostsNotification(posts);
+  if (!payload) {
+    return emptyResult;
+  }
+  return sendPayload(payload);
+}
+
+export async function notifyNewAccountingPost(
+  post: { id: string; description?: string | null; amount?: unknown; type?: string | null },
+): Promise<PushSendResult> {
+  return notifyNewAccountingPosts([post]);
+}
+
+export async function safeNotifyNewAccountingPosts(
+  posts: Array<{ id: string; description?: string | null; amount?: unknown; type?: string | null }>,
+) {
+  try {
+    return await notifyNewAccountingPosts(posts);
+  } catch (error) {
+    console.error("Failed to send accounting push notifications", error);
+    return emptyResult;
+  }
 }

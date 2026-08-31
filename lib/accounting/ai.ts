@@ -16,6 +16,7 @@ import {
 import { parseJson } from "./http";
 import { serializeDraft, serializeEntry } from "./serialize";
 import { createEntryInTransaction } from "./service";
+import { safeNotifyNewAccountingPosts } from "../push";
 import {
   aiExtractionSchema,
   aiRevisionRequestSchema,
@@ -880,6 +881,7 @@ export async function approveAiDraft(id: string, value: unknown) {
     result.unusedOwnedDocumentIds,
     "web-ai-approved-unused",
   );
+  await safeNotifyNewAccountingPosts(result.entries);
   return result.entries;
 }
 
