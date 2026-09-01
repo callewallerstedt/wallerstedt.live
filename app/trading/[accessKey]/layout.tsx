@@ -13,7 +13,6 @@ export async function generateMetadata({
   const { accessKey } = await params;
   if (!tradingAccessKeyMatches(accessKey)) {
     return {
-      title: "Not found",
       robots: { index: false, follow: false },
     };
   }

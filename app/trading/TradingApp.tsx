@@ -169,7 +169,6 @@ export function TradingApp({
             <section className="ac-section-block" ref={chartRef} aria-labelledby="name-chart-heading">
               <div className="ac-section-heading-row">
                 <h2 id="name-chart-heading">{selectedPosition.symbol}</h2>
-                <span className="ac-count-badge">logg</span>
               </div>
               <PositionChart
                 position={selectedPosition}
