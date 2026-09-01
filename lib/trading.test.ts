@@ -3,7 +3,17 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { applyLiveQuotes, getPortfolioStats, getTradingDeskStats, parseTradingBook } from "./trading";
+import {
+  alignedReturnPct,
+  applyLiveQuotes,
+  changePct,
+  getPortfolioStats,
+  getTradingDeskStats,
+  parseTradingBook,
+  rebaseToPercent,
+  seriesTotalPct,
+  toPercentSeries,
+} from "./trading";
 
 test("book seed parses and totals from live marks", () => {
   const raw = JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8"));
@@ -48,4 +58,41 @@ test("live quotes reprice positions and the equity total", () => {
   assert.equal(liveBook.fxUsdSek, 10);
   assert.ok(stats.openPnlSek !== book.stats.openPnlSek);
   assert.ok(stats.equitySek > 5000);
+});
+
+test("percent helpers rebase indexes from the first overlapping date", () => {
+  const equity = [
+    { time: "2026-01-10", value: 5000 },
+    { time: "2026-02-10", value: 5500 },
+  ];
+  const index = [
+    { time: "2026-01-09", value: 200 },
+    { time: "2026-01-10", value: 200 },
+    { time: "2026-02-10", value: 220 },
+  ];
+
+  assert.equal(changePct(5000, 5500), 10);
+  assert.equal(seriesTotalPct(equity), 10);
+  assert.deepEqual(
+    toPercentSeries(equity).map((point) => point.value),
+    [0, 10],
+  );
+
+  const rebased = rebaseToPercent(index, "2026-01-10");
+  assert.equal(rebased[0]?.time, "2026-01-10");
+  assert.equal(rebased[0]?.value, 0);
+  assert.equal(rebased.at(-1)?.value, 10);
+
+  const aligned = alignedReturnPct(equity, index);
+  assert.equal(aligned.subjectPct, 10);
+  assert.equal(aligned.benchmarkPct, 10);
+  assert.equal(aligned.alpha, 0);
+
+  const faster = [
+    { time: "2026-01-09", value: 100 },
+    { time: "2026-02-10", value: 130 },
+  ];
+  const vsFaster = alignedReturnPct(equity, faster);
+  assert.equal(vsFaster.benchmarkPct, 30);
+  assert.equal(vsFaster.alpha, -20);
 });

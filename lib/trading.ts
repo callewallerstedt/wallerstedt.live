@@ -78,6 +78,15 @@ export type TradingPoint = {
   value: number;
 };
 
+export const TRADING_INDEXES = [
+  { id: "spx", yahoo: "^GSPC", label: "S&P 500", color: "#9bbcff" },
+  { id: "nasdaq", yahoo: "^IXIC", label: "Nasdaq", color: "#c4b5fd" },
+  { id: "omx", yahoo: "^OMX", label: "OMX 30", color: "#e0bd85" },
+  { id: "dji", yahoo: "^DJI", label: "Dow", color: "#8ad4e8" },
+] as const;
+
+export type TradingIndexId = (typeof TRADING_INDEXES)[number]["id"];
+
 export type TradingQuote = {
   symbol: string;
   last: number;
@@ -419,6 +428,56 @@ export function formatIsoDate(iso: string, timeZone = TRADING_TIMEZONE) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(iso));
+}
+
+export function changePct(start: number, end: number) {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start === 0) return 0;
+  return ((end - start) / Math.abs(start)) * 100;
+}
+
+export function toPercentSeries(points: TradingPoint[]): TradingPoint[] {
+  const start = points.find((point) => Number.isFinite(point.value) && point.value !== 0)?.value;
+  if (start == null) return [];
+  return points.map((point) => ({
+    time: point.time,
+    value: Number(changePct(start, point.value).toFixed(4)),
+  }));
+}
+
+export function rebaseToPercent(points: TradingPoint[], startTime: string): TradingPoint[] {
+  const baseline =
+    [...points].reverse().find((point) => point.time <= startTime && point.value !== 0) ??
+    points.find((point) => point.time >= startTime && point.value !== 0);
+  if (!baseline) return [];
+  const series = points
+    .filter((point) => point.time >= startTime)
+    .map((point) => ({
+      time: point.time,
+      value: Number(changePct(baseline.value, point.value).toFixed(4)),
+    }));
+  if (series[0] && series[0].time !== startTime) {
+    return [{ time: startTime, value: 0 }, ...series];
+  }
+  return series;
+}
+
+export function seriesTotalPct(points: TradingPoint[]) {
+  const start = points.find((point) => Number.isFinite(point.value) && point.value !== 0);
+  const end = [...points].reverse().find((point) => Number.isFinite(point.value));
+  if (!start || !end) return 0;
+  return changePct(start.value, end.value);
+}
+
+export function alignedReturnPct(subject: TradingPoint[], benchmark: TradingPoint[]) {
+  const startTime = subject.find((point) => Number.isFinite(point.value))?.time;
+  if (!startTime) return { subjectPct: 0, benchmarkPct: 0, alpha: 0 };
+  const subjectPct = seriesTotalPct(subject);
+  const benchmarkPct = rebaseToPercent(benchmark, startTime).at(-1)?.value ?? 0;
+  return {
+    subjectPct,
+    benchmarkPct,
+    alpha: Number((subjectPct - benchmarkPct).toFixed(4)),
+  };
 }
 
 export function portfolioPositions(book: TradingBook, portfolio: TradingPortfolio) {
