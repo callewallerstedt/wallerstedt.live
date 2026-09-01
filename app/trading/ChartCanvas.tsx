@@ -4,6 +4,16 @@ import { useEffect, useRef, useState } from "react";
 
 import { ema, formatPrice, sma, type TradingCandle, type TradingPosition } from "@/lib/trading";
 
+import {
+  TRADING_CHART_DOWN,
+  TRADING_CHART_EMA,
+  TRADING_CHART_SMA,
+  TRADING_CHART_STOP,
+  TRADING_CHART_TARGET,
+  TRADING_CHART_UP,
+  tradingChartOptions,
+} from "./chart-theme";
+
 type HoverPoint = {
   x: number;
   y: number;
@@ -15,14 +25,6 @@ type HoverPoint = {
   ema20: number | null;
   sma50: number | null;
 };
-
-const UP = "#26d07c";
-const DOWN = "#e23b3b";
-const EMA = "#4a90e2";
-const SMA = "#f5a623";
-const TARGET = "#c084fc";
-const STOP = "#ef4444";
-const ENTRY = "#3ee6a0";
 
 export function ChartCanvas({
   candles,
@@ -41,77 +43,40 @@ export function ChartCanvas({
   const emaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void } | null>(null);
   const smaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void } | null>(null);
   const [hover, setHover] = useState<HoverPoint | null>(null);
-  const [levels, setLevels] = useState({ targetY: 0, stopY: 0 });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host || candles.length === 0) return;
     let cancelled = false;
-    // lightweight-charts is imported only in the browser.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let chart: any = null;
 
     import("lightweight-charts")
       .then((charts) => {
         if (cancelled || !hostRef.current) return;
-        const {
-          CandlestickSeries,
-          ColorType,
-          CrosshairMode,
-          LineSeries,
-          LineStyle,
-          LineType,
-          createChart,
-          createSeriesMarkers,
-        } = charts;
+        const { CandlestickSeries, LineSeries, LineStyle, LineType, createChart, createSeriesMarkers } = charts;
 
         chart = createChart(hostRef.current, {
-          autoSize: true,
+          ...tradingChartOptions(charts, hostRef.current.clientHeight || 380),
           width: hostRef.current.clientWidth || 640,
-          height: hostRef.current.clientHeight || 420,
-          layout: {
-            background: { type: ColorType.Solid, color: "#161921" },
-            textColor: "#c5c8ce",
-            fontFamily: "var(--font-body), Inter, sans-serif",
-            attributionLogo: false,
-          },
-          grid: {
-            vertLines: { color: "rgba(255,255,255,0.045)" },
-            horzLines: { color: "rgba(255,255,255,0.045)" },
-          },
-          crosshair: {
-            mode: CrosshairMode.Normal,
-            vertLine: { color: "rgba(255,255,255,0.22)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#2a2f38" },
-            horzLine: { color: "rgba(255,255,255,0.22)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#2a2f38" },
-          },
-          rightPriceScale: {
-            borderColor: "rgba(255,255,255,0.08)",
-            scaleMargins: { top: 0.12, bottom: 0.08 },
-          },
-          timeScale: {
-            borderColor: "rgba(255,255,255,0.08)",
-            minBarSpacing: 4,
-          },
-          handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
-          handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
         });
 
         const candleSeries = chart.addSeries(CandlestickSeries, {
-          upColor: UP,
-          downColor: DOWN,
-          borderUpColor: UP,
-          borderDownColor: DOWN,
-          wickUpColor: UP,
-          wickDownColor: DOWN,
+          upColor: TRADING_CHART_UP,
+          downColor: TRADING_CHART_DOWN,
+          borderUpColor: TRADING_CHART_UP,
+          borderDownColor: TRADING_CHART_DOWN,
+          wickUpColor: TRADING_CHART_UP,
+          wickDownColor: TRADING_CHART_DOWN,
           lastValueVisible: true,
           priceLineVisible: true,
-          priceLineColor: "rgba(255,255,255,0.55)",
+          priceLineColor: "rgba(255,255,255,0.45)",
           priceFormat: { type: "price", precision: 2, minMove: 0.01 },
         });
 
         const emaSeries = chart.addSeries(LineSeries, {
-          color: EMA,
+          color: TRADING_CHART_EMA,
           lineWidth: 2,
           lineType: LineType.Curved,
           lastValueVisible: false,
@@ -121,7 +86,7 @@ export function ChartCanvas({
         });
 
         const smaSeries = chart.addSeries(LineSeries, {
-          color: SMA,
+          color: TRADING_CHART_SMA,
           lineWidth: 2,
           lineType: LineType.Curved,
           lastValueVisible: false,
@@ -161,7 +126,7 @@ export function ChartCanvas({
             time: position.filledAt.slice(0, 10),
             position: "atPriceMiddle",
             shape: "circle",
-            color: ENTRY,
+            color: TRADING_CHART_UP,
             price: position.fill,
             text: `${formatPrice(position.fill)} ${fillClock}`,
             size: 1.4,
@@ -169,7 +134,7 @@ export function ChartCanvas({
         ]);
         candleSeries.createPriceLine({
           price: position.target,
-          color: TARGET,
+          color: TRADING_CHART_TARGET,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
@@ -177,7 +142,7 @@ export function ChartCanvas({
         });
         candleSeries.createPriceLine({
           price: position.stop,
-          color: STOP,
+          color: TRADING_CHART_STOP,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
@@ -188,17 +153,7 @@ export function ChartCanvas({
         emaRef.current = emaSeries;
         smaRef.current = smaSeries;
 
-        const syncLevels = () => {
-          const targetY = candleSeries.priceToCoordinate(position.target);
-          const stopY = candleSeries.priceToCoordinate(position.stop);
-          if (targetY == null || stopY == null) return;
-          setLevels({ targetY, stopY });
-        };
-
-        syncLevels();
-        chart.timeScale().subscribeVisibleLogicalRangeChange(syncLevels);
         chart.subscribeCrosshairMove((param: { point?: { x: number; y: number }; time?: unknown }) => {
-          syncLevels();
           if (!param.point || !param.time) {
             setHover(null);
             return;
@@ -247,16 +202,6 @@ export function ChartCanvas({
     <>
       <div className="trading-chart__canvas" ref={hostRef} />
       {error ? <div className="trading-chart__empty">{error}</div> : null}
-      <div className="trading-chart__levels" aria-hidden="true">
-        <span data-kind="target" style={{ top: levels.targetY }}>
-          target {formatPrice(position.target)} ({position.targetPct > 0 ? "+" : "−"}
-          {Math.abs(position.targetPct).toFixed(1)}%)
-        </span>
-        <span data-kind="stop" style={{ top: levels.stopY }}>
-          stop {formatPrice(position.stop)} ({position.stopPct > 0 ? "+" : "−"}
-          {Math.abs(position.stopPct).toFixed(1)}%)
-        </span>
-      </div>
       {hover ? (
         <div className="trading-chart__tooltip" style={{ left: hover.x, top: hover.y }}>
           <p>{hover.time}</p>
@@ -264,8 +209,8 @@ export function ChartCanvas({
           <p>H {formatPrice(hover.high)}</p>
           <p>L {formatPrice(hover.low)}</p>
           <p>C {formatPrice(hover.close)}</p>
-          {hover.ema20 != null ? <p style={{ color: EMA }}>EMA20 {formatPrice(hover.ema20)}</p> : null}
-          {hover.sma50 != null ? <p style={{ color: SMA }}>SMA50 {formatPrice(hover.sma50)}</p> : null}
+          {hover.ema20 != null ? <p style={{ color: TRADING_CHART_EMA }}>EMA20 {formatPrice(hover.ema20)}</p> : null}
+          {hover.sma50 != null ? <p style={{ color: TRADING_CHART_SMA }}>SMA50 {formatPrice(hover.sma50)}</p> : null}
         </div>
       ) : null}
     </>

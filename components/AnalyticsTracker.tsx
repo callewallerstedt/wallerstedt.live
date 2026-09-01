@@ -11,7 +11,8 @@ function shouldTrackPath(pathname: string) {
     pathname !== "" &&
     !pathname.startsWith("/admin") &&
     !pathname.startsWith("/api") &&
-    !pathname.startsWith("/vault")
+    !pathname.startsWith("/vault") &&
+    !pathname.startsWith("/trading")
   );
 }
 

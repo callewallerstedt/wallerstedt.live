@@ -2,10 +2,8 @@
   "version": 1,
   "updatedAt": "2026-09-01T20:30:00+02:00",
   "timezone": "Europe/Berlin",
-  "source": "public/trading/book.json",
-  "note": "Swap this file, or set NEXT_PUBLIC_TRADING_BOOK_URL to an API with the same shape. Never add broker account IDs.",
   "experiment": {
-    "title": "Rayner live experiment",
+    "title": "Rayner live",
     "operator": "Rayner",
     "style": "long-only swing",
     "capitalSek": 5000,
@@ -17,6 +15,15 @@
     ]
   },
   "fxUsdSek": 9.61,
+  "portfolios": [
+    {
+      "id": "rayner-live",
+      "name": "Rayner live",
+      "style": "Long-only swing",
+      "capitalSek": 5000,
+      "symbols": ["GM", "KO", "MDT"]
+    }
+  ],
   "positions": [
     {
       "symbol": "GM",
@@ -30,8 +37,7 @@
       "target": 92.12,
       "targetPct": 6.5,
       "last": 86.09,
-      "pnlPct": -0.4,
-      "chart": "/trading/charts/GM.json"
+      "pnlPct": -0.4
     },
     {
       "symbol": "KO",
@@ -45,8 +51,7 @@
       "target": 92.32,
       "targetPct": 3.9,
       "last": 88.12,
-      "pnlPct": -0.8,
-      "chart": "/trading/charts/KO.json"
+      "pnlPct": -0.8
     },
     {
       "symbol": "MDT",
@@ -60,8 +65,7 @@
       "target": 96.45,
       "targetPct": 6.2,
       "last": 92.66,
-      "pnlPct": 2.0,
-      "chart": "/trading/charts/MDT.json"
+      "pnlPct": 2.0
     }
   ],
   "closed": [],

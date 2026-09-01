@@ -1,38 +1,18 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  getTradingBookUrl,
-  parseTradingBook,
-  type TradingBook,
-  type TradingCandle,
-  type TradingChartFile,
-} from "@/lib/trading";
+import { parseTradingBook, type TradingBook, type TradingCandle, type TradingChartFile } from "@/lib/trading";
+
+const DATA_DIR = path.join(process.cwd(), "data", "trading");
 
 export async function getTradingBook(): Promise<TradingBook> {
-  const remote = getTradingBookUrl();
-  if (/^https?:\/\//i.test(remote)) {
-    const response = await fetch(remote, { next: { revalidate: 60 } });
-    if (!response.ok) {
-      throw new Error(`Could not load trading book (${response.status})`);
-    }
-    return parseTradingBook(await response.json());
-  }
-
-  const file = await readFile(path.join(process.cwd(), "public", remote.replace(/^\//, "")), "utf8");
+  const file = await readFile(path.join(DATA_DIR, "book.json"), "utf8");
   return parseTradingBook(JSON.parse(file));
 }
 
-export async function getTradingChart(chartPath: string): Promise<TradingCandle[]> {
-  if (/^https?:\/\//i.test(chartPath)) {
-    const response = await fetch(chartPath, { next: { revalidate: 60 } });
-    if (!response.ok) return [];
-    const file = (await response.json()) as TradingChartFile;
-    return file.candles ?? [];
-  }
-
+export async function getTradingChart(symbol: string): Promise<TradingCandle[]> {
   try {
-    const file = await readFile(path.join(process.cwd(), "public", chartPath.replace(/^\//, "")), "utf8");
+    const file = await readFile(path.join(DATA_DIR, "charts", `${symbol.toUpperCase()}.json`), "utf8");
     const parsed = JSON.parse(file) as TradingChartFile;
     return parsed.candles ?? [];
   } catch {
@@ -41,8 +21,7 @@ export async function getTradingChart(chartPath: string): Promise<TradingCandle[
 }
 
 export async function getTradingCharts(book: TradingBook) {
-  const entries = await Promise.all(
-    book.positions.map(async (position) => [position.symbol, await getTradingChart(position.chart)] as const),
-  );
+  const symbols = [...new Set(book.positions.map((position) => position.symbol))];
+  const entries = await Promise.all(symbols.map(async (symbol) => [symbol, await getTradingChart(symbol)] as const));
   return Object.fromEntries(entries) as Record<string, TradingCandle[]>;
 }
