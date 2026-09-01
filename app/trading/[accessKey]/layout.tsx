@@ -17,10 +17,31 @@ export async function generateMetadata({
     };
   }
 
+  const encodedKey = encodeURIComponent(accessKey);
   return {
     title: "Trading",
     referrer: "no-referrer",
+    manifest: `/trading/${encodedKey}/manifest.webmanifest`,
     robots: { index: false, follow: false, noarchive: true, noimageindex: true },
+    appleWebApp: {
+      capable: true,
+      title: "Trading",
+      statusBarStyle: "black-translucent",
+    },
+    icons: {
+      icon: [
+        { url: "/trading-icon.svg", type: "image/svg+xml" },
+        { url: "/trading-icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/trading-icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: "/trading-icon-180.png", sizes: "180x180", type: "image/png" }],
+    },
+    other: {
+      "mobile-web-app-capable": "yes",
+      "apple-mobile-web-app-capable": "yes",
+      "apple-mobile-web-app-title": "Trading",
+      "apple-mobile-web-app-status-bar-style": "black-translucent",
+    },
   };
 }
 
