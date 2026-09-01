@@ -26,6 +26,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly",
       priority: 0.7,
     },
+    {
+      url: "https://wallerstedt.live/trading",
+      changeFrequency: "weekly",
+      priority: 0.6,
+    },
     ...catalogReleases.map((release) => ({
       url: `https://wallerstedt.live/music/${release.slug}`,
       changeFrequency: "monthly" as const,

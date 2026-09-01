@@ -14,6 +14,7 @@ export function SiteHeader() {
     { href: "/music", label: "Music", match: "/music" },
     { href: "/playlists", label: "Playlists", match: "/playlists" },
     { href: "/random", label: "Random song", match: "" },
+    { href: "/trading", label: "Trading", match: "/trading" },
   ] as const;
 
   useEffect(() => {
