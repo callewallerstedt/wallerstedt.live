@@ -7,11 +7,13 @@ import {
   alignedReturnPct,
   applyLiveQuotes,
   changePct,
+  firstFillDate,
   getPortfolioStats,
   getTradingDeskStats,
   parseTradingBook,
   rebaseToPercent,
   seriesTotalPct,
+  sliceFrom,
   toPercentSeries,
 } from "./trading";
 
@@ -95,4 +97,33 @@ test("percent helpers rebase indexes from the first overlapping date", () => {
   const vsFaster = alignedReturnPct(equity, faster);
   assert.equal(vsFaster.benchmarkPct, 30);
   assert.equal(vsFaster.alpha, -20);
+});
+
+test("compare window starts at first fill, not years of cash", () => {
+  const equity = [
+    { time: "2024-09-03", value: 5000 },
+    { time: "2026-08-31", value: 5000 },
+    { time: "2026-09-01", value: 5100 },
+  ];
+  const index = [
+    { time: "2024-09-03", value: 100 },
+    { time: "2026-08-31", value: 180 },
+    { time: "2026-09-01", value: 181.8 },
+  ];
+  const book = parseTradingBook(
+    JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8")),
+  );
+  assert.equal(firstFillDate(book), "2026-09-01");
+
+  const windowed = sliceFrom(equity, "2026-09-01");
+  assert.deepEqual(
+    windowed.map((point) => point.time),
+    ["2026-08-31", "2026-09-01"],
+  );
+  assert.equal(seriesTotalPct(windowed), 2);
+
+  const aligned = alignedReturnPct(windowed, index);
+  assert.equal(aligned.subjectPct, 2);
+  assert.equal(aligned.benchmarkPct, 1);
+  assert.equal(aligned.alpha, 1);
 });

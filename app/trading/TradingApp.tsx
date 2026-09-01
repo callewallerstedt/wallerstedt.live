@@ -8,6 +8,7 @@ import {
   applyLiveCandles,
   applyLiveQuotes,
   buildEquityCurve,
+  firstFillDate,
   formatBerlinClock,
   formatBerlinDateTime,
   formatPrice,
@@ -16,6 +17,7 @@ import {
   getPositionMetrics,
   getTradingDeskStats,
   seriesTotalPct,
+  sliceFrom,
   stampLiveEquity,
   TRADING_INDEXES,
   type TradingBook,
@@ -151,7 +153,11 @@ export function TradingApp({
     () => stampLiveEquity(buildEquityCurve(liveBook, liveCharts), liveBook, quotes),
     [liveBook, liveCharts, quotes],
   );
-  const curvePct = seriesTotalPct(equityPoints);
+  const comparePoints = useMemo(
+    () => sliceFrom(equityPoints, firstFillDate(liveBook)),
+    [equityPoints, liveBook],
+  );
+  const curvePct = seriesTotalPct(comparePoints);
   const capitalPct = liveBook.experiment.capitalSek
     ? (stats.openPnlSek / liveBook.experiment.capitalSek) * 100
     : 0;
@@ -163,7 +169,7 @@ export function TradingApp({
     id: row.id,
     label: row.label,
     color: row.color,
-    ...alignedReturnPct(equityPoints, row.points),
+    ...alignedReturnPct(comparePoints, row.points),
   }));
   const selected = liveBook.positions.find((position) => position.symbol === symbol) ?? null;
   const selectedMetrics = selected ? getPositionMetrics(selected, liveBook, quotes, stats.marketUsd) : null;
@@ -176,12 +182,14 @@ export function TradingApp({
   }, [selected?.symbol]);
 
   const toggleIndex = (id: TradingIndexId) => {
-    setSelectedIndexes((current) => {
-      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      if (next.length > 0) setUnit("pct");
-      return next;
-    });
+    setSelectedIndexes((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
   };
+
+  useEffect(() => {
+    if (selectedIndexes.length > 0) setUnit("pct");
+  }, [selectedIndexes]);
 
   const retryBenchmarks = () => {
     setBenchmarks(null);
@@ -290,7 +298,7 @@ export function TradingApp({
               </div>
             ) : null}
             <EquityChart
-              points={equityPoints}
+              points={comparePoints}
               unit={unit}
               overlays={unit === "pct" ? activeOverlays : []}
             />

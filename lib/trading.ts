@@ -468,6 +468,23 @@ export function seriesTotalPct(points: TradingPoint[]) {
   return changePct(start.value, end.value);
 }
 
+export function firstFillDate(book: TradingBook) {
+  const dates = [
+    ...book.positions.map((position) => position.filledAt.slice(0, 10)),
+    ...book.closed.map((trade) => trade.closedAt.slice(0, 10)),
+  ].filter(Boolean).sort();
+  return dates[0];
+}
+
+export function sliceFrom(points: TradingPoint[], startTime?: string) {
+  if (!startTime || points.length === 0) return points;
+  const before = [...points].reverse().find((point) => point.time < startTime && point.value !== 0);
+  const fromStart = points.filter((point) => point.time >= startTime);
+  if (!fromStart.length) return before ? [before] : points;
+  if (before && fromStart[0]?.time !== before.time) return [before, ...fromStart];
+  return fromStart;
+}
+
 export function alignedReturnPct(subject: TradingPoint[], benchmark: TradingPoint[]) {
   const startTime = subject.find((point) => Number.isFinite(point.value))?.time;
   if (!startTime) return { subjectPct: 0, benchmarkPct: 0, alpha: 0 };
