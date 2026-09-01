@@ -11,6 +11,7 @@ import {
   getTradingDeskStats,
   parseTradingBook,
   type TradingBook,
+  type TradingCandle,
   type TradingPosition,
 } from "@/lib/trading";
 
@@ -53,7 +54,13 @@ function PositionMeta({ position }: { position: TradingPosition }) {
   );
 }
 
-export function TradingDesk({ initialBook }: { initialBook: TradingBook }) {
+export function TradingDesk({
+  initialBook,
+  initialCharts,
+}: {
+  initialBook: TradingBook;
+  initialCharts: Record<string, TradingCandle[]>;
+}) {
   const [book, setBook] = useState(initialBook);
 
   useEffect(() => {
@@ -110,7 +117,11 @@ export function TradingDesk({ initialBook }: { initialBook: TradingBook }) {
         {book.positions.map((position) => (
           <article className="trading-position" key={position.symbol}>
             <PositionMeta position={position} />
-            <PositionChart position={position} fillClock={formatBerlinClock(position.filledAt, book.timezone)} />
+            <PositionChart
+              position={position}
+              fillClock={formatBerlinClock(position.filledAt, book.timezone)}
+              initialCandles={initialCharts[position.symbol] ?? []}
+            />
           </article>
         ))}
       </section>
