@@ -5,15 +5,6 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   typedRoutes: true,
-  async redirects() {
-    return [
-      {
-        source: "/Trading",
-        destination: "/trading",
-        permanent: true,
-      },
-    ];
-  },
   async headers() {
     const privateHeaders = [
       { key: "Cache-Control", value: "private, no-store, max-age=0" },
