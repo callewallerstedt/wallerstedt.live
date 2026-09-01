@@ -266,6 +266,9 @@
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
+
+.trading-equity-chart,
+.trading-chart__frame {
   position: relative;
   overflow: hidden;
   border-radius: 12px;
