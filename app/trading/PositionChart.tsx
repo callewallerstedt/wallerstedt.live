@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-import { formatPrice, formatSignedPct, type TradingCandle, type TradingPosition } from "@/lib/trading";
+import {
+  formatPrice,
+  formatSignedPct,
+  type TradingCandle,
+  type TradingPosition,
+  type TradingPositionMetrics,
+  type TradingQuote,
+} from "@/lib/trading";
 
 import { ChartCanvas } from "./ChartCanvas";
 
@@ -10,10 +17,14 @@ export function PositionChart({
   position,
   fillClock,
   candles,
+  metrics,
+  quote,
 }: {
   position: TradingPosition;
   fillClock: string;
   candles: TradingCandle[];
+  metrics: TradingPositionMetrics;
+  quote?: TradingQuote;
 }) {
   const [mounted, setMounted] = useState(false);
   const [showEma, setShowEma] = useState(true);
@@ -23,20 +34,18 @@ export function PositionChart({
     setMounted(true);
   }, []);
 
-  const pnlUp = position.pnlPct >= 0;
-
   return (
     <div className="trading-chart">
       <div className="trading-chart__head">
         <div className="ac-hero-main">
           <span>
-            {position.symbol} {position.side} {position.shares}sh
+            {position.symbol} {position.side} {position.shares}sh · {position.name}
           </span>
-          <strong className={pnlUp ? "is-positive" : "is-negative"}>
-            P&L {formatSignedPct(position.pnlPct)}
+          <strong className={metrics.pnlPct >= 0 ? "is-positive" : "is-negative"}>
+            {formatSignedPct(metrics.pnlPct)} · {formatPrice(position.last)}
           </strong>
           <small>
-            fill {formatPrice(position.fill)} · last {formatPrice(position.last)}
+            fill {formatPrice(position.fill)} {fillClock} · R {metrics.rMultiple.toFixed(2)}
           </small>
         </div>
         <div className="trading-chart__legend">
@@ -55,25 +64,38 @@ export function PositionChart({
           <ChartCanvas candles={candles} position={position} fillClock={fillClock} showEma={showEma} showSma={showSma} />
         )}
       </div>
-      <div className="ac-hero-row">
+      <div className="trading-metric-grid">
         <div>
-          <span>Target</span>
+          <span>Mål</span>
           <strong>{formatPrice(position.target)}</strong>
-          <small>
-            {position.targetPct > 0 ? "+" : "−"}
-            {Math.abs(position.targetPct).toFixed(1)}%
-          </small>
+          <small>{formatSignedPct(metrics.targetDistPct)} vs last</small>
         </div>
         <div>
           <span>Stop</span>
           <strong>{formatPrice(position.stop)}</strong>
+          <small>{formatSignedPct(metrics.stopDistPct)} vs last</small>
+        </div>
+        <div>
+          <span>Dag</span>
+          <strong className={metrics.dayPct != null && metrics.dayPct >= 0 ? "is-positive" : "is-negative"}>
+            {metrics.dayPct == null ? "—" : formatSignedPct(metrics.dayPct)}
+          </strong>
           <small>
-            {position.stopPct > 0 ? "+" : "−"}
-            {Math.abs(position.stopPct).toFixed(1)}%
+            {quote?.dayLow != null && quote?.dayHigh != null
+              ? `${formatPrice(quote.dayLow)}–${formatPrice(quote.dayHigh)}`
+              : "range"}
           </small>
         </div>
+        <div>
+          <span>52v</span>
+          <strong>
+            {quote?.week52Low != null && quote?.week52High != null
+              ? `${formatPrice(quote.week52Low)}`
+              : "—"}
+          </strong>
+          <small>{quote?.week52High != null ? formatPrice(quote.week52High) : "high"}</small>
+        </div>
       </div>
-      <p className="trading-chart__hint">Loggskala. Zooma med hjulet. Dra i siffrorna till höger och nederst. Dubbelklick nollställer.</p>
     </div>
   );
 }

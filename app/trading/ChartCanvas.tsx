@@ -40,10 +40,13 @@ export function ChartCanvas({
   showSma: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const emaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void } | null>(null);
-  const smaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void } | null>(null);
+  const emaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void; setData: (data: Array<{ time: string; value: number }>) => void } | null>(null);
+  const smaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void; setData: (data: Array<{ time: string; value: number }>) => void } | null>(null);
+  const candleSeriesRef = useRef<{ setData: (data: TradingCandle[]) => void } | null>(null);
+  const candlesRef = useRef(candles);
   const [hover, setHover] = useState<HoverPoint | null>(null);
   const [error, setError] = useState<string | null>(null);
+  candlesRef.current = candles;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -95,12 +98,12 @@ export function ChartCanvas({
           visible: showSma,
         });
 
-        const closes = candles.map((candle) => candle.close);
+        const closes = candlesRef.current.map((candle) => candle.close);
         const emaValues = ema(closes, 20);
         const smaValues = sma(closes, 50);
 
         candleSeries.setData(
-          candles.map((candle) => ({
+          candlesRef.current.map((candle) => ({
             time: candle.time,
             open: candle.open,
             high: candle.high,
@@ -109,13 +112,13 @@ export function ChartCanvas({
           })),
         );
         emaSeries.setData(
-          candles.flatMap((candle, index) => {
+          candlesRef.current.flatMap((candle, index) => {
             const value = emaValues[index];
             return value == null ? [] : [{ time: candle.time, value }];
           }),
         );
         smaSeries.setData(
-          candles.flatMap((candle, index) => {
+          candlesRef.current.flatMap((candle, index) => {
             const value = smaValues[index];
             return value == null ? [] : [{ time: candle.time, value }];
           }),
@@ -150,6 +153,7 @@ export function ChartCanvas({
         });
 
         chart.timeScale().fitContent();
+        candleSeriesRef.current = candleSeries;
         emaRef.current = emaSeries;
         smaRef.current = smaSeries;
 
@@ -159,8 +163,12 @@ export function ChartCanvas({
             return;
           }
           const time = typeof param.time === "string" ? param.time : "";
-          const index = candles.findIndex((candle) => candle.time === time);
-          const candle = index >= 0 ? candles[index] : null;
+          const current = candlesRef.current;
+          const closesNow = current.map((candle) => candle.close);
+          const emaNow = ema(closesNow, 20);
+          const smaNow = sma(closesNow, 50);
+          const index = current.findIndex((candle) => candle.time === time);
+          const candle = index >= 0 ? current[index] : null;
           if (!candle) {
             setHover(null);
             return;
@@ -173,8 +181,8 @@ export function ChartCanvas({
             high: candle.high,
             low: candle.low,
             close: candle.close,
-            ema20: emaValues[index] ?? null,
-            sma50: smaValues[index] ?? null,
+            ema20: emaNow[index] ?? null,
+            sma50: smaNow[index] ?? null,
           });
         });
       })
@@ -185,10 +193,31 @@ export function ChartCanvas({
     return () => {
       cancelled = true;
       chart?.remove();
+      candleSeriesRef.current = null;
       emaRef.current = null;
       smaRef.current = null;
     };
-  }, [candles, fillClock, position.fill, position.filledAt, position.stop, position.target]);
+  }, [fillClock, position.fill, position.filledAt, position.stop, position.symbol, position.target]);
+
+  useEffect(() => {
+    if (!candleSeriesRef.current || candles.length === 0) return;
+    const closes = candles.map((candle) => candle.close);
+    const emaValues = ema(closes, 20);
+    const smaValues = sma(closes, 50);
+    candleSeriesRef.current.setData(candles);
+    emaRef.current?.setData(
+      candles.flatMap((candle, index) => {
+        const value = emaValues[index];
+        return value == null ? [] : [{ time: candle.time, value }];
+      }),
+    );
+    smaRef.current?.setData(
+      candles.flatMap((candle, index) => {
+        const value = smaValues[index];
+        return value == null ? [] : [{ time: candle.time, value }];
+      }),
+    );
+  }, [candles]);
 
   useEffect(() => {
     emaRef.current?.applyOptions({ visible: showEma });

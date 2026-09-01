@@ -8,12 +8,18 @@ import { TRADING_CHART_DOWN, TRADING_CHART_UP, tradingChartOptions } from "./cha
 
 export function EquityChart({ points }: { points: TradingPoint[] }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const pointsRef = useRef(points);
+  const seriesRef = useRef<{
+    setData: (data: TradingPoint[]) => void;
+    applyOptions: (options: Record<string, string>) => void;
+  } | null>(null);
   const [hover, setHover] = useState<{ x: number; y: number; time: string; value: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  pointsRef.current = points;
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || points.length === 0) return;
+    if (!host || pointsRef.current.length === 0) return;
     let cancelled = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let chart: any = null;
@@ -22,10 +28,11 @@ export function EquityChart({ points }: { points: TradingPoint[] }) {
       .then((charts) => {
         if (cancelled || !hostRef.current) return;
         const { AreaSeries, createChart } = charts;
-        const up = points.at(-1)!.value >= (points[0]?.value ?? 0);
+        const seed = pointsRef.current;
+        const up = seed.at(-1)!.value >= (seed[0]?.value ?? 0);
 
         chart = createChart(hostRef.current, {
-          ...tradingChartOptions(charts, hostRef.current.clientHeight || 220),
+          ...tradingChartOptions(charts, hostRef.current.clientHeight || 148),
           width: hostRef.current.clientWidth || 640,
         });
 
@@ -38,7 +45,8 @@ export function EquityChart({ points }: { points: TradingPoint[] }) {
           lastValueVisible: true,
           priceFormat: { type: "price", precision: 0, minMove: 1 },
         });
-        series.setData(points);
+        series.setData(seed);
+        seriesRef.current = series;
         chart.timeScale().fitContent();
 
         chart.subscribeCrosshairMove((param: { point?: { x: number; y: number }; time?: unknown }) => {
@@ -47,7 +55,7 @@ export function EquityChart({ points }: { points: TradingPoint[] }) {
             return;
           }
           const time = typeof param.time === "string" ? param.time : "";
-          const point = points.find((item) => item.time === time);
+          const point = pointsRef.current.find((item) => item.time === time);
           if (!point) {
             setHover(null);
             return;
@@ -67,7 +75,18 @@ export function EquityChart({ points }: { points: TradingPoint[] }) {
     return () => {
       cancelled = true;
       chart?.remove();
+      seriesRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    if (!seriesRef.current || points.length === 0) return;
+    const up = points.at(-1)!.value >= (points[0]?.value ?? 0);
+    seriesRef.current.setData(points);
+    seriesRef.current.applyOptions({
+      lineColor: up ? TRADING_CHART_UP : TRADING_CHART_DOWN,
+      topColor: up ? "rgba(164, 211, 176, 0.28)" : "rgba(226, 164, 158, 0.28)",
+    });
   }, [points]);
 
   return (

@@ -15,6 +15,7 @@ export default function robots(): MetadataRoute.Robots {
           "/trading",
           "/api/tesla",
           "/api/accounting",
+          "/api/trading",
         ],
       },
     ],

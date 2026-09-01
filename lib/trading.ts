@@ -78,15 +78,63 @@ export type TradingPoint = {
   value: number;
 };
 
+export type TradingQuote = {
+  symbol: string;
+  last: number;
+  previousClose: number | null;
+  dayPct: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  volume: number | null;
+  week52High: number | null;
+  week52Low: number | null;
+  time: string | null;
+};
+
+export type TradingLiveSnapshot = {
+  fetchedAt: string;
+  session: "open" | "closed";
+  stale: boolean;
+  fxUsdSek: number | null;
+  quotes: Record<string, TradingQuote>;
+};
+
 export type TradingDeskStats = {
   equitySek: number;
   openPnlSek: number;
   openPnlUsd: number;
+  costUsd: number;
+  costSek: number;
+  marketUsd: number;
+  marketSek: number;
+  dayPnlUsd: number;
+  dayPnlSek: number;
+  cashSek: number;
+  exposurePct: number;
   notionalUsd: number;
   notionalSek: number;
   namesHeld: string[];
   wins: number | null;
   losses: number | null;
+};
+
+export type TradingPositionMetrics = {
+  marketUsd: number;
+  marketSek: number;
+  costUsd: number;
+  costSek: number;
+  pnlUsd: number;
+  pnlSek: number;
+  pnlPct: number;
+  dayUsd: number;
+  daySek: number;
+  dayPct: number | null;
+  weightPct: number;
+  stopDistPct: number;
+  targetDistPct: number;
+  rMultiple: number;
+  riskUsd: number;
+  riskSek: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -218,22 +266,159 @@ export function getPortfolioStats(book: TradingBook, portfolio: TradingPortfolio
   });
 }
 
-export function getTradingDeskStats(book: TradingBook): TradingDeskStats {
+export function getTradingDeskStats(book: TradingBook, quotes: Record<string, TradingQuote> = {}): TradingDeskStats {
   const openPnlUsd = book.positions.reduce((sum, position) => sum + positionPnlUsd(position), 0);
-  const notionalUsd = book.positions.reduce((sum, position) => sum + position.fill * position.shares, 0);
-  const computedSek = openPnlUsd * book.fxUsdSek;
-  const openPnlSek = book.stats.openPnlSek ?? computedSek;
+  const costUsd = book.positions.reduce((sum, position) => sum + position.fill * position.shares, 0);
+  const marketUsd = book.positions.reduce((sum, position) => sum + position.last * position.shares, 0);
+  const dayPnlUsd = book.positions.reduce((sum, position) => sum + positionDayPnlUsd(position, quotes[position.symbol]), 0);
+  const openPnlSek = openPnlUsd * book.fxUsdSek;
+  const costSek = costUsd * book.fxUsdSek;
+  const marketSek = marketUsd * book.fxUsdSek;
 
   return {
     equitySek: book.experiment.capitalSek + openPnlSek,
     openPnlSek,
     openPnlUsd,
-    notionalUsd,
-    notionalSek: notionalUsd * book.fxUsdSek,
+    costUsd,
+    costSek,
+    marketUsd,
+    marketSek,
+    dayPnlUsd,
+    dayPnlSek: dayPnlUsd * book.fxUsdSek,
+    cashSek: book.experiment.capitalSek - costSek,
+    exposurePct: book.experiment.capitalSek ? (marketSek / book.experiment.capitalSek) * 100 : 0,
+    notionalUsd: costUsd,
+    notionalSek: costSek,
     namesHeld: book.positions.map((position) => position.symbol),
     wins: book.stats.wins,
     losses: book.stats.losses,
   };
+}
+
+export function positionDayPnlUsd(position: TradingPosition, quote?: TradingQuote) {
+  const previous = quote?.previousClose;
+  if (previous == null || !Number.isFinite(previous)) return 0;
+  const delta = position.last - previous;
+  return (position.side === "short" ? -delta : delta) * position.shares;
+}
+
+export function getPositionMetrics(
+  position: TradingPosition,
+  book: TradingBook,
+  quotes: Record<string, TradingQuote> = {},
+  marketUsdTotal = 0,
+): TradingPositionMetrics {
+  const quote = quotes[position.symbol];
+  const pnlUsd = positionPnlUsd(position);
+  const costUsd = position.fill * position.shares;
+  const marketUsd = position.last * position.shares;
+  const riskUsd = Math.abs(position.fill - position.stop) * position.shares;
+  const stopDistPct = position.last ? ((position.stop - position.last) / position.last) * 100 : 0;
+  const targetDistPct = position.last ? ((position.target - position.last) / position.last) * 100 : 0;
+  const riskPerShare = Math.abs(position.fill - position.stop);
+  const rMultiple = riskPerShare ? (position.last - position.fill) / riskPerShare * (position.side === "short" ? -1 : 1) : 0;
+
+  return {
+    marketUsd,
+    marketSek: marketUsd * book.fxUsdSek,
+    costUsd,
+    costSek: costUsd * book.fxUsdSek,
+    pnlUsd,
+    pnlSek: pnlUsd * book.fxUsdSek,
+    pnlPct: position.fill ? ((position.last - position.fill) / position.fill) * 100 * (position.side === "short" ? -1 : 1) : 0,
+    dayUsd: positionDayPnlUsd(position, quote),
+    daySek: positionDayPnlUsd(position, quote) * book.fxUsdSek,
+    dayPct: quote?.dayPct ?? null,
+    weightPct: marketUsdTotal ? (marketUsd / marketUsdTotal) * 100 : 0,
+    stopDistPct,
+    targetDistPct,
+    rMultiple,
+    riskUsd,
+    riskSek: riskUsd * book.fxUsdSek,
+  };
+}
+
+export function applyLiveQuotes(book: TradingBook, live: TradingLiveSnapshot | null): TradingBook {
+  if (!live) return book;
+  const fxUsdSek = live.fxUsdSek && live.fxUsdSek > 0 ? live.fxUsdSek : book.fxUsdSek;
+
+  return {
+    ...book,
+    updatedAt: live.fetchedAt || book.updatedAt,
+    fxUsdSek,
+    positions: book.positions.map((position) => {
+      const quote = live.quotes[position.symbol];
+      if (!quote?.last) return position;
+      const last = quote.last;
+      const pnlPct = position.fill ? Number((((last - position.fill) / position.fill) * 100 * (position.side === "short" ? -1 : 1)).toFixed(2)) : 0;
+      return { ...position, last, pnlPct };
+    }),
+    stats: { ...book.stats, openPnlSek: null },
+  };
+}
+
+export function applyLiveCandles(
+  charts: Record<string, TradingCandle[]>,
+  live: TradingLiveSnapshot | null,
+  timeZone = TRADING_TIMEZONE,
+): Record<string, TradingCandle[]> {
+  if (!live) return charts;
+  const today = formatIsoDate(live.fetchedAt || new Date().toISOString(), timeZone);
+  const next: Record<string, TradingCandle[]> = {};
+
+  for (const [symbol, candles] of Object.entries(charts)) {
+    const quote = live.quotes[symbol];
+    if (!quote?.last) {
+      next[symbol] = candles;
+      continue;
+    }
+    const last = candles.at(-1);
+    if (last && last.time === today) {
+      next[symbol] = [
+        ...candles.slice(0, -1),
+        {
+          ...last,
+          close: quote.last,
+          high: Math.max(last.high, quote.dayHigh ?? quote.last, quote.last),
+          low: Math.min(last.low, quote.dayLow ?? quote.last, quote.last),
+        },
+      ];
+      continue;
+    }
+    next[symbol] = [
+      ...candles,
+      {
+        time: today,
+        open: quote.previousClose ?? last?.close ?? quote.last,
+        high: quote.dayHigh ?? quote.last,
+        low: quote.dayLow ?? quote.last,
+        close: quote.last,
+      },
+    ];
+  }
+
+  return next;
+}
+
+export function stampLiveEquity(points: TradingPoint[], book: TradingBook, quotes: Record<string, TradingQuote> = {}): TradingPoint[] {
+  const stats = getTradingDeskStats(book, quotes);
+  const today = formatIsoDate(book.updatedAt || new Date().toISOString(), book.timezone);
+  const value = Number(stats.equitySek.toFixed(2));
+  if (points.length === 0) return [{ time: today, value }];
+  const last = points.at(-1)!;
+  if (last.time >= today) {
+    return [...points.slice(0, -1), { time: last.time, value }];
+  }
+  return [...points, { time: today, value }];
+}
+
+export function formatIsoDate(iso: string, timeZone = TRADING_TIMEZONE) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
 }
 
 export function portfolioPositions(book: TradingBook, portfolio: TradingPortfolio) {
