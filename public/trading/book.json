@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-01T20:30:00+02:00",
+  "timezone": "Europe/Berlin",
+  "source": "public/trading/book.json",
+  "note": "Swap this file, or set NEXT_PUBLIC_TRADING_BOOK_URL to an API with the same shape. Never add broker account IDs.",
+  "experiment": {
+    "title": "Rayner live experiment",
+    "operator": "Rayner",
+    "style": "long-only swing",
+    "capitalSek": 5000,
+    "rules": [
+      "EMA20 pullback reclaim",
+      "0.75% risk",
+      "2R target",
+      "long only"
+    ]
+  },
+  "fxUsdSek": 9.61,
+  "positions": [
+    {
+      "symbol": "GM",
+      "name": "General Motors",
+      "side": "long",
+      "shares": 1,
+      "fill": 86.47,
+      "filledAt": "2026-09-01T15:30:00+02:00",
+      "stop": 83.42,
+      "stopPct": -3.5,
+      "target": 92.12,
+      "targetPct": 6.5,
+      "last": 86.09,
+      "pnlPct": -0.4,
+      "chart": "/trading/charts/GM.json"
+    },
+    {
+      "symbol": "KO",
+      "name": "Coca-Cola",
+      "side": "long",
+      "shares": 2,
+      "fill": 88.82,
+      "filledAt": "2026-09-01T16:44:00+02:00",
+      "stop": 86.84,
+      "stopPct": -2.2,
+      "target": 92.32,
+      "targetPct": 3.9,
+      "last": 88.12,
+      "pnlPct": -0.8,
+      "chart": "/trading/charts/KO.json"
+    },
+    {
+      "symbol": "MDT",
+      "name": "Medtronic",
+      "side": "long",
+      "shares": 1,
+      "fill": 90.8,
+      "filledAt": "2026-09-01T16:54:00+02:00",
+      "stop": 87.75,
+      "stopPct": -3.4,
+      "target": 96.45,
+      "targetPct": 6.2,
+      "last": 92.66,
+      "pnlPct": 2.0,
+      "chart": "/trading/charts/MDT.json"
+    }
+  ],
+  "closed": [],
+  "stats": {
+    "openPnlSek": -23,
+    "wins": null,
+    "losses": null
+  }
+}
