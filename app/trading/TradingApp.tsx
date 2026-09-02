@@ -8,6 +8,7 @@ import {
   applyLiveCandles,
   applyLiveQuotes,
   buildEquityCurve,
+  EQUITY_RANGES,
   firstFillDate,
   formatBerlinClock,
   formatBerlinDateTime,
@@ -17,9 +18,10 @@ import {
   getPositionMetrics,
   getTradingDeskStats,
   seriesTotalPct,
-  sliceFrom,
+  sliceByRange,
   stampLiveEquity,
   TRADING_INDEXES,
+  type EquityRange,
   type TradingBook,
   type TradingCandle,
   type TradingIndexId,
@@ -72,14 +74,18 @@ export function TradingApp({
   initialLive: TradingLiveSnapshot | null;
 }) {
   const [live, setLive] = useState<TradingLiveSnapshot | null>(initialLive);
+  const [seedBook, setSeedBook] = useState(book);
+  const [seedCharts, setSeedCharts] = useState(charts);
   const [clock, setClock] = useState("");
   const [symbol, setSymbol] = useState<string | null>(book.positions[0]?.symbol ?? null);
   const [unit, setUnit] = useState<ChartUnit>("sek");
+  const [range, setRange] = useState<EquityRange>("all");
   const [selectedIndexes, setSelectedIndexes] = useState<TradingIndexId[]>([]);
   const [benchmarks, setBenchmarks] = useState<BenchmarkSeries[] | null>(null);
   const [benchStatus, setBenchStatus] = useState<"idle" | "loading" | "error">("idle");
   const [benchTick, setBenchTick] = useState(0);
   const chartRef = useRef<HTMLElement>(null);
+  const bookStampRef = useRef(`${book.version}:${book.updatedAt}`);
 
   const refreshLive = useCallback(async () => {
     if (document.hidden) return;
@@ -90,6 +96,23 @@ export function TradingApp({
       if (next?.quotes) setLive(next);
     } catch {
       /* keep last snapshot */
+    }
+  }, [accessKey]);
+
+  const refreshBook = useCallback(async () => {
+    if (document.hidden) return;
+    try {
+      const response = await fetch(`/api/trading/${encodeURIComponent(accessKey)}/book`, { cache: "no-store" });
+      if (!response.ok) return;
+      const next = (await response.json()) as { book?: TradingBook; charts?: Record<string, TradingCandle[]> };
+      if (!next.book) return;
+      const stamp = `${next.book.version}:${next.book.updatedAt}`;
+      if (stamp === bookStampRef.current) return;
+      bookStampRef.current = stamp;
+      setSeedBook(next.book);
+      if (next.charts) setSeedCharts(next.charts);
+    } catch {
+      /* keep last book */
     }
   }, [accessKey]);
 
@@ -107,20 +130,27 @@ export function TradingApp({
     };
     tick();
     const clockId = window.setInterval(tick, 1000);
-    const pollId = window.setInterval(() => void refreshLive(), POLL_MS);
+    const pollId = window.setInterval(() => {
+      void refreshLive();
+      void refreshBook();
+    }, POLL_MS);
     const onVisible = () => {
-      if (!document.hidden) void refreshLive();
+      if (!document.hidden) {
+        void refreshLive();
+        void refreshBook();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     void refreshLive();
+    void refreshBook();
     return () => {
       window.clearInterval(clockId);
       window.clearInterval(pollId);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [refreshLive]);
+  }, [refreshBook, refreshLive]);
 
   useEffect(() => {
     if (selectedIndexes.length === 0 || benchmarks) return;
@@ -145,8 +175,11 @@ export function TradingApp({
     };
   }, [accessKey, benchTick, benchmarks, selectedIndexes.length]);
 
-  const liveBook = useMemo(() => applyLiveQuotes(book, live), [book, live]);
-  const liveCharts = useMemo(() => applyLiveCandles(charts, live, liveBook.timezone), [charts, live, liveBook.timezone]);
+  const liveBook = useMemo(() => applyLiveQuotes(seedBook, live), [live, seedBook]);
+  const liveCharts = useMemo(
+    () => applyLiveCandles(seedCharts, live, liveBook.timezone),
+    [live, liveBook.timezone, seedCharts],
+  );
   const quotes = live?.quotes ?? {};
   const stats = useMemo(() => getTradingDeskStats(liveBook, quotes), [liveBook, quotes]);
   const equityPoints = useMemo(
@@ -154,8 +187,8 @@ export function TradingApp({
     [liveBook, liveCharts, quotes],
   );
   const comparePoints = useMemo(
-    () => sliceFrom(equityPoints, firstFillDate(liveBook)),
-    [equityPoints, liveBook],
+    () => sliceByRange(equityPoints, range, firstFillDate(liveBook)),
+    [equityPoints, liveBook, range],
   );
   const curvePct = seriesTotalPct(comparePoints);
   const capitalPct = liveBook.experiment.capitalSek
@@ -192,6 +225,12 @@ export function TradingApp({
     if (!selected) return;
     chartRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [selected?.symbol]);
+
+  useEffect(() => {
+    if (!symbol) return;
+    if (liveBook.positions.some((position) => position.symbol === symbol)) return;
+    setSymbol(liveBook.positions[0]?.symbol ?? null);
+  }, [liveBook.positions, symbol]);
 
   const toggleIndex = (id: TradingIndexId) => {
     setSelectedIndexes((current) =>
@@ -252,6 +291,19 @@ export function TradingApp({
               </div>
             </div>
             <div className="trading-compare">
+              <div className="trading-chart__legend trading-compare-ranges" role="group" aria-label="Tidsperiod">
+                {EQUITY_RANGES.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={range === item.key ? "is-on" : ""}
+                    aria-pressed={range === item.key}
+                    onClick={() => setRange(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
               <div className="trading-chart__legend" role="group" aria-label="Visa som">
                 <button
                   type="button"
@@ -310,6 +362,7 @@ export function TradingApp({
               </div>
             ) : null}
             <EquityChart
+              key={range}
               points={comparePoints}
               unit={unit}
               overlays={unit === "pct" ? activeOverlays : []}

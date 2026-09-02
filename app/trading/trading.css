@@ -97,7 +97,7 @@
 }
 
 .trading-metric-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
 }
 
 .trading-stat-row > div,
@@ -258,9 +258,20 @@
   text-transform: uppercase;
 }
 
-.trading-compare-indexes {
+.trading-compare-ranges {
+  flex: 1 1 100%;
   flex-wrap: wrap;
-  justify-content: flex-end;
+}
+
+.trading-chart__key {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 2px;
+  color: var(--ac-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .trading-compare-status {

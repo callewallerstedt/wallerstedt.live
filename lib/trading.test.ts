@@ -15,6 +15,7 @@ import {
   rebaseToPercent,
   resolvePreviousClose,
   seriesTotalPct,
+  sliceByRange,
   sliceFrom,
   toPercentSeries,
   type TradingQuote,
@@ -33,8 +34,10 @@ function quote(partial: Partial<TradingQuote> & Pick<TradingQuote, "symbol" | "l
     prePrice: null,
     prePct: null,
     preTime: null,
+    preMark: null,
     postPrice: null,
     postPct: null,
+    postMark: null,
     ...partial,
   };
 }
@@ -148,6 +151,19 @@ test("compare window starts at first fill, not years of cash", () => {
   assert.equal(aligned.subjectPct, 2);
   assert.equal(aligned.benchmarkPct, 1);
   assert.equal(aligned.alpha, 1);
+
+  const today = sliceByRange(equity, "1d", "2026-09-01");
+  assert.deepEqual(
+    today.map((point) => point.time),
+    ["2026-08-31", "2026-09-01"],
+  );
+  const week = sliceByRange(equity, "1w", "2026-09-01");
+  assert.equal(week[0]?.time, "2026-08-31");
+  const all = sliceByRange(equity, "all", "2026-09-01");
+  assert.deepEqual(
+    all.map((point) => point.time),
+    ["2026-08-31", "2026-09-01"],
+  );
 });
 
 test("day P&L follows the printed day % instead of a 5-day chart close", () => {

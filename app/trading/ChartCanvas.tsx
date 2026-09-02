@@ -2,11 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { ema, formatPrice, sma, type TradingCandle, type TradingPosition } from "@/lib/trading";
+import {
+  ema,
+  formatPrice,
+  sma,
+  type TradingCandle,
+  type TradingPosition,
+} from "@/lib/trading";
 
 import {
   TRADING_CHART_DOWN,
   TRADING_CHART_EMA,
+  TRADING_CHART_POST,
+  TRADING_CHART_PRE,
   TRADING_CHART_SMA,
   TRADING_CHART_STOP,
   TRADING_CHART_TARGET,
@@ -26,24 +34,98 @@ type HoverPoint = {
   sma50: number | null;
 };
 
+type PriceLine = { applyOptions: (options: Record<string, unknown>) => void };
+type CandleSeries = {
+  setData: (data: TradingCandle[]) => void;
+  createPriceLine: (options: Record<string, unknown>) => PriceLine;
+  removePriceLine: (line: unknown) => void;
+};
+
+function finitePrice(value?: number | null) {
+  return value != null && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function syncExtendedLines(
+  series: CandleSeries,
+  dotted: number,
+  prePrice: number | null | undefined,
+  postPrice: number | null | undefined,
+  preLineRef: { current: PriceLine | null },
+  postLineRef: { current: PriceLine | null },
+) {
+  const sync = (
+    line: PriceLine | null,
+    price: number | null,
+    title: string,
+    color: string,
+    setter: (next: PriceLine | null) => void,
+  ) => {
+    if (price == null) {
+      if (line) {
+        series.removePriceLine(line);
+        setter(null);
+      }
+      return;
+    }
+    if (line) {
+      line.applyOptions({ price, title, color });
+      return;
+    }
+    setter(
+      series.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: dotted,
+        axisLabelVisible: true,
+        title,
+      }),
+    );
+  };
+
+  sync(preLineRef.current, finitePrice(prePrice), "Pre", TRADING_CHART_PRE, (next) => {
+    preLineRef.current = next;
+  });
+  sync(postLineRef.current, finitePrice(postPrice), "AH", TRADING_CHART_POST, (next) => {
+    postLineRef.current = next;
+  });
+}
+
 export function ChartCanvas({
   candles,
   position,
   fillClock,
   showEma,
   showSma,
+  prePrice,
+  postPrice,
 }: {
   candles: TradingCandle[];
   position: TradingPosition;
   fillClock: string;
   showEma: boolean;
   showSma: boolean;
+  prePrice?: number | null;
+  postPrice?: number | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const emaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void; setData: (data: Array<{ time: string; value: number }>) => void } | null>(null);
   const smaRef = useRef<{ applyOptions: (options: { visible: boolean }) => void; setData: (data: Array<{ time: string; value: number }>) => void } | null>(null);
-  const candleSeriesRef = useRef<{ setData: (data: TradingCandle[]) => void } | null>(null);
+  const candleSeriesRef = useRef<{
+    setData: (data: TradingCandle[]) => void;
+    createPriceLine: (options: Record<string, unknown>) => {
+      applyOptions: (options: Record<string, unknown>) => void;
+    };
+    removePriceLine: (line: unknown) => void;
+  } | null>(null);
+  const lineStyleRef = useRef<number | null>(null);
+  const preLineRef = useRef<{ applyOptions: (options: Record<string, unknown>) => void } | null>(null);
+  const postLineRef = useRef<{ applyOptions: (options: Record<string, unknown>) => void } | null>(null);
+  const prePriceRef = useRef(prePrice);
+  const postPriceRef = useRef(postPrice);
   const candlesRef = useRef(candles);
+  prePriceRef.current = prePrice;
+  postPriceRef.current = postPrice;
   const [hover, setHover] = useState<HoverPoint | null>(null);
   const [error, setError] = useState<string | null>(null);
   candlesRef.current = candles;
@@ -154,8 +236,10 @@ export function ChartCanvas({
 
         chart.timeScale().fitContent();
         candleSeriesRef.current = candleSeries;
+        lineStyleRef.current = LineStyle.Dotted;
         emaRef.current = emaSeries;
         smaRef.current = smaSeries;
+        syncExtendedLines(candleSeries, LineStyle.Dotted, prePriceRef.current, postPriceRef.current, preLineRef, postLineRef);
 
         chart.subscribeCrosshairMove((param: { point?: { x: number; y: number }; time?: unknown }) => {
           if (!param.point || !param.time) {
@@ -196,8 +280,17 @@ export function ChartCanvas({
       candleSeriesRef.current = null;
       emaRef.current = null;
       smaRef.current = null;
+      preLineRef.current = null;
+      postLineRef.current = null;
     };
   }, [fillClock, position.fill, position.filledAt, position.stop, position.symbol, position.target]);
+
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    const dotted = lineStyleRef.current;
+    if (!series || dotted == null) return;
+    syncExtendedLines(series, dotted, prePrice, postPrice, preLineRef, postLineRef);
+  }, [prePrice, postPrice]);
 
   useEffect(() => {
     if (!candleSeriesRef.current || candles.length === 0) return;

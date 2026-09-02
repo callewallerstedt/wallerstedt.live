@@ -13,6 +13,8 @@ export const TRADING_CHART_EMA = "#9bbcff";
 export const TRADING_CHART_SMA = "#e0bd85";
 export const TRADING_CHART_TARGET = "#c4b5fd";
 export const TRADING_CHART_STOP = "#e29a9a";
+export const TRADING_CHART_PRE = "#f0c674";
+export const TRADING_CHART_POST = "#8ad4e8";
 
 export function tradingChartOptions(charts: Charts, height: number, scale: "log" | "linear" = "log") {
   const { ColorType, CrosshairMode, LineStyle, PriceScaleMode } = charts;

@@ -4,6 +4,7 @@ import {
   resolvePreviousClose,
   TRADING_INDEXES,
   usSessionPhase,
+  type TradingCandle,
   type TradingIndexId,
   type TradingLiveSnapshot,
   type TradingPoint,
@@ -35,7 +36,14 @@ type YahooChart = {
         currentTradingPeriod?: Record<string, { start?: number; end?: number }>;
       };
       timestamp?: number[];
-      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+        indicators?: {
+          quote?: Array<{
+            open?: Array<number | null>;
+            high?: Array<number | null>;
+            low?: Array<number | null>;
+            close?: Array<number | null>;
+          }>;
+        };
     }>;
   };
 };
@@ -100,6 +108,7 @@ function parseQuote(symbol: string, payload: YahooChart): TradingQuote | null {
   const post = postWindow ? lastCloseInWindow(timestamps, closes, postWindow.start, postWindow.end) : null;
   const todayNy = formatIsoDate(new Date().toISOString(), "America/New_York");
   const preIsToday = pre != null && unixToDate(pre.time, "America/New_York") === todayNy;
+  const postIsToday = post != null && unixToDate(post.time, "America/New_York") === todayNy;
   const showPre = usSessionPhase() === "pre" && preIsToday;
 
   return {
@@ -116,8 +125,10 @@ function parseQuote(symbol: string, payload: YahooChart): TradingQuote | null {
     prePrice: showPre ? pre?.value ?? null : null,
     prePct: showPre && pre && previousClose ? Number(changePct(previousClose, pre.value).toFixed(4)) : null,
     preTime: showPre && pre ? toIso(pre.time) : null,
-    postPrice: post?.value ?? null,
-    postPct: post && previousClose ? Number(changePct(previousClose, post.value).toFixed(4)) : null,
+    preMark: preIsToday ? pre?.value ?? null : null,
+    postPrice: postIsToday ? post?.value ?? null : null,
+    postPct: postIsToday && post && previousClose ? Number(changePct(previousClose, post.value).toFixed(4)) : null,
+    postMark: postIsToday ? post?.value ?? null : null,
   };
 }
 
@@ -226,4 +237,28 @@ export async function fetchTradingBenchmarks(): Promise<TradingBenchmarkSeries[]
     benchmarkCache = { at: Date.now(), series };
   }
   return series;
+}
+
+export async function fetchTradingDailyCandles(symbol: string): Promise<TradingCandle[]> {
+  const payload = await fetchYahooChart(symbol, "2y", "1d");
+  const result = payload.chart?.result?.[0];
+  const timestamps = result?.timestamp ?? [];
+  const quote = result?.indicators?.quote?.[0];
+  const timeZone = result?.meta?.exchangeTimezoneName || "UTC";
+  const candles: TradingCandle[] = [];
+  for (let i = 0; i < timestamps.length; i += 1) {
+    const open = quote?.open?.[i];
+    const high = quote?.high?.[i];
+    const low = quote?.low?.[i];
+    const close = quote?.close?.[i];
+    if ([open, high, low, close].some((value) => typeof value !== "number" || !Number.isFinite(value))) continue;
+    candles.push({
+      time: unixToDate(timestamps[i]!, timeZone),
+      open: open as number,
+      high: high as number,
+      low: low as number,
+      close: close as number,
+    });
+  }
+  return candles;
 }
