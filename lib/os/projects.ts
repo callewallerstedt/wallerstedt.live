@@ -62,7 +62,7 @@ export async function fetchGithubProjects(ledger: LedgerSnapshot | null): Promis
 
   const response = await fetch(
     `https://api.github.com/users/${COMPANY.githubUser}/repos?per_page=100&sort=pushed`,
-    { headers, cache: "no-store" },
+    { headers, next: { revalidate: 120 } },
   );
   if (!response.ok) {
     throw new Error(`GitHub ${response.status}`);
@@ -105,7 +105,7 @@ export async function fetchVercelProjects(): Promise<Array<{ name: string; url: 
   if (teamId) url.searchParams.set("teamId", teamId);
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
+    next: { revalidate: 120 },
   });
   if (!response.ok) throw new Error(`Vercel ${response.status}`);
   const body = (await response.json()) as { projects?: VercelProject[] };

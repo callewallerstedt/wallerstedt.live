@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
@@ -17,7 +18,7 @@ export async function requireOsAccessKey(accessKey: string) {
   }
 }
 
-export async function hasOsSession(accessKey: string) {
+export const hasOsSession = cache(async (accessKey: string) => {
   await requireOsAccessKey(accessKey);
   const headerList = await headers();
   const request = new Request("https://wallerstedt.live/bolag", {
@@ -26,4 +27,4 @@ export async function hasOsSession(accessKey: string) {
     },
   });
   return hasOwnerSession(request, accessKey);
-}
+});

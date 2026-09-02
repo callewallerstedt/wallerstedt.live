@@ -1,61 +1,59 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { POST as loginBolag } from "../../app/api/bolag/session/route";
 import { osPath } from "./paths";
 import { configuredOsAccessKey, isOsPageSlug, osPageFromPathname, resolveOsRoute } from "./route";
 
 const key = "secret-accounting-access-key";
 
-test("canonical /bolag uses the configured access key and no page", () => {
-  assert.deepEqual(resolveOsRoute(undefined, key), {
+test("bare /bolag and missing keys do not resolve", () => {
+  assert.equal(resolveOsRoute(undefined, undefined), null);
+  assert.equal(resolveOsRoute("", undefined), null);
+  assert.equal(resolveOsRoute("  ", ["money"]), null);
+});
+
+test("/bolag/<key> is the canonical dashboard URL", () => {
+  assert.deepEqual(resolveOsRoute(key, undefined), {
     accessKey: key,
     page: "",
-    keyedAlias: false,
   });
-  assert.deepEqual(resolveOsRoute([], key), {
+  assert.deepEqual(resolveOsRoute(key, []), {
     accessKey: key,
     page: "",
-    keyedAlias: false,
   });
 });
 
-test("canonical /bolag/<page> uses the configured access key", () => {
-  assert.deepEqual(resolveOsRoute(["money"], key), {
+test("/bolag/<key>/<page> keeps the key in the route", () => {
+  assert.deepEqual(resolveOsRoute(key, ["money"]), {
     accessKey: key,
     page: "money",
-    keyedAlias: false,
   });
-  assert.deepEqual(resolveOsRoute(["accounting"], key), {
+  assert.deepEqual(resolveOsRoute(key, ["wealth"]), {
     accessKey: key,
-    page: "accounting",
-    keyedAlias: false,
+    page: "wealth",
+  });
+  assert.deepEqual(resolveOsRoute(key, ["vault"]), {
+    accessKey: key,
+    page: "vault",
   });
 });
 
-test("/bolag/<key> remains a keyed back-compat alias", () => {
-  assert.deepEqual(resolveOsRoute([key], key), {
-    accessKey: key,
-    page: "",
-    keyedAlias: true,
-  });
-  assert.deepEqual(resolveOsRoute([key, "wealth"], key), {
-    accessKey: key,
-    page: "wealth",
-    keyedAlias: true,
-  });
+test("page slugs without a key are not valid dashboard routes", () => {
+  assert.equal(resolveOsRoute(undefined, ["money"]), null);
+  assert.equal(resolveOsRoute("", ["accounting"]), null);
 });
 
 test("unknown nested paths are rejected", () => {
-  assert.equal(resolveOsRoute(["nope", "nope"], key), null);
-  assert.equal(resolveOsRoute(["money", "extra"], key), null);
+  assert.equal(resolveOsRoute(key, ["nope"]), null);
+  assert.equal(resolveOsRoute(key, ["money", "extra"]), null);
 });
 
-test("osPath never puts the access key in the URL", () => {
-  assert.equal(osPath(), "/bolag");
-  assert.equal(osPath(""), "/bolag");
-  assert.equal(osPath("money"), "/bolag/money");
-  assert.equal(osPath("alerts"), "/bolag/alerts");
+test("osPath keeps the access key in the path like /vault/<key>", () => {
+  assert.equal(osPath(key), `/bolag/${key}`);
+  assert.equal(osPath(key, ""), `/bolag/${key}`);
+  assert.equal(osPath(key, "money"), `/bolag/${key}/money`);
+  assert.equal(osPath(key, "alerts"), `/bolag/${key}/alerts`);
+  assert.equal(osPath(key, "vault"), `/bolag/${key}/vault`);
 });
 
 test("configuredOsAccessKey trims ACCOUNTING_ACCESS_KEY", () => {
@@ -71,36 +69,14 @@ test("configuredOsAccessKey trims ACCOUNTING_ACCESS_KEY", () => {
   }
 });
 
-test("sidebar titles follow both canonical and keyed URLs", () => {
+test("sidebar titles read the page after the access key", () => {
   assert.equal(osPageFromPathname("/bolag"), "");
   assert.equal(osPageFromPathname("/bolag/"), "");
-  assert.equal(osPageFromPathname("/bolag/money"), "money");
+  assert.equal(osPageFromPathname("/bolag/money"), "");
   assert.equal(osPageFromPathname(`/bolag/${key}`), "");
   assert.equal(osPageFromPathname(`/bolag/${key}/alerts`), "alerts");
-  assert.equal(osPageFromPathname("/os/upcoming"), "upcoming");
+  assert.equal(osPageFromPathname(`/bolag/${key}/vault`), "vault");
+  assert.equal(osPageFromPathname(`/os/${key}/upcoming`), "upcoming");
   assert.equal(isOsPageSlug("money"), true);
   assert.equal(isOsPageSlug(key), false);
-});
-
-test("keyless bolag login returns 503 when ACCOUNTING_ACCESS_KEY is missing", async () => {
-  const previous = process.env.ACCOUNTING_ACCESS_KEY;
-  try {
-    delete process.env.ACCOUNTING_ACCESS_KEY;
-    const response = await loginBolag(
-      new Request("https://wallerstedt.live/api/bolag/session", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          origin: "https://wallerstedt.live",
-        },
-        body: JSON.stringify({ password: "secret" }),
-      }),
-    );
-    assert.equal(response.status, 503);
-    const body = (await response.json()) as { error?: string };
-    assert.equal(body.error, "accounting_not_configured");
-  } finally {
-    if (previous === undefined) delete process.env.ACCOUNTING_ACCESS_KEY;
-    else process.env.ACCOUNTING_ACCESS_KEY = previous;
-  }
 });

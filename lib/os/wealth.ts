@@ -38,7 +38,7 @@ export async function loadSpotifyArtist() {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: "grant_type=client_credentials",
-      cache: "no-store",
+      next: { revalidate: 300 },
     });
     if (!response.ok) return null;
     const body = (await response.json()) as { access_token?: string };
@@ -48,7 +48,7 @@ export async function loadSpotifyArtist() {
   const artistId = process.env.SPOTIFY_ARTIST_ID?.trim() || "7qBBYMwk5wXAjSXWWhPCxK";
   const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, {
     headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
+    next: { revalidate: 300 },
   });
   if (!response.ok) return null;
   const body = (await response.json()) as {

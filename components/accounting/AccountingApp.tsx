@@ -445,9 +445,9 @@ function withoutReadOnlyFields(entry: DraftEntry | AccountingEntry) {
   };
 }
 
-export function AccountingApp({ accessKey }: { accessKey: string }) {
+export function AccountingApp({ accessKey, embedded = false }: { accessKey: string; embedded?: boolean }) {
   const api = useMemo(() => new AccountingApi(accessKey), [accessKey]);
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("checking");
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>(embedded ? "authenticated" : "checking");
   const [sessionError, setSessionError] = useState("");
   const [online, setOnline] = useState(true);
   const [tab, setTab] = useState<AppTab>("home");
@@ -662,16 +662,16 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     const goOffline = () => setOnline(false);
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
-    if ("serviceWorker" in navigator) {
+    if ("serviceWorker" in navigator && !embedded) {
       void navigator.serviceWorker.register("/accounting-sw.js", { scope: "/vault/", updateViaCache: "none" });
     }
-    void checkSession();
+    if (!embedded) void checkSession();
     return () => {
       window.removeEventListener("online", goOnline);
       window.removeEventListener("offline", goOffline);
       document.documentElement.lang = previousLanguage;
     };
-  }, [checkSession]);
+  }, [checkSession, embedded]);
 
   useEffect(() => {
     if (sessionStatus === "authenticated" && !dashboard) void loadDashboard();
@@ -692,6 +692,18 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
     const timeout = window.setTimeout(() => setToast(""), 4200);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("filter") === "missing") {
+        setTab("ledger");
+        setLedgerDocFilter("missing");
+      }
+    } catch {
+      // Keep the default ledger filter if the URL cannot be parsed.
+    }
+  }, []);
 
   useEffect(() => {
     const fromUrl = postIdFromHref(window.location.href);
@@ -741,6 +753,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
       await api.logout(allDevices);
     } finally {
       expireSession();
+      if (embedded) window.location.reload();
     }
   }
 
@@ -938,18 +951,22 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
   const refreshing = dashboardLoading || entriesLoading || entryLoading || accountsLoading;
 
   return (
-    <main className="accounting-app ac-shell">
+    <main className={`accounting-app ac-shell${embedded ? " ac-shell--embedded" : ""}`}>
       <header className="ac-topbar">
         <div className="ac-topbar-inner">
-          <div className="ac-brand-lockup">
-            <span className="ac-logo" aria-hidden="true">
-              <Image alt="" height={42} priority src="/accounting-logo.png" width={42} />
-            </span>
-            <div>
-              <span className="ac-brand-name">Wallerstedt</span>
-              <span className="ac-brand-subtitle">Bokföring</span>
+          {embedded ? (
+            <p className="ac-brand-subtitle">Poster, kvitton och AI</p>
+          ) : (
+            <div className="ac-brand-lockup">
+              <span className="ac-logo" aria-hidden="true">
+                <Image alt="" height={42} priority src="/accounting-logo.png" width={42} />
+              </span>
+              <div>
+                <span className="ac-brand-name">Wallerstedt</span>
+                <span className="ac-brand-subtitle">Bokföring</span>
+              </div>
             </div>
-          </div>
+          )}
           <div className="ac-topbar-actions">
             <span className={`ac-online-pill ${online ? "is-online" : "is-offline"}`} role="status">
               {online ? <Icon.Cloud size={16} /> : <Icon.WifiOff size={16} />}
@@ -1096,6 +1113,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
             accessKey={accessKey}
             api={api}
             dashboard={dashboard}
+            embedded={embedded}
             onBackupComplete={loadDashboard}
             onExpired={expireSession}
             onLogout={() => void logout()}
@@ -3445,6 +3463,7 @@ function SettingsView({
   accessKey,
   api,
   dashboard,
+  embedded = false,
   onBackupComplete,
   onExpired,
   onLogout,
@@ -3453,6 +3472,7 @@ function SettingsView({
   accessKey: string;
   api: AccountingApi;
   dashboard: DashboardData | null;
+  embedded?: boolean;
   onBackupComplete: () => Promise<void>;
   onExpired: () => void;
   onLogout: () => void;
@@ -3504,16 +3524,18 @@ function SettingsView({
 
           <PwaRegistration api={api} visible />
 
+          {embedded ? null : (
           <section className="ac-card" aria-labelledby="os-heading">
             <div className="ac-section-icon"><Icon.Wallet /></div>
             <div>
               <h2 id="os-heading">Företags-OS</h2>
               <p>Samma ledger och inloggning, ny översikt. Vaulten är oförändrad.</p>
-              <a className="ac-button ac-button--secondary" href="/bolag">
+              <a className="ac-button ac-button--secondary" href={`/bolag/${encodeURIComponent(accessKey)}`}>
                 Öppna OS
               </a>
             </div>
           </section>
+          )}
 
           <section className="ac-card ac-security-card" aria-labelledby="security-heading">
             <div className="ac-section-icon"><Icon.Shield /></div>
