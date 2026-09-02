@@ -134,6 +134,22 @@
   background: var(--ac-warning);
 }
 
+.trading-app .ac-online-pill.is-extended .trading-live-dot {
+  background: #e0bd85;
+}
+
+.trading-pre {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.trading-pre__sun {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
 .trading-app .ac-section-heading-row h2 {
   font-size: 15px;
 }

@@ -87,6 +87,8 @@ export const TRADING_INDEXES = [
 
 export type TradingIndexId = (typeof TRADING_INDEXES)[number]["id"];
 
+export type TradingSession = "pre" | "open" | "post" | "closed";
+
 export type TradingQuote = {
   symbol: string;
   last: number;
@@ -98,11 +100,16 @@ export type TradingQuote = {
   week52High: number | null;
   week52Low: number | null;
   time: string | null;
+  prePrice: number | null;
+  prePct: number | null;
+  preTime: string | null;
+  postPrice: number | null;
+  postPct: number | null;
 };
 
 export type TradingLiveSnapshot = {
   fetchedAt: string;
-  session: "open" | "closed";
+  session: TradingSession;
   stale: boolean;
   fxUsdSek: number | null;
   quotes: Record<string, TradingQuote>;
@@ -138,6 +145,8 @@ export type TradingPositionMetrics = {
   dayUsd: number;
   daySek: number;
   dayPct: number | null;
+  prePrice: number | null;
+  prePct: number | null;
   weightPct: number;
   stopDistPct: number;
   targetDistPct: number;
@@ -305,8 +314,8 @@ export function getTradingDeskStats(book: TradingBook, quotes: Record<string, Tr
 }
 
 export function positionDayPnlUsd(position: TradingPosition, quote?: TradingQuote) {
-  const previous = quote?.previousClose;
-  if (previous == null || !Number.isFinite(previous)) return 0;
+  const previous = resolvePreviousClose(position.last, quote?.dayPct ?? null, quote?.previousClose ?? null);
+  if (previous == null) return 0;
   const delta = position.last - previous;
   return (position.side === "short" ? -delta : delta) * position.shares;
 }
@@ -338,6 +347,8 @@ export function getPositionMetrics(
     dayUsd: positionDayPnlUsd(position, quote),
     daySek: positionDayPnlUsd(position, quote) * book.fxUsdSek,
     dayPct: quote?.dayPct ?? null,
+    prePrice: quote?.prePrice ?? null,
+    prePct: quote?.prePct ?? null,
     weightPct: marketUsdTotal ? (marketUsd / marketUsdTotal) * 100 : 0,
     stopDistPct,
     targetDistPct,
@@ -428,6 +439,34 @@ export function formatIsoDate(iso: string, timeZone = TRADING_TIMEZONE) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(iso));
+}
+
+export function resolvePreviousClose(last: number, dayPct: number | null, previousClose: number | null) {
+  if (dayPct != null && Number.isFinite(dayPct) && dayPct !== -100) {
+    const implied = last / (1 + dayPct / 100);
+    if (Number.isFinite(implied) && implied !== 0) return implied;
+  }
+  if (previousClose != null && Number.isFinite(previousClose) && previousClose !== 0) return previousClose;
+  return null;
+}
+
+export function usSessionPhase(now = new Date()): TradingSession {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+  if (weekday === "Sat" || weekday === "Sun") return "closed";
+  const stamp = hour * 60 + minute;
+  if (stamp >= 4 * 60 && stamp < 9 * 60 + 30) return "pre";
+  if (stamp >= 9 * 60 + 30 && stamp < 16 * 60) return "open";
+  if (stamp >= 16 * 60 && stamp < 20 * 60) return "post";
+  return "closed";
 }
 
 export function changePct(start: number, end: number) {

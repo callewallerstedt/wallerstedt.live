@@ -174,7 +174,19 @@ export function TradingApp({
   const selected = liveBook.positions.find((position) => position.symbol === symbol) ?? null;
   const selectedMetrics = selected ? getPositionMetrics(selected, liveBook, quotes, stats.marketUsd) : null;
   const liveOn = live?.session === "open" && !live.stale;
-  const statusLabel = !live ? "Seed" : liveOn ? "Live" : live.session === "open" ? "Fördröjd" : "Stängt";
+  const statusLabel = !live
+    ? "Seed"
+    : live.session === "pre"
+      ? "Premarket"
+      : live.session === "post"
+        ? "After hours"
+        : liveOn
+          ? "Live"
+          : live.session === "open"
+            ? "Fördröjd"
+            : "Stängt";
+  const sessionClass =
+    live?.session === "pre" || live?.session === "post" ? "is-extended" : liveOn ? "is-online" : "is-offline";
 
   useEffect(() => {
     if (!selected) return;
@@ -210,7 +222,7 @@ export function TradingApp({
             </div>
           </div>
           <div className="ac-topbar-actions">
-            <span className={`ac-online-pill ${liveOn ? "is-online" : "is-offline"}`} role="status">
+            <span className={`ac-online-pill ${sessionClass}`} role="status">
               <span className="trading-live-dot" />
               {statusLabel}
               {clock ? ` · ${clock} NY` : ""}
@@ -431,7 +443,16 @@ function PositionRow({
         <small className="trading-blotter__sub">{position.side}</small>
       </td>
       <td>{formatPrice(position.fill)}</td>
-      <td>{formatPrice(position.last)}</td>
+      <td>
+        {formatPrice(position.last)}
+        {metrics.prePct != null ? (
+          <small className={`trading-blotter__sub trading-pre ${pnlClass(metrics.prePct)}`}>
+            <SunIcon />
+            {formatSignedPct(metrics.prePct)}
+            {metrics.prePrice != null ? ` · ${formatPrice(metrics.prePrice)}` : ""}
+          </small>
+        ) : null}
+      </td>
       <td className={pnlClass(metrics.dayPct ?? 0)}>
         {metrics.dayPct == null ? "—" : formatSignedPct(metrics.dayPct)}
         <small className={`trading-blotter__sub ${pnlClass(metrics.daySek)}`}>{formatSek(metrics.daySek)}</small>
@@ -452,5 +473,20 @@ function PositionRow({
         <Sparkline positive={metrics.pnlPct >= 0} values={spark} />
       </td>
     </tr>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg className="trading-pre__sun" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="2.4" fill="currentColor" />
+      <path
+        d="M8 1.4v1.6M8 13v1.6M1.4 8h1.6M13 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M3.2 12.8l1.1-1.1M11.7 4.3l1.1-1.1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

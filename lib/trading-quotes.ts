@@ -1,6 +1,9 @@
 import {
+  changePct,
   formatIsoDate,
+  resolvePreviousClose,
   TRADING_INDEXES,
+  usSessionPhase,
   type TradingIndexId,
   type TradingLiveSnapshot,
   type TradingPoint,
@@ -28,6 +31,8 @@ type YahooChart = {
         fiftyTwoWeekHigh?: number;
         fiftyTwoWeekLow?: number;
         regularMarketTime?: number;
+        tradingPeriods?: Record<string, Array<Array<{ start?: number; end?: number }>>>;
+        currentTradingPeriod?: Record<string, { start?: number; end?: number }>;
       };
       timestamp?: number[];
       indicators?: { quote?: Array<{ close?: Array<number | null> }> };
@@ -55,16 +60,47 @@ function toIso(unix?: number) {
   return new Date(unix * 1000).toISOString();
 }
 
+function latestWindow(periods: Array<Array<{ start?: number; end?: number }>> | undefined) {
+  const last = periods?.at(-1)?.at(-1);
+  const start = asFinite(last?.start);
+  const end = asFinite(last?.end);
+  if (start == null || end == null) return null;
+  return { start, end };
+}
+
+function lastCloseInWindow(timestamps: number[], closes: Array<number | null | undefined>, start: number, end: number) {
+  let last: { value: number; time: number } | null = null;
+  for (let i = 0; i < timestamps.length; i += 1) {
+    const time = timestamps[i];
+    const close = closes[i];
+    if (time == null || typeof close !== "number" || !Number.isFinite(close)) continue;
+    if (time >= start && time < end) last = { value: close, time };
+  }
+  return last;
+}
+
 function parseQuote(symbol: string, payload: YahooChart): TradingQuote | null {
-  const meta = payload.chart?.result?.[0]?.meta;
+  const result = payload.chart?.result?.[0];
+  const meta = result?.meta;
   const last = asFinite(meta?.regularMarketPrice);
   if (!meta || last == null) return null;
 
   const dayPct = asFinite(meta.regularMarketChangePercent);
-  const previousClose =
-    asFinite(meta.previousClose) ??
-    asFinite(meta.chartPreviousClose) ??
-    (dayPct != null && dayPct !== -100 ? last / (1 + dayPct / 100) : null);
+  const previousClose = resolvePreviousClose(last, dayPct, asFinite(meta.previousClose));
+  const timestamps = result?.timestamp ?? [];
+  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  const preWindow = latestWindow(meta.tradingPeriods?.pre);
+  const postWindow = latestWindow(meta.tradingPeriods?.post);
+  const currentPre = meta.currentTradingPeriod?.pre;
+  const livePreWindow =
+    asFinite(currentPre?.start) != null && asFinite(currentPre?.end) != null
+      ? { start: currentPre!.start!, end: currentPre!.end! }
+      : preWindow;
+  const pre = livePreWindow ? lastCloseInWindow(timestamps, closes, livePreWindow.start, livePreWindow.end) : null;
+  const post = postWindow ? lastCloseInWindow(timestamps, closes, postWindow.start, postWindow.end) : null;
+  const todayNy = formatIsoDate(new Date().toISOString(), "America/New_York");
+  const preIsToday = pre != null && unixToDate(pre.time, "America/New_York") === todayNy;
+  const showPre = usSessionPhase() === "pre" && preIsToday;
 
   return {
     symbol,
@@ -77,11 +113,16 @@ function parseQuote(symbol: string, payload: YahooChart): TradingQuote | null {
     week52High: asFinite(meta.fiftyTwoWeekHigh),
     week52Low: asFinite(meta.fiftyTwoWeekLow),
     time: toIso(meta.regularMarketTime),
+    prePrice: showPre ? pre?.value ?? null : null,
+    prePct: showPre && pre && previousClose ? Number(changePct(previousClose, pre.value).toFixed(4)) : null,
+    preTime: showPre && pre ? toIso(pre.time) : null,
+    postPrice: post?.value ?? null,
+    postPct: post && previousClose ? Number(changePct(previousClose, post.value).toFixed(4)) : null,
   };
 }
 
-async function fetchYahooChart(symbol: string, range = "5d"): Promise<YahooChart> {
-  const url = `${YAHOO_CHART}/${encodeURIComponent(symbol)}?interval=1d&range=${encodeURIComponent(range)}&includePrePost=true`;
+async function fetchYahooChart(symbol: string, range = "5d", interval = "1d"): Promise<YahooChart> {
+  const url = `${YAHOO_CHART}/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}&includePrePost=true`;
   const response = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -96,27 +137,11 @@ async function fetchYahooChart(symbol: string, range = "5d"): Promise<YahooChart
   return (await response.json()) as YahooChart;
 }
 
-function usEquitySession(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
-  if (weekday === "Sat" || weekday === "Sun") return false;
-  const stamp = hour * 60 + minute;
-  return stamp >= 9 * 60 + 30 && stamp < 16 * 60;
-}
-
 export async function fetchTradingLive(symbols: string[]): Promise<TradingLiveSnapshot> {
   const unique = [...new Set(symbols.map((symbol) => symbol.toUpperCase()))];
   const rows = await Promise.allSettled([
-    ...unique.map(async (symbol) => [symbol, parseQuote(symbol, await fetchYahooChart(symbol))] as const),
-    fetchYahooChart(FX_SYMBOL).then((payload) => ["__FX__", parseQuote(FX_SYMBOL, payload)] as const),
+    ...unique.map(async (symbol) => [symbol, parseQuote(symbol, await fetchYahooChart(symbol, "1d", "1m"))] as const),
+    fetchYahooChart(FX_SYMBOL, "1d", "1m").then((payload) => ["__FX__", parseQuote(FX_SYMBOL, payload)] as const),
   ]);
 
   const quotes: Record<string, TradingQuote> = {};
@@ -131,17 +156,20 @@ export async function fetchTradingLive(symbols: string[]): Promise<TradingLiveSn
       continue;
     }
     quotes[symbol] = quote;
-    if (quote.time) newest = Math.max(newest, Date.parse(quote.time));
+    for (const stamp of [quote.time, quote.preTime]) {
+      if (stamp) newest = Math.max(newest, Date.parse(stamp));
+    }
   }
 
   const fetchedAt = new Date().toISOString();
-  const session = usEquitySession() ? "open" : "closed";
+  const session = usSessionPhase();
+  const staleMinutes = session === "pre" || session === "post" ? 20 : 15;
   const ageMs = newest ? Date.now() - newest : Number.POSITIVE_INFINITY;
 
   return {
     fetchedAt,
     session,
-    stale: unique.some((symbol) => !quotes[symbol]) || ageMs > 15 * 60 * 1000,
+    stale: unique.some((symbol) => !quotes[symbol]) || ageMs > staleMinutes * 60 * 1000,
     fxUsdSek,
     quotes,
   };

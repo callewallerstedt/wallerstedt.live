@@ -8,14 +8,36 @@ import {
   applyLiveQuotes,
   changePct,
   firstFillDate,
+  getPositionMetrics,
   getPortfolioStats,
   getTradingDeskStats,
   parseTradingBook,
   rebaseToPercent,
+  resolvePreviousClose,
   seriesTotalPct,
   sliceFrom,
   toPercentSeries,
+  type TradingQuote,
 } from "./trading";
+
+function quote(partial: Partial<TradingQuote> & Pick<TradingQuote, "symbol" | "last">): TradingQuote {
+  return {
+    previousClose: null,
+    dayPct: null,
+    dayHigh: null,
+    dayLow: null,
+    volume: null,
+    week52High: null,
+    week52Low: null,
+    time: null,
+    prePrice: null,
+    prePct: null,
+    preTime: null,
+    postPrice: null,
+    postPct: null,
+    ...partial,
+  };
+}
 
 test("book seed parses and totals from live marks", () => {
   const raw = JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8"));
@@ -39,7 +61,7 @@ test("live quotes reprice positions and the equity total", () => {
     stale: false,
     fxUsdSek: 10,
     quotes: {
-      GM: {
+      GM: quote({
         symbol: "GM",
         last: 90,
         previousClose: 86,
@@ -50,7 +72,7 @@ test("live quotes reprice positions and the equity total", () => {
         week52High: 100,
         week52Low: 50,
         time: "2026-09-01T21:00:00+02:00",
-      },
+      }),
     },
   });
 
@@ -126,4 +148,28 @@ test("compare window starts at first fill, not years of cash", () => {
   assert.equal(aligned.subjectPct, 2);
   assert.equal(aligned.benchmarkPct, 1);
   assert.equal(aligned.alpha, 1);
+});
+
+test("day P&L follows the printed day % instead of a 5-day chart close", () => {
+  const implied = resolvePreviousClose(88, -0.756, 91.64);
+  assert.ok(implied != null);
+  assert.ok(Math.abs(implied - 88.67) < 0.02);
+
+  const raw = JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8"));
+  const book = parseTradingBook(raw);
+  const quotes = {
+    KO: quote({ symbol: "KO", last: 88, previousClose: 91.64, dayPct: -0.756 }),
+  };
+  const liveBook = applyLiveQuotes(book, {
+    fetchedAt: "2026-09-01T21:00:00+02:00",
+    session: "closed",
+    stale: false,
+    fxUsdSek: 9.61,
+    quotes,
+  });
+  const ko = liveBook.positions.find((position) => position.symbol === "KO");
+  assert.ok(ko);
+  const metrics = getPositionMetrics(ko, liveBook, quotes);
+  assert.ok(Math.abs(metrics.daySek + 12.88) < 0.2);
+  assert.ok(Math.abs(metrics.dayPct! + 0.756) < 0.001);
 });
