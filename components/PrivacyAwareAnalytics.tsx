@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation";
 export function PrivacyAwareAnalytics() {
   const pathname = usePathname() ?? "";
 
-  if (pathname.startsWith("/vault") || pathname.startsWith("/trading")) {
+  if (pathname.startsWith("/vault") || pathname.startsWith("/trading") || pathname.startsWith("/os")) {
     return null;
   }
 

@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
         headers: privateHeaders,
       },
       {
+        source: "/os/:path*",
+        headers: privateHeaders,
+      },
+      {
         source: "/trading",
         headers: privateHeaders,
       },
