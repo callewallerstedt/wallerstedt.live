@@ -48,6 +48,28 @@ export function formatSekCompact(cents: number | null | undefined) {
   return formatSek(cents);
 }
 
+export function formatSekTile(cents: number | null | undefined) {
+  if (cents == null || !Number.isFinite(cents)) return "—";
+  return new Intl.NumberFormat(COMPANY.locale, {
+    style: "currency",
+    currency: COMPANY.currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+export function formatSekDelta(cents: number | null | undefined) {
+  if (cents == null || !Number.isFinite(cents)) return "—";
+  const formatted = formatSekTile(Math.abs(cents));
+  if (cents > 0) return `+${formatted}`;
+  if (cents < 0) return `−${formatted}`;
+  return formatted;
+}
+
+export function formatVsLast(current: number, previous: number, lastMonthKey: string) {
+  return `${formatSekDelta(current - previous)} vs ${formatMonthLabel(lastMonthKey)}`;
+}
+
 export function formatNumber(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";
   return new Intl.NumberFormat(COMPANY.locale).format(value);
@@ -87,6 +109,29 @@ export function moneyToCents(value: number | string | { toString(): string } | n
   if (value == null) return 0;
   const parsed = Number(typeof value === "object" ? value.toString() : value);
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+}
+
+export function formatCompactCount(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat(COMPANY.locale, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+export function formatUsd(amount: number | null | undefined) {
+  if (amount == null || !Number.isFinite(amount)) return "—";
+  return new Intl.NumberFormat(COMPANY.locale, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function monthEndYmd(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month, 0));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 export function lastNMonths(nowYmd: string, count: number) {

@@ -38,6 +38,8 @@ export type MonthPoint = {
   incomeCents: number;
   expenseCents: number;
   resultCents: number;
+  bankCents: number;
+  kfCents: number;
 };
 
 export type CategoryRow = {
@@ -69,11 +71,15 @@ export type LedgerSnapshot = {
   year: string;
   month: string;
   incomeMonthCents: number;
+  incomeLastMonthCents: number;
   incomeYtdCents: number;
   expenseMonthCents: number;
+  expenseLastMonthCents: number;
   expenseYtdCents: number;
   profitMonthCents: number;
+  profitLastMonthCents: number;
   profitYtdCents: number;
+  lastMonth: string;
   vatPayableCents: number;
   vatYtdCents: number;
   debtCents: number;
@@ -152,6 +158,35 @@ export type ConnectBlock = {
   detail: string;
 };
 
+export type SpotifyHistorySong = {
+  name: string;
+  id: string;
+  streams: number;
+  category: string;
+};
+
+export type SpotifyHistory = {
+  source: string;
+  kind: string;
+  scrapedAt: string;
+  artistId: string;
+  from: string;
+  to: string;
+  totalStreams: number;
+  last7: number;
+  last30: number;
+  ownStreams: number;
+  labelStreams: number;
+  months: Array<{ month: string; streams: number }>;
+  daily: Array<{ date: string; streams: number }>;
+  top: SpotifyHistorySong[];
+  distrokid: {
+    scrapedAt: string;
+    totalEarnedUsd: number;
+    balanceUsd: number;
+  };
+};
+
 export type OsSnapshot = {
   company: {
     name: string;
@@ -185,5 +220,6 @@ export type OsSnapshot = {
     popularity: number | null;
     name: string | null;
   } | null;
+  spotifyHistory: SpotifyHistory;
   connect: ConnectBlock[];
 };

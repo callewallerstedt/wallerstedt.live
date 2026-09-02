@@ -1,0 +1,244 @@
+{
+  "source": "callewallerstedt/spotifyanalytics",
+  "kind": "spotify-for-artists-scrape",
+  "scrapedAt": "2026-04-15",
+  "artistId": "7qBBYMwk5wXAjSXWWhPCxK",
+  "from": "2025-04-14",
+  "to": "2026-04-15",
+  "totalStreams": 21630138,
+  "last7": 343477,
+  "last30": 1658057,
+  "ownStreams": 10815255,
+  "labelStreams": 10814883,
+  "months": [
+    {
+      "month": "2025-04",
+      "streams": 861792
+    },
+    {
+      "month": "2025-05",
+      "streams": 1671049
+    },
+    {
+      "month": "2025-06",
+      "streams": 1533672
+    },
+    {
+      "month": "2025-07",
+      "streams": 1613561
+    },
+    {
+      "month": "2025-08",
+      "streams": 1547127
+    },
+    {
+      "month": "2025-09",
+      "streams": 2136995
+    },
+    {
+      "month": "2025-10",
+      "streams": 2332497
+    },
+    {
+      "month": "2025-11",
+      "streams": 2030470
+    },
+    {
+      "month": "2025-12",
+      "streams": 1747160
+    },
+    {
+      "month": "2026-01",
+      "streams": 1861306
+    },
+    {
+      "month": "2026-02",
+      "streams": 1724289
+    },
+    {
+      "month": "2026-03",
+      "streams": 1749129
+    },
+    {
+      "month": "2026-04",
+      "streams": 821091
+    }
+  ],
+  "daily": [
+    {
+      "date": "2026-03-17",
+      "streams": 61740
+    },
+    {
+      "date": "2026-03-18",
+      "streams": 54759
+    },
+    {
+      "date": "2026-03-19",
+      "streams": 51851
+    },
+    {
+      "date": "2026-03-20",
+      "streams": 48542
+    },
+    {
+      "date": "2026-03-21",
+      "streams": 52639
+    },
+    {
+      "date": "2026-03-22",
+      "streams": 54829
+    },
+    {
+      "date": "2026-03-23",
+      "streams": 59279
+    },
+    {
+      "date": "2026-03-24",
+      "streams": 64474
+    },
+    {
+      "date": "2026-03-25",
+      "streams": 64026
+    },
+    {
+      "date": "2026-03-26",
+      "streams": 53053
+    },
+    {
+      "date": "2026-03-27",
+      "streams": 45003
+    },
+    {
+      "date": "2026-03-28",
+      "streams": 47528
+    },
+    {
+      "date": "2026-03-29",
+      "streams": 48296
+    },
+    {
+      "date": "2026-03-30",
+      "streams": 61233
+    },
+    {
+      "date": "2026-03-31",
+      "streams": 69714
+    },
+    {
+      "date": "2026-04-01",
+      "streams": 78387
+    },
+    {
+      "date": "2026-04-02",
+      "streams": 69496
+    },
+    {
+      "date": "2026-04-03",
+      "streams": 50655
+    },
+    {
+      "date": "2026-04-04",
+      "streams": 47237
+    },
+    {
+      "date": "2026-04-05",
+      "streams": 50965
+    },
+    {
+      "date": "2026-04-06",
+      "streams": 71850
+    },
+    {
+      "date": "2026-04-07",
+      "streams": 63465
+    },
+    {
+      "date": "2026-04-08",
+      "streams": 45559
+    },
+    {
+      "date": "2026-04-09",
+      "streams": 44876
+    },
+    {
+      "date": "2026-04-10",
+      "streams": 58565
+    },
+    {
+      "date": "2026-04-11",
+      "streams": 60174
+    },
+    {
+      "date": "2026-04-12",
+      "streams": 57534
+    },
+    {
+      "date": "2026-04-13",
+      "streams": 58929
+    },
+    {
+      "date": "2026-04-14",
+      "streams": 63399
+    },
+    {
+      "date": "2026-04-15",
+      "streams": 0
+    }
+  ],
+  "top": [
+    {
+      "name": "Memories",
+      "id": "3v30vhrt2ujqzuUaOUf7vb",
+      "streams": 6177931,
+      "category": "label"
+    },
+    {
+      "name": "September - slowed + reverb",
+      "id": "4xtMWZQBhM4dTnzU1Up8jC",
+      "streams": 5808717,
+      "category": "own"
+    },
+    {
+      "name": "September",
+      "id": "7u4e9F9pKVUFZI4hs3jT3m",
+      "streams": 2683419,
+      "category": "own"
+    },
+    {
+      "name": "Serenity",
+      "id": "5OLculAkMkEHzuXi84NtQz",
+      "streams": 2120223,
+      "category": "label"
+    },
+    {
+      "name": "Memories - slowed + reverb",
+      "id": "78XMr0jQ3llU5T7FKbVOf7",
+      "streams": 1573432,
+      "category": "label"
+    },
+    {
+      "name": "dawn",
+      "id": "1Kr24EEP8zC9BlqF9yKGUU",
+      "streams": 546938,
+      "category": "label"
+    },
+    {
+      "name": "Emergence",
+      "id": "5OhUNwdgRLEPqrB3j04sjW",
+      "streams": 522530,
+      "category": "own"
+    },
+    {
+      "name": "hotline bling",
+      "id": "2z0VmDOXQ38oS4xFoT9H5F",
+      "streams": 328935,
+      "category": "own"
+    }
+  ],
+  "distrokid": {
+    "scrapedAt": "2026-04-15",
+    "totalEarnedUsd": 55083.75,
+    "balanceUsd": 0.0
+  }
+}
