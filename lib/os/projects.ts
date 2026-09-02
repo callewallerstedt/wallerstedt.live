@@ -21,7 +21,10 @@ function kindFor(name: string, description: string | null): ProjectRow["kind"] {
   return "other";
 }
 
-function matchLedger(name: string, ledger: LedgerSnapshot | null) {
+export function matchProjectLedger(
+  name: string,
+  ledger: Pick<LedgerSnapshot, "counterparties" | "expenses"> | null,
+) {
   if (!ledger) return { revenueCents: null as number | null, costCents: null as number | null };
   const needle = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
   if (needle.length < 4) return { revenueCents: null, costCents: null };
@@ -35,9 +38,12 @@ function matchLedger(name: string, ledger: LedgerSnapshot | null) {
       hit = true;
     }
   }
-  for (const row of [...ledger.recent, ...ledger.largestExpenses]) {
+  const seen = new Set<string>();
+  for (const row of ledger.expenses) {
+    if (row.kind !== "expense" || seen.has(row.id)) continue;
     const hay = row.description.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    if (hay.includes(needle) && row.kind === "expense") {
+    if (hay.includes(needle)) {
+      seen.add(row.id);
       costCents += row.amountCents;
       hit = true;
     }
@@ -66,7 +72,7 @@ export async function fetchGithubProjects(ledger: LedgerSnapshot | null): Promis
     .filter((repo) => !repo.fork)
     .slice(0, 24)
     .map((repo) => {
-      const money = matchLedger(repo.name, ledger);
+      const money = matchProjectLedger(repo.name, ledger);
       return {
         name: repo.name,
         status: repo.archived ? "archived" : "active",

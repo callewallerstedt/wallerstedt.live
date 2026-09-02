@@ -451,9 +451,9 @@ export function AccountingPage({ snapshot, accessKey }: { snapshot: OsSnapshot; 
           hint={ledger?.employerCents == null ? "Konto 2730 unused" : "Konto 2730"}
         />
         <KpiCard
-          label="Preliminärskatt"
+          label="Källskatt"
           value={ledger?.withholdingCents == null ? "—" : formatSek(ledger.withholdingCents)}
-          hint={ledger?.withholdingCents == null ? "Konto 2710 unused" : "Konto 2710"}
+          hint={ledger?.withholdingCents == null ? "Konto 2710 unused" : "Employee withholding · 2710"}
         />
         <KpiCard
           label="Corp tax estimate"
@@ -467,7 +467,11 @@ export function AccountingPage({ snapshot, accessKey }: { snapshot: OsSnapshot; 
         />
         <KpiCard label="Booked revenue YTD" value={ledger ? formatSek(ledger.incomeYtdCents) : "—"} />
         <KpiCard label="Booked expenses YTD" value={ledger ? formatSek(ledger.expenseYtdCents) : "—"} />
-        <KpiCard label="Dividend capacity" value={ledger ? formatSek(ledger.dividendCapacityCents) : "—"} hint="YTD after 20.6%. Not K10." />
+        <KpiCard
+          label="After-tax YTD"
+          value={ledger ? formatSek(ledger.afterTaxYtdCents) : "—"}
+          hint="Booked YTD − 20.6% estimate. Not distributable equity."
+        />
       </section>
       <Card>
         <CardHeader className="flex-row items-center justify-between">

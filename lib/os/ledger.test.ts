@@ -90,6 +90,8 @@ test("ledger snapshot uses booked posts only and labels missing receipts", () =>
   assert.equal(snapshot.incomeMonthCents, 100000);
   assert.equal(snapshot.expenseMonthCents, 20000);
   assert.equal(snapshot.profitYtdCents, 60000);
+  assert.equal(snapshot.afterTaxYtdCents, 60000 - Math.round(60000 * 0.206));
+  assert.equal(snapshot.expenses.length, 2);
   assert.equal(snapshot.bankCents, 10000);
   assert.equal(snapshot.kfDepositedCents, 50000);
   assert.equal(snapshot.ledgerAssetsCents, 60000);
@@ -161,7 +163,7 @@ test("alerts only fire from real ledger or repo signals", () => {
       corpTaxBookedCents: null,
       corpTaxEstimateCents: 0,
       cashAfterTaxCents: -100,
-      dividendCapacityCents: 0,
+      afterTaxYtdCents: 0,
       missingReceiptCount: 3,
       pendingDraftCount: 1,
       entryCount: 3,
@@ -176,6 +178,7 @@ test("alerts only fire from real ledger or repo signals", () => {
       accountingCents: 0,
       recurring: [],
       counterparties: [],
+      expenses: [],
       accountNames: {},
     },
   });
@@ -185,4 +188,51 @@ test("alerts only fire from real ledger or repo signals", () => {
   assert.ok(alerts.some((alert) => alert.id === "stale-callewallerstedt/design"));
   assert.ok(alerts.some((alert) => alert.title === "VAT approaching"));
   assert.ok(!alerts.some((alert) => /spotify down/i.test(alert.title)));
+});
+
+test("negative Utbetalning amounts count as expenses, like the vault", () => {
+  const snapshot = buildLedgerSnapshot(
+    [
+      {
+        id: "in-1",
+        date: "2026-09-01",
+        description: "Royalty",
+        debitAccount: 1930,
+        creditAccount: 3044,
+        debitName: "Företagskonto",
+        creditName: "Royalty",
+        amount: "1000.00",
+        vatAmount: "0",
+        type: "Inbetalning",
+        receiptRequired: false,
+        documentCount: 0,
+      },
+      {
+        id: "out-neg",
+        date: "2026-09-02",
+        description: "Adobe Creative Cloud",
+        debitAccount: 6540,
+        creditAccount: 1930,
+        debitName: "Programvara",
+        creditName: "Företagskonto",
+        amount: "-200.00",
+        vatAmount: "-40.00",
+        type: "Utbetalning",
+        receiptRequired: true,
+        documentCount: 1,
+      },
+    ],
+    [
+      { account: 1930, name: "Företagskonto" },
+      { account: 6540, name: "Programvara" },
+    ],
+    0,
+    "2026-09-02",
+  );
+
+  assert.equal(snapshot.expenseMonthCents, 20000);
+  assert.equal(snapshot.expenseYtdCents, 20000);
+  assert.equal(snapshot.profitYtdCents, 80000);
+  assert.equal(snapshot.vatPayableCents, -4000);
+  assert.equal(snapshot.softwareCents, 20000);
 });

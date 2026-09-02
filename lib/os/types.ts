@@ -86,7 +86,7 @@ export type LedgerSnapshot = {
   corpTaxBookedCents: number | null;
   corpTaxEstimateCents: number;
   cashAfterTaxCents: number;
-  dividendCapacityCents: number;
+  afterTaxYtdCents: number;
   missingReceiptCount: number;
   pendingDraftCount: number;
   entryCount: number;
@@ -101,6 +101,7 @@ export type LedgerSnapshot = {
   accountingCents: number;
   recurring: RecurringRow[];
   counterparties: CounterpartyRow[];
+  expenses: LedgerEntryRow[];
   accountNames: Record<number, string>;
 };
 

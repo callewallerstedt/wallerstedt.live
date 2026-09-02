@@ -56,6 +56,8 @@ export function normalizeLedgerEntries(entries: RawLedgerEntry[]): LedgerEntryRo
   return entries.map((entry) => {
     const kind = entryKind(entry.type);
     const documentCount = entry.documentCount;
+    const signedCents = moneyToCents(entry.amount);
+    const signedVatCents = moneyToCents(entry.vatAmount);
     return {
       id: entry.id,
       date: entryDate(entry.date),
@@ -64,8 +66,10 @@ export function normalizeLedgerEntries(entries: RawLedgerEntry[]): LedgerEntryRo
       creditAccount: entry.creditAccount,
       debitName: entry.debitName,
       creditName: entry.creditName,
-      amountCents: moneyToCents(entry.amount),
-      vatCents: moneyToCents(entry.vatAmount),
+      // Vault dashboard() uses amount.abs() for Utbetalning so a negative
+      // expense cannot shrink the expense total and inflate profit.
+      amountCents: kind === "expense" ? Math.abs(signedCents) : signedCents,
+      vatCents: kind === "expense" ? Math.abs(signedVatCents) : signedVatCents,
       type: entry.type ?? "",
       kind,
       receiptRequired: entry.receiptRequired,
@@ -303,7 +307,7 @@ export function buildLedgerSnapshot(
       : null,
     corpTaxEstimateCents,
     cashAfterTaxCents,
-    dividendCapacityCents: Math.max(0, profitYtdCents - corpTaxEstimateCents),
+    afterTaxYtdCents: profitYtdCents - corpTaxEstimateCents,
     missingReceiptCount: missingReceipts.length,
     pendingDraftCount,
     entryCount: entries.length,
@@ -318,6 +322,7 @@ export function buildLedgerSnapshot(
     accountingCents,
     recurring,
     counterparties: [...counterpartyMap.values()].sort((a, b) => b.cents - a.cents).slice(0, 12),
+    expenses,
     accountNames,
   };
 }
