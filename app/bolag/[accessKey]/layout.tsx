@@ -18,7 +18,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { accessKey } = await params;
   return {
-    title: "OS | Wallerstedt Productions AB",
+    title: "Bolag | Wallerstedt Productions AB",
     description: "Owner dashboard for Wallerstedt Productions AB.",
     referrer: "no-referrer",
     robots: { index: false, follow: false, noarchive: true, noimageindex: true },

@@ -1,6 +1,6 @@
 # wallerstedt.live
 
-Artist site for [Wallerstedt](https://wallerstedt.live), plus a private bookkeeping PWA at `/vault/<ACCOUNTING_ACCESS_KEY>` and an owner company OS at `/os/<ACCOUNTING_ACCESS_KEY>`. The OS reuses the vault session and ledger. It does not replace the PWA.
+Artist site for [Wallerstedt](https://wallerstedt.live), plus a private bookkeeping PWA at `/vault/<ACCOUNTING_ACCESS_KEY>` and an owner company dashboard at `/bolag/<ACCOUNTING_ACCESS_KEY>` on the same site. The dashboard reuses the vault session and ledger. It does not replace the PWA.
 
 ## Bookkeeping web push (iPhone Home Screen)
 

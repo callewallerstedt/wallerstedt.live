@@ -31,7 +31,7 @@ export function OsShell({
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
-  const slug = parts[0] === "os" ? (parts[2] ?? "") : "";
+  const slug = parts[0] === "bolag" ? (parts[2] ?? "") : "";
   const title = titles[slug] ?? "Overview";
 
   return (

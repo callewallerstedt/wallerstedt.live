@@ -19,7 +19,7 @@ export async function requireOsAccessKey(accessKey: string) {
 export async function hasOsSession(accessKey: string) {
   requireOsAccessKey(accessKey);
   const headerList = await headers();
-  const request = new Request("https://wallerstedt.live/os", {
+  const request = new Request("https://wallerstedt.live/bolag", {
     headers: {
       cookie: headerList.get("cookie") ?? "",
     },

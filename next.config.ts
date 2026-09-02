@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   typedRoutes: true,
+  async redirects() {
+    return [
+      { source: "/os/:path*", destination: "/bolag/:path*", permanent: false },
+    ];
+  },
   async headers() {
     const privateHeaders = [
       { key: "Cache-Control", value: "private, no-store, max-age=0" },
@@ -22,6 +27,10 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/os/:path*",
+        headers: privateHeaders,
+      },
+      {
+        source: "/bolag/:path*",
         headers: privateHeaders,
       },
       {
