@@ -3,8 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { cookies } from "next/headers";
-import { unstable_noStore as noStore } from "next/cache";
-
 import { artist } from "./artist";
 import { getCatalogSongs, type SongSlug } from "./site-data";
 
@@ -94,8 +92,6 @@ export function getAdminCookieName() {
 }
 
 export async function getSiteSettings() {
-  noStore();
-
   try {
     const raw = await readFile(settingsPath, "utf8");
     return await normalizeSettings(JSON.parse(raw) as Partial<SiteSettings>);

@@ -7,6 +7,13 @@ import type { Route } from "next";
 import { PlatformIcon } from "@/components/icons";
 import { getCatalogSongs, getReleaseForSongSlug, getSongBySlug, type SongSlug } from "@/lib/site-data";
 
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  const catalogSongs = await getCatalogSongs();
+  return catalogSongs.map((song) => ({ song: song.slug }));
+}
+
 const suggestedSongSlugs: SongSlug[] = ["september", "bon-voyage", "emergence", "solace"];
 const fallbackSongSlugs: SongSlug[] = ["midnight", "memories", "coalescence", "dawn"];
 

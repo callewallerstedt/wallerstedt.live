@@ -1,8 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { unstable_noStore as noStore } from "next/cache";
-
 import { artist } from "./artist";
 import songCatalog from "./song-catalog.json";
 
@@ -317,8 +315,6 @@ function buildCatalogReleases(entries: Song[]) {
 }
 
 export async function getCatalogSongs() {
-  noStore();
-
   try {
     const raw = await readFile(songCatalogPath, "utf8");
     return JSON.parse(raw) as Song[];
