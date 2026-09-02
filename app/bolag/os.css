@@ -43,6 +43,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-positive: var(--positive);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-soft: var(--brand-soft);
@@ -86,6 +87,7 @@ body:has(.os-root) > .footer {
   --accent: oklch(0.94 0 0);
   --accent-foreground: oklch(0.18 0 0);
   --destructive: oklch(0.52 0.18 28);
+  --positive: oklch(0.5 0.13 155);
   --os-border: oklch(0.88 0 0);
   --input: oklch(0.88 0 0);
   --ring: oklch(0.55 0 0);
@@ -134,6 +136,7 @@ body:has(.os-root) > .footer {
   --accent: oklch(0.23 0 0);
   --accent-foreground: oklch(0.98 0 0);
   --destructive: oklch(0.68 0.16 25);
+  --positive: oklch(0.78 0.14 158);
   --os-border: oklch(1 0 0 / 9%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.55 0 0);
@@ -186,6 +189,40 @@ body:has(.os-root) > .footer {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ============================================================
+   Bokföring inside the dashboard.
+
+   The vault is its own app with its own `--ac-*` design system. Rather than
+   rewriting it, the tokens are re-pointed at the OS palette so the embedded
+   copy follows the dashboard's theme and accent, and its chrome is reshaped to
+   fit inside the OS shell instead of duplicating it.
+   ============================================================ */
+
+.os-root .accounting-app {
+  --ac-bg: transparent;
+  --ac-card: var(--card);
+  --ac-card-soft: color-mix(in oklch, var(--card) 88%, var(--foreground) 12%);
+  --ac-inset: var(--muted);
+  --ac-inset-strong: color-mix(in oklch, var(--muted) 80%, var(--foreground) 20%);
+  --ac-ink: var(--foreground);
+  --ac-ink-dim: color-mix(in oklch, var(--foreground) 86%, transparent);
+  --ac-muted: var(--muted-foreground);
+  --ac-faint: color-mix(in oklch, var(--muted-foreground) 76%, transparent);
+  --ac-accent: var(--brand);
+  --ac-accent-ink: var(--brand-foreground);
+  --ac-shadow: none;
+  --ac-radius-sm: 8px;
+  --ac-radius-md: 12px;
+  --ac-radius-lg: 12px;
+  --ac-pad: 14px;
+  /* The vault's internal grids were designed around a phone-width column.
+     Keeping it near that width inside the dashboard avoids stretched tiles. */
+  --ac-max: 820px;
+  background: transparent;
+  font-family: var(--font-inter), Inter, sans-serif;
+}
+
+/* The OS shell already owns scrolling, the page background and the title. */
 .os-root .ac-shell--embedded {
   display: flex;
   flex-direction: column;
@@ -194,11 +231,7 @@ body:has(.os-root) > .footer {
   height: 100%;
   max-width: none;
   padding-bottom: 0;
-}
-
-.os-root .ac-shell--embedded .ac-topbar {
-  position: relative;
-  flex-shrink: 0;
+  background: transparent;
 }
 
 .os-root .ac-shell--embedded > .ac-page-wrap,
@@ -207,20 +240,188 @@ body:has(.os-root) > .footer {
   min-height: 0;
   overflow-y: auto;
   max-width: none;
+  width: 100%;
+  padding: 12px max(0.75rem, env(safe-area-inset-left)) calc(5.5rem + env(safe-area-inset-bottom));
 }
 
+@media (min-width: 768px) {
+  .os-root .ac-shell--embedded > .ac-page-wrap,
+  .os-root .ac-shell--embedded > .ac-view {
+    padding: 16px 20px 24px;
+  }
+}
+
+.os-root .ac-shell--embedded > .ac-page-wrap > *,
+.os-root .ac-shell--embedded > .ac-view > * {
+  max-width: var(--ac-max);
+  margin-inline: auto;
+}
+
+/* A slim toolbar, not a second app header: the OS header above it already
+   carries the brand and the section name. */
+.os-root .ac-shell--embedded .ac-topbar {
+  order: -2;
+  position: relative;
+  flex-shrink: 0;
+  padding-top: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid var(--os-border);
+}
+
+.os-root .ac-shell--embedded .ac-topbar-inner {
+  max-width: var(--ac-max);
+  padding: 8px 12px;
+}
+
+@media (min-width: 768px) {
+  .os-root .ac-shell--embedded .ac-topbar-inner {
+    padding: 8px 20px;
+  }
+}
+
+.os-root .ac-shell--embedded .ac-brand-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.os-root .accounting-app .ac-online-pill {
+  background: var(--muted);
+  border-radius: 999px;
+}
+
+.os-root .accounting-app .ac-icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--muted);
+}
+
+/* The vault's own tab bar becomes a segmented control directly under the
+   toolbar. Two stacked bottom bars on a phone is the layout bug this fixes. */
 .os-root .ac-shell--embedded .ac-bottom-nav {
+  order: -1;
   position: relative;
   left: auto;
   right: auto;
   bottom: auto;
+  z-index: auto;
   flex-shrink: 0;
+  padding-bottom: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid var(--os-border);
+}
+
+.os-root .ac-shell--embedded .ac-bottom-nav-inner {
+  max-width: var(--ac-max);
+  gap: 4px;
+  padding: 8px 12px;
+}
+
+@media (min-width: 768px) {
+  .os-root .ac-shell--embedded .ac-bottom-nav-inner {
+    padding: 8px 20px;
+    justify-items: start;
+    grid-template-columns: repeat(5, minmax(0, 8rem));
+  }
+}
+
+.os-root .ac-shell--embedded .ac-bottom-nav button {
+  flex-direction: row;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.os-root .ac-shell--embedded .ac-bottom-nav button .ac-nav-icon {
+  height: 20px;
+}
+
+.os-root .ac-shell--embedded .ac-bottom-nav button.is-active {
+  color: var(--foreground);
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--brand) 40%, transparent);
+}
+
+.os-root .ac-shell--embedded .ac-bottom-nav button.is-add .ac-nav-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--brand-gradient, var(--brand));
+  background-image: linear-gradient(135deg, var(--brand-from), var(--brand-to));
+  color: var(--brand-foreground);
+  margin-bottom: 0;
+}
+
+/* Cards inside the vault should read like OS cards: hairline ring, flat. */
+.os-root .accounting-app .ac-card,
+.os-root .accounting-app .ac-panel,
+.os-root .accounting-app .ac-tile {
+  box-shadow: inset 0 0 0 1px var(--os-border);
 }
 
 .os-root *,
 .os-root *::before,
 .os-root *::after {
   border-color: var(--os-border);
+}
+
+/* os.css imports Tailwind's theme and utilities but not its preflight, so bare
+   form controls would otherwise render with the browser's light default chrome
+   inside a dark dashboard. The reset lives in the theme layer, which is ordered
+   before utilities, so a `bg-*` utility still wins over it. */
+@layer theme {
+  .os-root :where(button, [type="button"], [type="submit"], [type="reset"]) {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .os-root :where(input, select, textarea) {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+  }
+
+  .os-root :where(select) {
+    appearance: none;
+    border: 0;
+    padding-right: 1.5rem;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 0.7rem center, right 0.45rem center;
+    background-size: 0.3rem 0.3rem, 0.3rem 0.3rem;
+    background-repeat: no-repeat;
+  }
+
+  .os-root :where(input[type="date"]) {
+    color-scheme: inherit;
+  }
+
+  .os-root :where(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+.os-root.dark {
+  color-scheme: dark;
+}
+
+.os-root:not(.dark) {
+  color-scheme: light;
 }
 
 .os-root h1,

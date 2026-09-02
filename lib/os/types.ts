@@ -127,12 +127,33 @@ export type ProjectRow = {
   kind: "music" | "site" | "ai" | "client" | "other";
 };
 
-export type AlertRow = {
+export type TaskArea = "company" | "money" | "music" | "project" | "admin";
+
+export type TaskRow = {
+  id: string;
+  title: string;
+  notes: string;
+  done: boolean;
+  priority: "low" | "normal" | "high";
+  area: TaskArea;
+  dueDate: string | null;
+  sortOrder: number;
+  completedAt: string | null;
+  createdAt: string;
+};
+
+/**
+ * Something the dashboard derived that the owner should act on, as opposed to a
+ * task they typed themselves. Always carries a link to where the work happens.
+ */
+export type ActionItem = {
   id: string;
   title: string;
   detail: string;
-  href?: string;
-  tone: "brand" | "warn" | "muted";
+  href: string | null;
+  date: string | null;
+  tone: "warn" | "brand" | "muted";
+  source: "receipts" | "drafts" | "tax" | "cash" | "project" | "release";
 };
 
 export type UpcomingRow = {
@@ -231,7 +252,9 @@ export type OsSnapshot = {
   projects: ProjectRow[];
   projectsError: string | null;
   releases: ReleaseRow[];
-  alerts: AlertRow[];
+  actions: ActionItem[];
+  tasks: TaskRow[];
+  tasksError: string | null;
   upcoming: UpcomingRow[];
   wealth: {
     source: string;

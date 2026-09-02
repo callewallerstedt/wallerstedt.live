@@ -2,6 +2,30 @@
 
 Artist site for [Wallerstedt](https://wallerstedt.live), plus a private bookkeeping PWA at `/vault/<ACCOUNTING_ACCESS_KEY>` and the owner company app at `/bolag/<ACCOUNTING_ACCESS_KEY>`. The company app is the canonical place for vault/bokföring plus the other owner tabs. Sign in with the same owner password. The secret key stays in the address bar. Bare `/bolag` is not a public page — missing or wrong keys 404 like `/vault`. The Home Screen PWA at `/vault/<key>` still works.
 
+## Company dashboard (`/bolag/<key>`)
+
+Six tabs, a collapsible sidebar on desktop and a fixed tab bar on phones:
+
+| Tab | What it holds |
+| --- | --- |
+| **Overview** | Safe-to-spend, cash, this month's revenue and result, the to-do list, what needs attention, the twelve-month trend and the latest entries |
+| **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead |
+| **Bokföring** | The full vault app, embedded in the dashboard shell |
+| **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
+| **Music** | Spotify for Artists export, DistroKid payouts and the release calendar |
+| **Projects** | Public GitHub repositories, matched to ledger revenue where names line up |
+
+`Content`, `Customers`, `Accounting`, `Investments`, `Wealth`, `Upcoming` and `Alerts` were merged into those six; their URLs redirect rather than 404.
+
+### Tasks need a migration
+
+The to-do list is stored in Postgres (`CompanyTask`). Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing:
+
+```bash
+npm run prisma:deploy
+```
+
+
 ## Bookkeeping web push (iPhone Home Screen)
 
 The accounting app can send a notification when a ledger post is created, edited, or deleted (from the vault, AI approval, the agent API, or desktop sync). Tapping the notice opens that post. If the post was deleted, the app shows a short “posten är raderad” state instead of a blank editor. iOS 16.4+ only delivers Web Push to a Home Screen PWA (`display: standalone`, a service worker, and permission from a tap). Safari tabs cannot subscribe. There is no permission prompt on first visit; the opt-in lives under **Mer**.

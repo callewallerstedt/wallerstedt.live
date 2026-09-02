@@ -1,22 +1,19 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { OsVault } from "@/components/os/vault";
 import {
-  AccountingPage,
-  AlertsPage,
-  ContentPage,
-  CustomersPage,
-  InvestmentsPage,
   MoneyPage,
   MusicPage,
   OverviewPage,
   ProjectsPage,
-  UpcomingPage,
-  WealthPage,
+  TasksPage,
 } from "@/components/os/pages";
 import { OsPageSkeleton } from "@/components/os/ui";
-import { resolveOsRoute, type OsPageSlug } from "@/lib/os/route";
+import { berlinYmd } from "@/lib/os/format";
+import { routeHref } from "@/lib/os/href";
+import { osPath } from "@/lib/os/paths";
+import { osLegacyTarget, resolveOsRoute, type OsPageSlug } from "@/lib/os/route";
 import { hasOsSession } from "@/lib/os/session";
 import { loadOsPage } from "@/lib/os/snapshot";
 
@@ -24,30 +21,19 @@ async function OsPageBody({ accessKey, page }: { accessKey: string; page: OsPage
   if (page === "vault") return <OsVault accessKey={accessKey} />;
   const snapshot = await loadOsPage(accessKey, page);
   if (!snapshot) return null;
+  const todayYmd = berlinYmd() ?? new Date().toISOString().slice(0, 10);
 
   switch (page) {
+    case "tasks":
+      return <TasksPage accessKey={accessKey} snapshot={snapshot} todayYmd={todayYmd} />;
     case "money":
-      return <MoneyPage snapshot={snapshot} accessKey={accessKey} />;
+      return <MoneyPage accessKey={accessKey} snapshot={snapshot} />;
     case "music":
-      return <MusicPage snapshot={snapshot} />;
-    case "content":
-      return <ContentPage snapshot={snapshot} />;
+      return <MusicPage snapshot={snapshot} todayYmd={todayYmd} />;
     case "projects":
       return <ProjectsPage snapshot={snapshot} />;
-    case "customers":
-      return <CustomersPage snapshot={snapshot} accessKey={accessKey} />;
-    case "accounting":
-      return <AccountingPage snapshot={snapshot} accessKey={accessKey} />;
-    case "investments":
-      return <InvestmentsPage snapshot={snapshot} />;
-    case "wealth":
-      return <WealthPage snapshot={snapshot} />;
-    case "upcoming":
-      return <UpcomingPage snapshot={snapshot} />;
-    case "alerts":
-      return <AlertsPage snapshot={snapshot} />;
     default:
-      return <OverviewPage snapshot={snapshot} accessKey={accessKey} />;
+      return <OverviewPage accessKey={accessKey} snapshot={snapshot} todayYmd={todayYmd} />;
   }
 }
 
@@ -58,7 +44,12 @@ export default async function Page({
 }) {
   const { accessKey, page: pageSlug } = await params;
   const resolved = resolveOsRoute(accessKey, pageSlug);
-  if (!resolved) notFound();
+  if (!resolved) {
+    // A tab that was merged into another one keeps working instead of 404ing.
+    const legacy = osLegacyTarget(pageSlug);
+    if (legacy !== null && accessKey?.trim()) redirect(routeHref(osPath(accessKey.trim(), legacy)));
+    notFound();
+  }
   if (!(await hasOsSession(resolved.accessKey))) return null;
 
   return (

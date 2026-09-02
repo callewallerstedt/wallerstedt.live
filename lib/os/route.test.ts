@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { osPath } from "./paths";
-import { configuredOsAccessKey, isOsPageSlug, osPageFromPathname, resolveOsRoute } from "./route";
+import {
+  configuredOsAccessKey,
+  isOsPageSlug,
+  osLegacyTarget,
+  osPageFromPathname,
+  resolveOsRoute,
+} from "./route";
 
 const key = "secret-accounting-access-key";
 
@@ -28,9 +34,9 @@ test("/bolag/<key>/<page> keeps the key in the route", () => {
     accessKey: key,
     page: "money",
   });
-  assert.deepEqual(resolveOsRoute(key, ["wealth"]), {
+  assert.deepEqual(resolveOsRoute(key, ["tasks"]), {
     accessKey: key,
-    page: "wealth",
+    page: "tasks",
   });
   assert.deepEqual(resolveOsRoute(key, ["vault"]), {
     accessKey: key,
@@ -40,7 +46,7 @@ test("/bolag/<key>/<page> keeps the key in the route", () => {
 
 test("page slugs without a key are not valid dashboard routes", () => {
   assert.equal(resolveOsRoute(undefined, ["money"]), null);
-  assert.equal(resolveOsRoute("", ["accounting"]), null);
+  assert.equal(resolveOsRoute("", ["tasks"]), null);
 });
 
 test("unknown nested paths are rejected", () => {
@@ -52,8 +58,21 @@ test("osPath keeps the access key in the path like /vault/<key>", () => {
   assert.equal(osPath(key), `/bolag/${key}`);
   assert.equal(osPath(key, ""), `/bolag/${key}`);
   assert.equal(osPath(key, "money"), `/bolag/${key}/money`);
-  assert.equal(osPath(key, "alerts"), `/bolag/${key}/alerts`);
+  assert.equal(osPath(key, "tasks"), `/bolag/${key}/tasks`);
   assert.equal(osPath(key, "vault"), `/bolag/${key}/vault`);
+});
+
+test("retired tabs redirect into the tab that absorbed them", () => {
+  assert.equal(osLegacyTarget(["alerts"]), "tasks");
+  assert.equal(osLegacyTarget(["upcoming"]), "tasks");
+  assert.equal(osLegacyTarget(["accounting"]), "money");
+  assert.equal(osLegacyTarget(["wealth"]), "money");
+  assert.equal(osLegacyTarget(["customers"]), "money");
+  assert.equal(osLegacyTarget(["investments"]), "money");
+  assert.equal(osLegacyTarget(["content"]), "music");
+  assert.equal(osLegacyTarget(["money"]), null);
+  assert.equal(osLegacyTarget(["nope"]), null);
+  assert.equal(osLegacyTarget(undefined), null);
 });
 
 test("configuredOsAccessKey trims ACCOUNTING_ACCESS_KEY", () => {
@@ -74,9 +93,9 @@ test("sidebar titles read the page after the access key", () => {
   assert.equal(osPageFromPathname("/bolag/"), "");
   assert.equal(osPageFromPathname("/bolag/money"), "");
   assert.equal(osPageFromPathname(`/bolag/${key}`), "");
-  assert.equal(osPageFromPathname(`/bolag/${key}/alerts`), "alerts");
+  assert.equal(osPageFromPathname(`/bolag/${key}/tasks`), "tasks");
   assert.equal(osPageFromPathname(`/bolag/${key}/vault`), "vault");
-  assert.equal(osPageFromPathname(`/os/${key}/upcoming`), "upcoming");
+  assert.equal(osPageFromPathname(`/os/${key}/music`), "music");
   assert.equal(isOsPageSlug("money"), true);
   assert.equal(isOsPageSlug(key), false);
 });

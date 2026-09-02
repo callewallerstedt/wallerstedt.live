@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { OsLogin } from "@/components/os/login";
 import { OsProviders } from "@/components/os/providers";
 import { OsShell } from "@/components/os/shell";
 import { hasOsSession, requireOsAccessKey } from "@/lib/os/session";
+import { openTaskCount } from "@/lib/os/tasks";
 
 import "../os.css";
 
@@ -52,11 +52,18 @@ export default async function OsLayout({
   const { accessKey } = await params;
   await requireOsAccessKey(accessKey);
   const signedIn = await hasOsSession(accessKey);
+  const taskCount = signedIn ? await openTaskCount() : 0;
 
   return (
     <div className="os-root dark" data-accent="ember">
       <OsProviders>
-        {signedIn ? <OsShell accessKey={accessKey}>{children}</OsShell> : <OsLogin accessKey={accessKey} />}
+        {signedIn ? (
+          <OsShell accessKey={accessKey} taskCount={taskCount}>
+            {children}
+          </OsShell>
+        ) : (
+          <OsLogin accessKey={accessKey} />
+        )}
       </OsProviders>
     </div>
   );

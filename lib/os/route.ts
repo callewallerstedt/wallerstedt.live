@@ -3,18 +3,26 @@ export function configuredOsAccessKey() {
 }
 
 export const OS_PAGE_SLUGS = [
+  "tasks",
   "vault",
   "money",
   "music",
-  "content",
   "projects",
-  "customers",
-  "accounting",
-  "investments",
-  "wealth",
-  "upcoming",
-  "alerts",
 ] as const;
+
+/**
+ * Pages that used to have their own tab. They still resolve so old links,
+ * bookmarks and the iOS home-screen shortcut do not 404 after the merge.
+ */
+export const OS_LEGACY_REDIRECTS: Record<string, (typeof OS_PAGE_SLUGS)[number] | ""> = {
+  content: "music",
+  customers: "money",
+  accounting: "money",
+  investments: "money",
+  wealth: "money",
+  upcoming: "tasks",
+  alerts: "tasks",
+};
 
 export type OsPageSlug = (typeof OS_PAGE_SLUGS)[number] | "";
 
@@ -31,6 +39,17 @@ export function osPageFromPathname(pathname: string): OsPageSlug {
   if (rest.length < 2) return "";
   if (isOsPageSlug(rest[1])) return rest[1];
   return "";
+}
+
+/**
+ * A retired slug maps to the tab that absorbed it, so old bookmarks land on the
+ * page that now holds that content instead of a 404.
+ */
+export function osLegacyTarget(page: string[] | undefined): OsPageSlug | null {
+  const parts = (page ?? []).filter(Boolean);
+  if (parts.length !== 1) return null;
+  const target = OS_LEGACY_REDIRECTS[parts[0]!];
+  return target === undefined ? null : target;
 }
 
 export function resolveOsRoute(

@@ -4,7 +4,7 @@ import test from "node:test";
 import { buildLedgerSnapshot, entryKind } from "./ledger";
 import { lastNMonths, moneyToCents, monthEndYmd } from "./format";
 import { quarterlyVatDeadlines, nextMonthlyTaxDate } from "./calendar";
-import { buildAlerts } from "./alerts";
+import { buildActions } from "./actions";
 
 test("entry kinds follow the Swedish ledger types", () => {
   assert.equal(entryKind("Inbetalning"), "income");
@@ -122,8 +122,8 @@ test("VAT calendar stays on the 12th and does not invent amounts", () => {
   assert.equal(nextMonthlyTaxDate("2026-09-12"), "2026-10-12");
 });
 
-test("alerts only fire from real ledger or repo signals", () => {
-  const alerts = buildAlerts({
+test("actions only fire from real ledger or repo signals", () => {
+  const actions = buildActions({
     nowYmd: "2026-09-02",
     vaultBase: "/vault/key",
     upcoming: [
@@ -199,11 +199,17 @@ test("alerts only fire from real ledger or repo signals", () => {
     },
   });
 
-  assert.ok(alerts.some((alert) => alert.id === "receipts-missing"));
-  assert.ok(alerts.some((alert) => alert.id === "bank-negative"));
-  assert.ok(alerts.some((alert) => alert.id === "stale-callewallerstedt/design"));
-  assert.ok(alerts.some((alert) => alert.title === "VAT approaching"));
-  assert.ok(!alerts.some((alert) => /spotify down/i.test(alert.title)));
+  assert.ok(actions.some((action) => action.id === "receipts"));
+  assert.ok(actions.some((action) => action.id === "drafts"));
+  assert.ok(actions.some((action) => action.id === "bank-negative"));
+  assert.ok(actions.some((action) => action.id === "stale-callewallerstedt/design"));
+  assert.ok(actions.some((action) => action.id === "tax-vat"));
+  assert.ok(!actions.some((action) => /spotify/i.test(action.title)));
+  // Urgent money problems sort above a quiet repo.
+  assert.ok(
+    actions.findIndex((action) => action.id === "receipts") <
+      actions.findIndex((action) => action.id === "stale-callewallerstedt/design"),
+  );
 });
 
 test("negative Utbetalning amounts count as expenses, like the vault", () => {

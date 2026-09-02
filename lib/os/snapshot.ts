@@ -4,7 +4,7 @@ import { listAccounts } from "@/lib/accounting/service";
 import { getAccountingDb } from "@/lib/accounting/db";
 import { catalogSongs } from "@/lib/site-data";
 
-import { buildAlerts } from "./alerts";
+import { buildActions } from "./actions";
 import { taxUpcoming } from "./calendar";
 import { COMPANY } from "./company";
 import { berlinYmd, parseCatalogDate } from "./format";
@@ -19,6 +19,7 @@ import { osPath } from "./paths";
 import type { OsPageSlug } from "./route";
 import { hasOsSession } from "./session";
 import { loadSpotifyHistory } from "./spotify-history";
+import { listTasks } from "./tasks";
 import { connectBlocks, detectSources, sourceById } from "./sources";
 import type { LedgerSnapshot, OsSnapshot, ReleaseRow, UpcomingRow } from "./types";
 import { loadPersonalWealth, loadSpotifyArtist } from "./wealth";
@@ -112,7 +113,9 @@ function emptySnapshot(overrides: Partial<OsSnapshot> = {}): OsSnapshot {
     projects: [],
     projectsError: null,
     releases: catalogReleases(todayYmd()),
-    alerts: [],
+    actions: [],
+    tasks: [],
+    tasksError: null,
     upcoming: [],
     wealth: null,
     spotify: null,
@@ -184,29 +187,27 @@ export const loadWealthBundle = cache(async () => {
 
 export async function loadOverviewSnapshot(accessKey: string): Promise<OsSnapshot> {
   const nowYmd = todayYmd();
-  const [ledgerBundle, projectBundle, spotify] = await Promise.all([
+  const [ledgerBundle, projectBundle, taskBundle] = await Promise.all([
     loadLedgerBundle(),
     loadProjectBundle(),
-    loadSpotifyBundle(),
+    listTasks(),
   ]);
   const upcoming = buildUpcoming(accessKey, ledgerBundle.ledger, nowYmd);
+  const context = {
+    ledger: ledgerBundle.ledger,
+    projects: projectBundle.projects,
+    upcoming,
+    nowYmd,
+    vaultBase: vaultBase(accessKey),
+  };
   return emptySnapshot({
     ...ledgerBundle,
     ...projectBundle,
-    spotify,
+    tasks: taskBundle.tasks,
+    tasksError: taskBundle.error,
     upcoming,
-    alerts: buildAlerts({
-      ledger: ledgerBundle.ledger,
-      projects: projectBundle.projects,
-      upcoming,
-      nowYmd,
-      vaultBase: vaultBase(accessKey),
-    }),
+    actions: buildActions(context),
   });
-}
-
-export async function loadLedgerOnlySnapshot(): Promise<OsSnapshot> {
-  return emptySnapshot(await loadLedgerBundle());
 }
 
 export async function loadMusicSnapshot(): Promise<OsSnapshot> {
@@ -222,50 +223,19 @@ export async function loadWealthSnapshot(): Promise<OsSnapshot> {
   return emptySnapshot({ ...ledgerBundle, wealth });
 }
 
-export async function loadUpcomingSnapshot(accessKey: string): Promise<OsSnapshot> {
-  const ledgerBundle = await loadLedgerBundle();
-  return emptySnapshot({
-    ...ledgerBundle,
-    upcoming: buildUpcoming(accessKey, ledgerBundle.ledger, todayYmd()),
-  });
-}
-
-export async function loadAlertsSnapshot(accessKey: string): Promise<OsSnapshot> {
-  const nowYmd = todayYmd();
-  const [ledgerBundle, projectBundle] = await Promise.all([loadLedgerBundle(), loadProjectBundle()]);
-  const upcoming = buildUpcoming(accessKey, ledgerBundle.ledger, nowYmd);
-  return emptySnapshot({
-    ...ledgerBundle,
-    ...projectBundle,
-    upcoming,
-    alerts: buildAlerts({
-      ledger: ledgerBundle.ledger,
-      projects: projectBundle.projects,
-      upcoming,
-      nowYmd,
-      vaultBase: vaultBase(accessKey),
-    }),
-  });
-}
-
 export async function loadPageSnapshot(accessKey: string, page: OsPageSlug): Promise<OsSnapshot> {
   switch (page) {
     case "music":
-    case "content":
       return loadMusicSnapshot();
     case "projects":
       return loadProjectsSnapshot();
-    case "wealth":
-      return loadWealthSnapshot();
-    case "upcoming":
-      return loadUpcomingSnapshot(accessKey);
-    case "alerts":
-      return loadAlertsSnapshot(accessKey);
+    // Money absorbed Tax, Work, Invest and Wealth, so it needs the trading book
+    // alongside the ledger.
     case "money":
-    case "customers":
-    case "accounting":
-    case "investments":
-      return loadLedgerOnlySnapshot();
+      return loadWealthSnapshot();
+    // Tasks shows the same derived work queue the Overview summarises.
+    case "tasks":
+      return loadOverviewSnapshot(accessKey);
     default:
       return loadOverviewSnapshot(accessKey);
   }
