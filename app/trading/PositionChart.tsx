@@ -46,6 +46,9 @@ export function PositionChart({
           </strong>
           <small>
             fill {formatPrice(position.fill)} {fillClock} · R {metrics.rMultiple.toFixed(2)}
+            {metrics.prePct != null
+              ? ` · pre ${formatSignedPct(metrics.prePct)}${metrics.prePrice != null ? ` ${formatPrice(metrics.prePrice)}` : ""}`
+              : ""}
           </small>
         </div>
         <div className="trading-chart__legend">
