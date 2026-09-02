@@ -38,6 +38,8 @@ export type MonthPoint = {
   incomeCents: number;
   expenseCents: number;
   resultCents: number;
+  bankCents: number;
+  kfCents: number;
 };
 
 export type CategoryRow = {
@@ -69,11 +71,15 @@ export type LedgerSnapshot = {
   year: string;
   month: string;
   incomeMonthCents: number;
+  incomeLastMonthCents: number;
   incomeYtdCents: number;
   expenseMonthCents: number;
+  expenseLastMonthCents: number;
   expenseYtdCents: number;
   profitMonthCents: number;
+  profitLastMonthCents: number;
   profitYtdCents: number;
+  lastMonth: string;
   vatPayableCents: number;
   vatYtdCents: number;
   debtCents: number;
@@ -152,6 +158,67 @@ export type ConnectBlock = {
   detail: string;
 };
 
+export type SpotifyHistorySong = {
+  name: string;
+  id: string;
+  streams: number;
+  category: string;
+  avgDaily: number;
+};
+
+export type SpotifyHistory = {
+  source: string;
+  kind: string;
+  pulledVia: string;
+  scrapedAt: string;
+  artistId: string;
+  from: string;
+  to: string;
+  throughLabel: string;
+  totalStreams: number;
+  ownStreams: number;
+  labelStreams: number;
+  lastCompleteDay: string;
+  lastCompleteOwn: number;
+  last7Own: number;
+  last30Own: number;
+  last7: number;
+  last30: number;
+  ratePerStreamUsd: number;
+  estimatedOwnEarningsUsd: number;
+  months: Array<{ month: string; own: number; label: number; total: number }>;
+  daily: Array<{ date: string; own: number; label: number }>;
+  top: SpotifyHistorySong[];
+  memories: {
+    name: string;
+    id: string;
+    streams: number;
+    firstDayStreams: number;
+    avgDaily: number;
+    from: string;
+    to: string;
+    category: string;
+  };
+  distrokid: {
+    scrapedAt: string;
+    generated: string;
+    totalEarnedUsd: number;
+    balanceUsd: number;
+    spotifyQty: number;
+    spotifyEarnUsd: number;
+    stores: Array<{ store: string; qty: number; earnUsd: number }>;
+  };
+  csvVerified: {
+    source: string;
+    matches: string;
+    from: string;
+    to: string;
+    days: number;
+    ownTotal: number;
+    ownLastDay: number;
+  };
+};
+
 export type OsSnapshot = {
   company: {
     name: string;
@@ -185,5 +252,6 @@ export type OsSnapshot = {
     popularity: number | null;
     name: string | null;
   } | null;
+  spotifyHistory: SpotifyHistory;
   connect: ConnectBlock[];
 };

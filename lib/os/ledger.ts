@@ -1,7 +1,7 @@
 import { calculateAccountBalances, calculateSelectedAccountBalances } from "@/lib/accounting/balances";
 
 import { COMPANY, LEDGER_BALANCE_ACCOUNTS } from "./company";
-import { lastNMonths, moneyToCents, monthKey, yearKey } from "./format";
+import { lastNMonths, moneyToCents, monthEndYmd, monthKey, yearKey } from "./format";
 import type {
   CategoryRow,
   CounterpartyRow,
@@ -127,6 +127,33 @@ function counterpartyName(entry: LedgerEntryRow) {
   return text || "Okänd";
 }
 
+function runningAccountByMonth(
+  rawEntries: RawLedgerEntry[],
+  monthKeys: string[],
+  nowYmd: string,
+  account: number,
+) {
+  const dated = rawEntries
+    .map((entry) => ({ entry, date: entryDate(entry.date) }))
+    .filter((row): row is { entry: RawLedgerEntry; date: string } => Boolean(row.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const result = new Map<string, number>();
+  let balance = 0;
+  let index = 0;
+  for (const key of monthKeys) {
+    const end = monthEndYmd(key);
+    const cutoff = end > nowYmd ? nowYmd : end;
+    while (index < dated.length && dated[index]!.date <= cutoff) {
+      const amount = moneyToCents(dated[index]!.entry.amount);
+      if (dated[index]!.entry.debitAccount === account) balance += amount;
+      if (dated[index]!.entry.creditAccount === account) balance -= amount;
+      index += 1;
+    }
+    result.set(key, balance);
+  }
+  return result;
+}
+
 export function buildLedgerSnapshot(
   rawEntries: RawLedgerEntry[],
   accounts: LedgerAccount[],
@@ -143,20 +170,28 @@ export function buildLedgerSnapshot(
   const expenses = entries.filter((entry) => entry.kind === "expense");
   const debtEntries = entries.filter((entry) => entry.kind === "debt");
 
+  const lastMonth = monthKeys[monthKeys.length - 2] ?? month;
   const incomeMonth = income.filter((entry) => inMonth(entry, month));
+  const incomeLastMonth = income.filter((entry) => inMonth(entry, lastMonth));
   const incomeYtd = income.filter((entry) => inYear(entry, year));
   const expenseMonth = expenses.filter((entry) => inMonth(entry, month));
+  const expenseLastMonth = expenses.filter((entry) => inMonth(entry, lastMonth));
   const expenseYtd = expenses.filter((entry) => inYear(entry, year));
 
   const incomeMonthCents = sum(incomeMonth, (entry) => entry.amountCents);
+  const incomeLastMonthCents = sum(incomeLastMonth, (entry) => entry.amountCents);
   const incomeYtdCents = sum(incomeYtd, (entry) => entry.amountCents);
   const expenseMonthCents = sum(expenseMonth, (entry) => entry.amountCents);
+  const expenseLastMonthCents = sum(expenseLastMonth, (entry) => entry.amountCents);
   const expenseYtdCents = sum(expenseYtd, (entry) => entry.amountCents);
   const profitYtdCents = incomeYtdCents - expenseYtdCents;
   const vatPayableCents =
     sum(income, (entry) => entry.vatCents) - sum(expenses, (entry) => entry.vatCents);
   const vatYtdCents =
     sum(incomeYtd, (entry) => entry.vatCents) - sum(expenseYtd, (entry) => entry.vatCents);
+
+  const bankByMonth = runningAccountByMonth(rawEntries, monthKeys, nowYmd, COMPANY.accounts.bank);
+  const kfByMonth = runningAccountByMonth(rawEntries, monthKeys, nowYmd, COMPANY.accounts.capitalInsurance);
 
   const months: MonthPoint[] = monthKeys.map((key) => {
     const incomeCents = sum(
@@ -172,6 +207,8 @@ export function buildLedgerSnapshot(
       incomeCents,
       expenseCents,
       resultCents: incomeCents - expenseCents,
+      bankCents: bankByMonth.get(key) ?? 0,
+      kfCents: kfByMonth.get(key) ?? 0,
     };
   });
 
@@ -282,11 +319,15 @@ export function buildLedgerSnapshot(
     year,
     month,
     incomeMonthCents,
+    incomeLastMonthCents,
     incomeYtdCents,
     expenseMonthCents,
+    expenseLastMonthCents,
     expenseYtdCents,
     profitMonthCents: incomeMonthCents - expenseMonthCents,
+    profitLastMonthCents: incomeLastMonthCents - expenseLastMonthCents,
     profitYtdCents,
+    lastMonth,
     vatPayableCents,
     vatYtdCents,
     debtCents: sum(debtEntries, (entry) => entry.amountCents),
@@ -312,7 +353,7 @@ export function buildLedgerSnapshot(
     pendingDraftCount,
     entryCount: entries.length,
     months,
-    recent: entries.slice(0, 12),
+    recent: entries.slice(0, 20),
     missingReceipts: missingReceipts.slice(0, 20),
     largestExpenses: ytdExpenses.slice(0, 10),
     categories: [...categoryMap.values()].sort((a, b) => b.cents - a.cents).slice(0, 12),

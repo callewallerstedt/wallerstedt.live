@@ -18,6 +18,7 @@ import {
 import { osPath } from "./paths";
 import type { OsPageSlug } from "./route";
 import { hasOsSession } from "./session";
+import { loadSpotifyHistory } from "./spotify-history";
 import { connectBlocks, detectSources, sourceById } from "./sources";
 import type { LedgerSnapshot, OsSnapshot, ReleaseRow, UpcomingRow } from "./types";
 import { loadPersonalWealth, loadSpotifyArtist } from "./wealth";
@@ -115,6 +116,7 @@ function emptySnapshot(overrides: Partial<OsSnapshot> = {}): OsSnapshot {
     upcoming: [],
     wealth: null,
     spotify: null,
+    spotifyHistory: loadSpotifyHistory(),
     connect: connectBlocks(sources),
     ...overrides,
   };

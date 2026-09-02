@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildLedgerSnapshot, entryKind } from "./ledger";
-import { lastNMonths, moneyToCents } from "./format";
+import { lastNMonths, moneyToCents, monthEndYmd } from "./format";
 import { quarterlyVatDeadlines, nextMonthlyTaxDate } from "./calendar";
 import { buildAlerts } from "./alerts";
 
@@ -89,11 +89,23 @@ test("ledger snapshot uses booked posts only and labels missing receipts", () =>
 
   assert.equal(snapshot.incomeMonthCents, 100000);
   assert.equal(snapshot.expenseMonthCents, 20000);
+  assert.equal(snapshot.lastMonth, "2026-08");
+  assert.equal(snapshot.incomeLastMonthCents, 0);
+  assert.equal(snapshot.expenseLastMonthCents, 20000);
+  assert.equal(snapshot.profitLastMonthCents, -20000);
   assert.equal(snapshot.profitYtdCents, 60000);
   assert.equal(snapshot.afterTaxYtdCents, 60000 - Math.round(60000 * 0.206));
   assert.equal(snapshot.expenses.length, 2);
   assert.equal(snapshot.bankCents, 10000);
   assert.equal(snapshot.kfDepositedCents, 50000);
+  const july = snapshot.months.find((row) => row.month === "2026-07");
+  const august = snapshot.months.find((row) => row.month === "2026-08");
+  const september = snapshot.months.find((row) => row.month === "2026-09");
+  assert.equal(july?.bankCents, -50000);
+  assert.equal(july?.kfCents, 50000);
+  assert.equal(august?.bankCents, -70000);
+  assert.equal(september?.bankCents, 10000);
+  assert.equal(monthEndYmd("2026-09"), "2026-09-30");
   assert.equal(snapshot.ledgerAssetsCents, 60000);
   assert.equal(snapshot.missingReceiptCount, 1);
   assert.equal(snapshot.softwareCents, 40000);
@@ -146,11 +158,15 @@ test("alerts only fire from real ledger or repo signals", () => {
       year: "2026",
       month: "2026-09",
       incomeMonthCents: 0,
+      incomeLastMonthCents: 0,
       incomeYtdCents: 0,
       expenseMonthCents: 0,
+      expenseLastMonthCents: 0,
       expenseYtdCents: 0,
       profitMonthCents: 0,
+      profitLastMonthCents: 0,
       profitYtdCents: 0,
+      lastMonth: "2026-08",
       vatPayableCents: 0,
       vatYtdCents: 0,
       debtCents: 0,
@@ -235,4 +251,36 @@ test("negative Utbetalning amounts count as expenses, like the vault", () => {
   assert.equal(snapshot.profitYtdCents, 80000);
   assert.equal(snapshot.vatPayableCents, -4000);
   assert.equal(snapshot.softwareCents, 20000);
+});
+
+test("spotify history is the S4A scrape, not invented stream counts", async () => {
+  const { loadSpotifyHistory } = await import("./spotify-history");
+  const history = loadSpotifyHistory();
+  assert.equal(history.source, "callewallerstedt/spotifyanalytics");
+  assert.equal(history.scrapedAt, "2026-04-15");
+  assert.equal(history.throughLabel, "through Apr 2026");
+  assert.equal(history.from, "2025-04-14");
+  assert.equal(history.to, "2026-04-14");
+  assert.equal(history.totalStreams, 21630138);
+  assert.equal(history.ownStreams, 10815255);
+  assert.equal(history.labelStreams, 10814883);
+  assert.equal(history.lastCompleteOwn, 38427);
+  assert.equal(history.memories.name, "Memories");
+  assert.equal(history.memories.firstDayStreams, 16236);
+  assert.equal(history.memories.streams, 6177931);
+  assert.equal(history.ratePerStreamUsd, 0.00294);
+  assert.equal(history.estimatedOwnEarningsUsd, 31796.85);
+  assert.equal(history.distrokid.spotifyQty, 23845399);
+  assert.equal(history.distrokid.spotifyEarnUsd, 40021.17);
+  assert.equal(history.csvVerified.days, 364);
+  assert.equal(history.csvVerified.ownTotal, 10654264);
+  assert.equal(history.csvVerified.ownLastDay, 32702);
+  assert.equal(
+    history.daily.reduce((sum, row) => sum + row.own + row.label, 0),
+    history.totalStreams,
+  );
+  assert.equal(
+    history.months.reduce((sum, row) => sum + row.total, 0),
+    history.totalStreams,
+  );
 });

@@ -67,15 +67,19 @@ export function TrendChart({
   values,
   labels,
   label = "Trend",
+  compact = false,
 }: {
   values: number[];
   labels: string[];
   label?: string;
+  compact?: boolean;
 }) {
   const id = useId().replace(/:/g, "")
   const width = 640
-  const height = 220
-  const pad = { l: 52, r: 12, t: 16, b: 28 }
+  const height = compact ? 80 : 220
+  const pad = compact
+    ? { l: 36, r: 8, t: 4, b: 16 }
+    : { l: 52, r: 12, t: 16, b: 28 }
   const innerW = width - pad.l - pad.r
   const innerH = height - pad.t - pad.b
   if (values.length < 2) {
@@ -97,7 +101,7 @@ export function TrendChart({
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className="h-full w-full"
+      className={compact ? "h-20 w-full" : "h-full w-full"}
       role="img"
       aria-label={label}
     >
@@ -138,12 +142,135 @@ export function TrendChart({
         strokeLinecap="round"
       />
       {labels.map((item, index) => {
+        if (compact && index % 3 !== 0 && index !== labels.length - 1) return null
         const x = pad.l + (index / (labels.length - 1)) * innerW
         return (
           <text
             key={`${item}-${index}`}
             x={x}
-            y={height - 8}
+            y={height - 4}
+            textAnchor="middle"
+            className="fill-muted-foreground"
+            fontSize="10"
+            fontFamily="var(--font-inter)"
+          >
+            {item}
+          </text>
+        )
+      })}
+    </svg>
+  )
+}
+
+export function DualTrendChart({
+  labels,
+  series,
+  unit = "sek",
+  compact = false,
+}: {
+  labels: string[];
+  series: Array<{
+    key: string;
+    label: string;
+    values: number[];
+    tone?: "brand" | "muted";
+    fill?: boolean;
+  }>;
+  unit?: "sek" | "count";
+  compact?: boolean;
+}) {
+  const id = useId().replace(/:/g, "")
+  const width = 640
+  const height = compact ? 104 : 148
+  const pad = compact
+    ? { l: 34, r: 8, t: 8, b: 18 }
+    : { l: 40, r: 10, t: 10, b: 20 }
+  const innerW = width - pad.l - pad.r
+  const innerH = height - pad.t - pad.b
+  const values = series.flatMap((item) => item.values)
+  if (values.length < 2 || series[0]?.values.length < 2) return null
+  const min = Math.min(0, ...values)
+  const max = Math.max(...values, 0)
+  const span = max - min || 1
+  const ticks = [max, (max + min) / 2, min]
+  const formatTick = (tick: number) =>
+    new Intl.NumberFormat("sv-SE", { notation: "compact", maximumFractionDigits: 1 }).format(
+      unit === "sek" ? tick / 100 : tick,
+    )
+  const pointsFor = (itemValues: number[]) =>
+    itemValues.map((value, index) => {
+      const x = pad.l + (index / (itemValues.length - 1)) * innerW
+      const y = pad.t + innerH - ((value - min) / span) * innerH
+      return [x, y] as const
+    })
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className={compact ? "h-28 w-full" : "h-36 w-full"}
+      role="img"
+      aria-label={series.map((item) => item.label).join(" vs ")}
+    >
+      <BrandGradientDefs id={id} />
+      {ticks.map((tick) => {
+        const y = pad.t + innerH - ((tick - min) / span) * innerH
+        return (
+          <g key={tick}>
+            <line
+              x1={pad.l}
+              x2={width - pad.r}
+              y1={y}
+              y2={y}
+              stroke="currentColor"
+              className="text-border"
+              strokeWidth="1"
+            />
+            <text
+              x={pad.l - 6}
+              y={y + 3}
+              textAnchor="end"
+              className="fill-muted-foreground"
+              fontSize="10"
+              fontFamily="var(--font-inter)"
+            >
+              {formatTick(tick)}
+            </text>
+          </g>
+        )
+      })}
+      {series.map((item, seriesIndex) => {
+        const points = pointsFor(item.values)
+        const line = points.map(([x, y]) => `${x},${y}`).join(" ")
+        const zeroY = pad.t + innerH - ((0 - min) / span) * innerH
+        const area = `${pad.l},${zeroY} ${line} ${pad.l + innerW},${zeroY}`
+        const stroke = item.tone === "muted" ? "var(--chart-2)" : `url(#${id})`
+        return (
+          <g key={item.key}>
+            {item.fill ? <polygon points={area} fill={`url(#${id}-fill)`} /> : null}
+            <polyline
+              points={line}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={seriesIndex === 0 ? 2.25 : 1.75}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              strokeDasharray={item.tone === "muted" ? "0" : undefined}
+            />
+          </g>
+        )
+      })}
+      {labels.map((item, index) => {
+        if (!item) return null
+        const filled = labels.filter(Boolean).length
+        const sparse = filled < labels.length
+        const step = Math.max(1, Math.round((labels.length - 1) / 6))
+        if (!sparse && index % step !== 0 && index !== labels.length - 1) return null
+        const x = pad.l + (index / Math.max(1, labels.length - 1)) * innerW
+        return (
+          <text
+            key={`${item}-${index}`}
+            x={x}
+            y={height - 5}
             textAnchor="middle"
             className="fill-muted-foreground"
             fontSize="10"
