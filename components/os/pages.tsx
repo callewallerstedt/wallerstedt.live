@@ -3,7 +3,7 @@ import { ArrowUpRightIcon } from "lucide-react";
 
 import { formatDate, formatMonthLabel, formatNumber, formatPercent, formatSek } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
-import { osPath, vaultPath } from "@/lib/os/paths";
+import { osPath } from "@/lib/os/paths";
 import type { OsSnapshot } from "@/lib/os/types";
 import { TrendChart } from "@/components/os/charts";
 import {
@@ -23,7 +23,7 @@ function connect(snapshot: OsSnapshot, id: OsSnapshot["connect"][number]["source
 
 export function OverviewPage({ snapshot, accessKey }: { snapshot: OsSnapshot; accessKey: string }) {
   const ledger = snapshot.ledger;
-  const vault = vaultPath(accessKey);
+  const vault = osPath(accessKey, "vault");
   const spark = ledger?.months.map((row) => row.incomeCents) ?? [];
   const spotify = connect(snapshot, "spotify");
   const tiktok = connect(snapshot, "tiktok");
@@ -80,7 +80,7 @@ export function OverviewPage({ snapshot, accessKey }: { snapshot: OsSnapshot; ac
 
       <section className="grid gap-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
             <CardTitle>Revenue 12m</CardTitle>
             {ledger ? (
               <p className="text-sm font-semibold tabular-nums text-brand">{formatSek(ledger.incomeYtdCents)}</p>
@@ -123,7 +123,7 @@ export function OverviewPage({ snapshot, accessKey }: { snapshot: OsSnapshot; ac
 
       <section className="grid gap-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
             <CardTitle>Ledger</CardTitle>
             <Link href={routeHref(vault)} className="text-sm font-semibold text-brand">
               Vault
@@ -171,7 +171,7 @@ function ledgerErrorCard(snapshot: OsSnapshot) {
 
 export function MoneyPage({ snapshot, accessKey }: { snapshot: OsSnapshot; accessKey: string }) {
   const ledger = snapshot.ledger;
-  const vault = vaultPath(accessKey);
+  const vault = osPath(accessKey, "vault");
   if (!ledger) {
     return (
       <PageFrame>
@@ -264,7 +264,7 @@ export function MoneyPage({ snapshot, accessKey }: { snapshot: OsSnapshot; acces
         </Card>
       </section>
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Receipts missing</CardTitle>
           <Link href={routeHref(vault)} className="text-sm font-semibold text-brand">
             Vault
@@ -397,7 +397,7 @@ export function ProjectsPage({ snapshot }: { snapshot: OsSnapshot }) {
   );
 }
 
-export function CustomersPage({ snapshot }: { snapshot: OsSnapshot }) {
+export function CustomersPage({ snapshot, accessKey }: { snapshot: OsSnapshot; accessKey: string }) {
   const ledger = snapshot.ledger;
   return (
     <PageFrame>
@@ -429,7 +429,7 @@ export function CustomersPage({ snapshot }: { snapshot: OsSnapshot }) {
         </CardContent>
       </Card>
       <EmptyCard title="Follow-ups" detail="No customer pipeline is wired. Ledger income is shown above." />
-      <Link href={routeHref(osPath("accounting"))} className="text-sm font-semibold text-brand">
+      <Link href={routeHref(osPath(accessKey, "accounting"))} className="text-sm font-semibold text-brand">
         Tax
       </Link>
     </PageFrame>
@@ -438,11 +438,11 @@ export function CustomersPage({ snapshot }: { snapshot: OsSnapshot }) {
 
 export function AccountingPage({ snapshot, accessKey }: { snapshot: OsSnapshot; accessKey: string }) {
   const ledger = snapshot.ledger;
-  const vault = vaultPath(accessKey);
+  const vault = osPath(accessKey, "vault");
   return (
     <PageFrame>
       <PageTitle>Tax</PageTitle>
-      <p className="text-sm text-muted-foreground">Official books stay in the vault. This page only reads them.</p>
+      <p className="text-sm text-muted-foreground">Official books. Edit them under Bokföring.</p>
       <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="VAT payable" value={ledger ? formatSek(ledger.vatPayableCents) : "—"} hint="Income VAT − expense VAT" />
         <KpiCard
@@ -474,10 +474,10 @@ export function AccountingPage({ snapshot, accessKey }: { snapshot: OsSnapshot; 
         />
       </section>
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Receipts missing</CardTitle>
           <Link href={routeHref(vault)} className="text-sm font-semibold text-brand">
-            Edit in vault
+            Edit in Bokföring
           </Link>
         </CardHeader>
         <CardContent className="px-0">

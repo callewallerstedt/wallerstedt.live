@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { dashboard, listAccounts } from "@/lib/accounting/service";
+import { listAccounts } from "@/lib/accounting/service";
 import { getAccountingDb } from "@/lib/accounting/db";
 import { catalogSongs } from "@/lib/site-data";
 
@@ -9,12 +9,18 @@ import { taxUpcoming } from "./calendar";
 import { COMPANY } from "./company";
 import { berlinYmd, parseCatalogDate } from "./format";
 import { buildLedgerSnapshot, type RawLedgerEntry } from "./ledger";
-import { fetchGithubProjects, fetchVercelProjects, mergeVercelIntoProjects } from "./projects";
-import { connectBlocks, detectSources, sourceById } from "./sources";
-import type { OsSnapshot, ReleaseRow, UpcomingRow } from "./types";
-import { loadPersonalWealth, loadSpotifyArtist } from "./wealth";
-import { vaultPath } from "./paths";
+import {
+  fetchGithubProjects,
+  fetchVercelProjects,
+  matchProjectLedger,
+  mergeVercelIntoProjects,
+} from "./projects";
+import { osPath } from "./paths";
+import type { OsPageSlug } from "./route";
 import { hasOsSession } from "./session";
+import { connectBlocks, detectSources, sourceById } from "./sources";
+import type { LedgerSnapshot, OsSnapshot, ReleaseRow, UpcomingRow } from "./types";
+import { loadPersonalWealth, loadSpotifyArtist } from "./wealth";
 
 async function loadRawEntries(): Promise<RawLedgerEntry[]> {
   const rows = await getAccountingDb().accountingEntry.findMany({
@@ -58,41 +64,17 @@ function catalogReleases(nowYmd: string): ReleaseRow[] {
   return rows.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export const getOsSnapshot = cache(async (accessKey: string): Promise<OsSnapshot> => {
-  const nowYmd = berlinYmd() ?? new Date().toISOString().slice(0, 10);
-  const sources = detectSources();
-  const vaultBase = vaultPath(accessKey);
+function todayYmd() {
+  return berlinYmd() ?? new Date().toISOString().slice(0, 10);
+}
 
-  let ledger = null;
-  let ledgerError: string | null = null;
-  try {
-    const [entries, accounts, dash] = await Promise.all([
-      loadRawEntries(),
-      listAccounts(),
-      dashboard(),
-    ]);
-    ledger = buildLedgerSnapshot(entries, accounts, dash.pendingDraftCount, nowYmd);
-  } catch (error) {
-    ledgerError = error instanceof Error ? error.message : "Ledger unavailable";
-  }
+function vaultBase(accessKey: string) {
+  return osPath(accessKey, "vault");
+}
 
-  let projects = [] as Awaited<ReturnType<typeof fetchGithubProjects>>;
-  let projectsError: string | null = null;
-  try {
-    projects = await fetchGithubProjects(ledger);
-    if (sourceById(sources, "vercel")?.wired) {
-      try {
-        projects = mergeVercelIntoProjects(projects, await fetchVercelProjects());
-      } catch {
-        // Keep GitHub rows; Vercel is optional enrichment.
-      }
-    }
-  } catch (error) {
-    projectsError = error instanceof Error ? error.message : "GitHub unavailable";
-  }
-
+function buildUpcoming(accessKey: string, ledger: LedgerSnapshot | null, nowYmd: string): UpcomingRow[] {
   const releases = catalogReleases(nowYmd);
-  const upcoming: UpcomingRow[] = [
+  return [
     ...taxUpcoming(nowYmd),
     ...releases
       .filter((row) => row.upcoming)
@@ -110,15 +92,13 @@ export const getOsSnapshot = cache(async (accessKey: string): Promise<OsSnapshot
       date: entry.date ?? nowYmd,
       kind: "task" as const,
       detail: "Receipt missing",
-      href: `${vaultBase}?post=${entry.id}`,
+      href: `${vaultBase(accessKey)}?post=${entry.id}`,
     })) ?? []),
   ].sort((a, b) => a.date.localeCompare(b.date));
+}
 
-  const [wealth, spotify] = await Promise.all([
-    sourceById(sources, "wealth")?.wired ? loadPersonalWealth() : Promise.resolve(null),
-    sourceById(sources, "spotify")?.wired ? loadSpotifyArtist() : Promise.resolve(null),
-  ]);
-
+function emptySnapshot(overrides: Partial<OsSnapshot> = {}): OsSnapshot {
+  const sources = detectSources();
   return {
     company: {
       name: COMPANY.name,
@@ -126,26 +106,171 @@ export const getOsSnapshot = cache(async (accessKey: string): Promise<OsSnapshot
       owner: COMPANY.owner,
     },
     sources,
-    ledger,
-    ledgerError,
-    projects,
-    projectsError,
-    releases,
-    alerts: buildAlerts({
-      ledger,
-      projects,
-      upcoming,
-      nowYmd,
-      vaultBase,
-    }),
-    upcoming,
-    wealth,
-    spotify,
+    ledger: null,
+    ledgerError: null,
+    projects: [],
+    projectsError: null,
+    releases: catalogReleases(todayYmd()),
+    alerts: [],
+    upcoming: [],
+    wealth: null,
+    spotify: null,
     connect: connectBlocks(sources),
+    ...overrides,
   };
+}
+
+export const loadLedgerBundle = cache(async (): Promise<{
+  ledger: LedgerSnapshot | null;
+  ledgerError: string | null;
+}> => {
+  try {
+    const [entries, accounts, pendingDraftCount] = await Promise.all([
+      loadRawEntries(),
+      listAccounts(),
+      getAccountingDb().accountingAiDraft.count({ where: { status: "pending" } }),
+    ]);
+    return {
+      ledger: buildLedgerSnapshot(entries, accounts, pendingDraftCount, todayYmd()),
+      ledgerError: null,
+    };
+  } catch (error) {
+    return {
+      ledger: null,
+      ledgerError: error instanceof Error ? error.message : "Ledger unavailable",
+    };
+  }
 });
 
-export async function loadOsPage(accessKey: string) {
+export const loadProjectBundle = cache(async (): Promise<{
+  projects: OsSnapshot["projects"];
+  projectsError: string | null;
+}> => {
+  try {
+    const [{ ledger }, github] = await Promise.all([loadLedgerBundle(), fetchGithubProjects(null)]);
+    let projects = github.map((project) => {
+      const money = matchProjectLedger(project.name, ledger);
+      return { ...project, revenueCents: money.revenueCents, costCents: money.costCents };
+    });
+    if (sourceById(detectSources(), "vercel")?.wired) {
+      try {
+        projects = mergeVercelIntoProjects(projects, await fetchVercelProjects());
+      } catch {
+        // Keep GitHub rows; Vercel is optional enrichment.
+      }
+    }
+    return { projects, projectsError: null };
+  } catch (error) {
+    return {
+      projects: [],
+      projectsError: error instanceof Error ? error.message : "GitHub unavailable",
+    };
+  }
+});
+
+export const loadSpotifyBundle = cache(async () => {
+  const sources = detectSources();
+  if (!sourceById(sources, "spotify")?.wired) return null;
+  return loadSpotifyArtist();
+});
+
+export const loadWealthBundle = cache(async () => {
+  const sources = detectSources();
+  if (!sourceById(sources, "wealth")?.wired) return null;
+  return loadPersonalWealth();
+});
+
+export async function loadOverviewSnapshot(accessKey: string): Promise<OsSnapshot> {
+  const nowYmd = todayYmd();
+  const [ledgerBundle, projectBundle, spotify] = await Promise.all([
+    loadLedgerBundle(),
+    loadProjectBundle(),
+    loadSpotifyBundle(),
+  ]);
+  const upcoming = buildUpcoming(accessKey, ledgerBundle.ledger, nowYmd);
+  return emptySnapshot({
+    ...ledgerBundle,
+    ...projectBundle,
+    spotify,
+    upcoming,
+    alerts: buildAlerts({
+      ledger: ledgerBundle.ledger,
+      projects: projectBundle.projects,
+      upcoming,
+      nowYmd,
+      vaultBase: vaultBase(accessKey),
+    }),
+  });
+}
+
+export async function loadLedgerOnlySnapshot(): Promise<OsSnapshot> {
+  return emptySnapshot(await loadLedgerBundle());
+}
+
+export async function loadMusicSnapshot(): Promise<OsSnapshot> {
+  return emptySnapshot({ spotify: await loadSpotifyBundle() });
+}
+
+export async function loadProjectsSnapshot(): Promise<OsSnapshot> {
+  return emptySnapshot(await loadProjectBundle());
+}
+
+export async function loadWealthSnapshot(): Promise<OsSnapshot> {
+  const [ledgerBundle, wealth] = await Promise.all([loadLedgerBundle(), loadWealthBundle()]);
+  return emptySnapshot({ ...ledgerBundle, wealth });
+}
+
+export async function loadUpcomingSnapshot(accessKey: string): Promise<OsSnapshot> {
+  const ledgerBundle = await loadLedgerBundle();
+  return emptySnapshot({
+    ...ledgerBundle,
+    upcoming: buildUpcoming(accessKey, ledgerBundle.ledger, todayYmd()),
+  });
+}
+
+export async function loadAlertsSnapshot(accessKey: string): Promise<OsSnapshot> {
+  const nowYmd = todayYmd();
+  const [ledgerBundle, projectBundle] = await Promise.all([loadLedgerBundle(), loadProjectBundle()]);
+  const upcoming = buildUpcoming(accessKey, ledgerBundle.ledger, nowYmd);
+  return emptySnapshot({
+    ...ledgerBundle,
+    ...projectBundle,
+    upcoming,
+    alerts: buildAlerts({
+      ledger: ledgerBundle.ledger,
+      projects: projectBundle.projects,
+      upcoming,
+      nowYmd,
+      vaultBase: vaultBase(accessKey),
+    }),
+  });
+}
+
+export async function loadPageSnapshot(accessKey: string, page: OsPageSlug): Promise<OsSnapshot> {
+  switch (page) {
+    case "music":
+    case "content":
+      return loadMusicSnapshot();
+    case "projects":
+      return loadProjectsSnapshot();
+    case "wealth":
+      return loadWealthSnapshot();
+    case "upcoming":
+      return loadUpcomingSnapshot(accessKey);
+    case "alerts":
+      return loadAlertsSnapshot(accessKey);
+    case "money":
+    case "customers":
+    case "accounting":
+    case "investments":
+      return loadLedgerOnlySnapshot();
+    default:
+      return loadOverviewSnapshot(accessKey);
+  }
+}
+
+export async function loadOsPage(accessKey: string, page: OsPageSlug = "") {
   if (!(await hasOsSession(accessKey))) return null;
-  return getOsSnapshot(accessKey);
+  if (page === "vault") return emptySnapshot();
+  return loadPageSnapshot(accessKey, page);
 }

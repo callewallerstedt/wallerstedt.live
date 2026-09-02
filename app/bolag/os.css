@@ -177,11 +177,44 @@ body:has(.os-root) > .footer {
 
 .os-root {
   min-height: 100dvh;
+  max-width: 100%;
+  overflow-x: hidden;
   font-family: var(--font-inter), Inter, sans-serif;
   font-weight: 500;
   color: var(--foreground);
   background: var(--background);
   -webkit-font-smoothing: antialiased;
+}
+
+.os-root .ac-shell--embedded {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-width: none;
+  padding-bottom: 0;
+}
+
+.os-root .ac-shell--embedded .ac-topbar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.os-root .ac-shell--embedded > .ac-page-wrap,
+.os-root .ac-shell--embedded > .ac-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  max-width: none;
+}
+
+.os-root .ac-shell--embedded .ac-bottom-nav {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  flex-shrink: 0;
 }
 
 .os-root *,

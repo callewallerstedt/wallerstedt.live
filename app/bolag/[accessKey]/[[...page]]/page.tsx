@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
+import { OsVault } from "@/components/os/vault";
 import {
   AccountingPage,
   AlertsPage,
@@ -13,22 +15,15 @@ import {
   UpcomingPage,
   WealthPage,
 } from "@/components/os/pages";
-import { configuredOsAccessKey, resolveOsRoute } from "@/lib/os/route";
+import { OsPageSkeleton } from "@/components/os/ui";
+import { resolveOsRoute, type OsPageSlug } from "@/lib/os/route";
+import { hasOsSession } from "@/lib/os/session";
 import { loadOsPage } from "@/lib/os/snapshot";
 
-export const dynamic = "force-dynamic";
-
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ slug?: string[] }>;
-}) {
-  const { slug } = await params;
-  const resolved = resolveOsRoute(slug, configuredOsAccessKey());
-  if (!resolved) notFound();
-  const snapshot = await loadOsPage(resolved.accessKey);
+async function OsPageBody({ accessKey, page }: { accessKey: string; page: OsPageSlug }) {
+  if (page === "vault") return <OsVault accessKey={accessKey} />;
+  const snapshot = await loadOsPage(accessKey, page);
   if (!snapshot) return null;
-  const { accessKey, page } = resolved;
 
   switch (page) {
     case "money":
@@ -40,7 +35,7 @@ export default async function Page({
     case "projects":
       return <ProjectsPage snapshot={snapshot} />;
     case "customers":
-      return <CustomersPage snapshot={snapshot} />;
+      return <CustomersPage snapshot={snapshot} accessKey={accessKey} />;
     case "accounting":
       return <AccountingPage snapshot={snapshot} accessKey={accessKey} />;
     case "investments":
@@ -54,4 +49,21 @@ export default async function Page({
     default:
       return <OverviewPage snapshot={snapshot} accessKey={accessKey} />;
   }
+}
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ accessKey: string; page?: string[] }>;
+}) {
+  const { accessKey, page: pageSlug } = await params;
+  const resolved = resolveOsRoute(accessKey, pageSlug);
+  if (!resolved) notFound();
+  if (!(await hasOsSession(resolved.accessKey))) return null;
+
+  return (
+    <Suspense fallback={<OsPageSkeleton />}>
+      <OsPageBody accessKey={resolved.accessKey} page={resolved.page} />
+    </Suspense>
+  );
 }

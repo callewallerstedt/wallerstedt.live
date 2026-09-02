@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import { OsHeader, OsSidebar } from "@/components/os/sidebar";
+import { OsHeader, OsMobileMenu, OsSidebar } from "@/components/os/sidebar";
 import { osPageFromPathname } from "@/lib/os/route";
+import { cn } from "@/lib/utils";
 
 const titles: Record<string, string> = {
   "": "Overview",
+  vault: "Bokföring",
   money: "Money",
   music: "Music",
   content: "Content",
@@ -22,29 +24,60 @@ const titles: Record<string, string> = {
 
 export function OsShell({
   accessKey,
-  alertCount,
+  alertCount = 0,
   children,
 }: {
   accessKey: string;
-  alertCount: number;
+  alertCount?: number;
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const slug = osPageFromPathname(pathname);
   const title = titles[slug] ?? "Overview";
+  const vault = slug === "vault";
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh max-w-full overflow-hidden bg-background text-foreground">
       <OsSidebar
         accessKey={accessKey}
         alertCount={alertCount}
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <OsHeader collapsed={collapsed} onCollapsedChange={setCollapsed} title={title} />
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      {menuOpen ? (
+        <OsMobileMenu accessKey={accessKey} alertCount={alertCount} onClose={() => setMenuOpen(false)} />
+      ) : null}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <OsHeader
+          collapsed={collapsed}
+          menuOpen={menuOpen}
+          onCollapsedChange={setCollapsed}
+          onMenuToggle={() => setMenuOpen((open) => !open)}
+          title={title}
+        />
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1",
+            vault ? "flex flex-col overflow-hidden" : "overflow-x-hidden overflow-y-auto",
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

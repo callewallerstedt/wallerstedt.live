@@ -4,6 +4,7 @@ export function vaultPath(accessKey: string, query = "") {
   return `/vault/${encodeURIComponent(accessKey)}${query}`;
 }
 
-export function osPath(page: OsPageSlug = "") {
-  return page ? `/bolag/${page}` : "/bolag";
+export function osPath(accessKey: string, page: OsPageSlug | "" = "") {
+  const suffix = page ? `/${page}` : "";
+  return `/bolag/${encodeURIComponent(accessKey)}${suffix}`;
 }

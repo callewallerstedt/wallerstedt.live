@@ -4,11 +4,12 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldIcon } from "lucide-react";
 
+import { OsBrandLockup } from "@/components/os/brand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-export function OsLogin() {
+export function OsLogin({ accessKey }: { accessKey: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,7 +24,7 @@ export function OsLogin() {
     setSubmitting(true);
     setError("");
     try {
-      const response = await fetch("/api/bolag/session", {
+      const response = await fetch(`/api/accounting/${encodeURIComponent(accessKey)}/session/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
@@ -42,9 +43,10 @@ export function OsLogin() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-2">
+    <div className="flex min-h-dvh items-center justify-center px-[max(0.5rem,env(safe-area-inset-left))] py-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-[max(0.5rem,env(safe-area-inset-top))]">
       <Card className="w-full max-w-sm">
-        <CardHeader>
+        <CardHeader className="gap-3">
+          <OsBrandLockup />
           <CardTitle>Wallerstedt Productions AB</CardTitle>
           <p className="text-sm text-muted-foreground">Same owner session as bokföring.</p>
         </CardHeader>
@@ -55,6 +57,7 @@ export function OsLogin() {
               <Input
                 autoComplete="current-password"
                 autoFocus
+                className="min-h-11 md:min-h-8"
                 disabled={submitting}
                 id="os-password"
                 onChange={(event) => setPassword(event.target.value)}
@@ -67,7 +70,7 @@ export function OsLogin() {
                 {error}
               </p>
             ) : null}
-            <Button disabled={submitting} type="submit" variant="brand">
+            <Button className="min-h-11 md:min-h-8" disabled={submitting} type="submit" variant="brand">
               <ShieldIcon />
               {submitting ? "Loggar in…" : "Öppna"}
             </Button>
