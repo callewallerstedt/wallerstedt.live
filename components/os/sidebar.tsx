@@ -24,6 +24,7 @@ import {
 import { accentMeta, accents, type Accent } from "@/lib/accent";
 import { routeHref } from "@/lib/os/href";
 import { osPath, vaultPath } from "@/lib/os/paths";
+import { osPageFromPathname } from "@/lib/os/route";
 import { cn } from "@/lib/utils";
 import { useAccent, useOsTheme } from "@/components/os/providers";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,7 @@ export function OsSidebar({
 }) {
   const pathname = usePathname();
   const { accent, setAccent } = useAccent();
-  const base = osPath(accessKey);
+  const currentPage = osPageFromPathname(pathname);
 
   return (
     <aside
@@ -90,9 +91,9 @@ export function OsSidebar({
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 py-1">
         {pages.map((item) => {
-          const href = item.slug ? `${base}/${item.slug}` : base;
+          const href = osPath(item.slug);
           const Icon = item.icon;
-          const active = item.slug === "" ? pathname === base : pathname === href || pathname.startsWith(`${href}/`);
+          const active = currentPage === item.slug;
           return (
             <Link
               key={item.label}

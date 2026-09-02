@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   async redirects() {
     return [
+      { source: "/os", destination: "/bolag", permanent: false },
       { source: "/os/:path*", destination: "/bolag/:path*", permanent: false },
     ];
   },
@@ -26,11 +27,23 @@ const nextConfig: NextConfig = {
         headers: privateHeaders,
       },
       {
+        source: "/os",
+        headers: privateHeaders,
+      },
+      {
         source: "/os/:path*",
         headers: privateHeaders,
       },
       {
+        source: "/bolag",
+        headers: privateHeaders,
+      },
+      {
         source: "/bolag/:path*",
+        headers: privateHeaders,
+      },
+      {
+        source: "/api/bolag/:path*",
         headers: privateHeaders,
       },
       {

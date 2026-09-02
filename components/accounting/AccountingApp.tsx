@@ -3509,7 +3509,7 @@ function SettingsView({
             <div>
               <h2 id="os-heading">Företags-OS</h2>
               <p>Samma ledger och inloggning, ny översikt. Vaulten är oförändrad.</p>
-              <a className="ac-button ac-button--secondary" href={`/bolag/${encodeURIComponent(accessKey)}`}>
+              <a className="ac-button ac-button--secondary" href="/bolag">
                 Öppna OS
               </a>
             </div>

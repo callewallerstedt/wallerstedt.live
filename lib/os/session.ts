@@ -5,6 +5,7 @@ import { assertAccessKey, hasOwnerSession } from "@/lib/accounting/auth";
 import { AccountingError } from "@/lib/accounting/errors";
 
 export { osPath, vaultPath } from "./paths";
+export { configuredOsAccessKey } from "./route";
 
 export async function requireOsAccessKey(accessKey: string) {
   try {
@@ -17,7 +18,7 @@ export async function requireOsAccessKey(accessKey: string) {
 }
 
 export async function hasOsSession(accessKey: string) {
-  requireOsAccessKey(accessKey);
+  await requireOsAccessKey(accessKey);
   const headerList = await headers();
   const request = new Request("https://wallerstedt.live/bolag", {
     headers: {

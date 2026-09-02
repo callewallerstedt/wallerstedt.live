@@ -397,7 +397,7 @@ export function ProjectsPage({ snapshot }: { snapshot: OsSnapshot }) {
   );
 }
 
-export function CustomersPage({ snapshot, accessKey }: { snapshot: OsSnapshot; accessKey: string }) {
+export function CustomersPage({ snapshot }: { snapshot: OsSnapshot }) {
   const ledger = snapshot.ledger;
   return (
     <PageFrame>
@@ -429,7 +429,7 @@ export function CustomersPage({ snapshot, accessKey }: { snapshot: OsSnapshot; a
         </CardContent>
       </Card>
       <EmptyCard title="Follow-ups" detail="No customer pipeline is wired. Ledger income is shown above." />
-      <Link href={routeHref(osPath(accessKey, "accounting"))} className="text-sm font-semibold text-brand">
+      <Link href={routeHref(osPath("accounting"))} className="text-sm font-semibold text-brand">
         Tax
       </Link>
     </PageFrame>

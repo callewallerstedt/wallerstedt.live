@@ -1,6 +1,6 @@
 # wallerstedt.live
 
-Artist site for [Wallerstedt](https://wallerstedt.live), plus a private bookkeeping PWA at `/vault/<ACCOUNTING_ACCESS_KEY>` and an owner company dashboard at `/bolag/<ACCOUNTING_ACCESS_KEY>` on the same site. The dashboard reuses the vault session and ledger. It does not replace the PWA.
+Artist site for [Wallerstedt](https://wallerstedt.live), plus a private bookkeeping PWA at `/vault/<ACCOUNTING_ACCESS_KEY>` and an owner company dashboard at `/bolag` on the same site. The dashboard reuses the vault session and ledger. Sign in with the same owner password; the access key is not required in the address bar. `/bolag/<ACCOUNTING_ACCESS_KEY>` still redirects to `/bolag`. It does not replace the PWA.
 
 ## Bookkeeping web push (iPhone Home Screen)
 

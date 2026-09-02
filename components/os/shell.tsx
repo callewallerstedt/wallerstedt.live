@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { OsHeader, OsSidebar } from "@/components/os/sidebar";
+import { osPageFromPathname } from "@/lib/os/route";
 
 const titles: Record<string, string> = {
   "": "Overview",
@@ -30,8 +31,7 @@ export function OsShell({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
-  const parts = pathname.split("/").filter(Boolean);
-  const slug = parts[0] === "bolag" ? (parts[2] ?? "") : "";
+  const slug = osPageFromPathname(pathname);
   const title = titles[slug] ?? "Overview";
 
   return (
