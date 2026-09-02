@@ -5,8 +5,6 @@ export type SourceId =
   | "distrokid"
   | "avanza"
   | "bank"
-  | "github"
-  | "vercel"
   | "wealth";
 
 export type SourceState = {
@@ -111,22 +109,6 @@ export type LedgerSnapshot = {
   accountNames: Record<number, string>;
 };
 
-export type ProjectRow = {
-  name: string;
-  status: string;
-  currentTask: string | null;
-  nextAction: string | null;
-  repo: string | null;
-  repoUrl: string | null;
-  website: string | null;
-  revenueCents: number | null;
-  costCents: number | null;
-  hours: number | null;
-  notes: string | null;
-  lastActivity: string | null;
-  kind: "music" | "site" | "ai" | "client" | "other";
-};
-
 export type TaskArea = "company" | "money" | "music" | "project" | "admin";
 
 export type TaskRow = {
@@ -153,7 +135,7 @@ export type ActionItem = {
   href: string | null;
   date: string | null;
   tone: "warn" | "brand" | "muted";
-  source: "receipts" | "drafts" | "tax" | "cash" | "project" | "release";
+  source: "receipts" | "drafts" | "tax" | "cash" | "release";
 };
 
 export type UpcomingRow = {
@@ -249,8 +231,6 @@ export type OsSnapshot = {
   sources: SourceState[];
   ledger: LedgerSnapshot | null;
   ledgerError: string | null;
-  projects: ProjectRow[];
-  projectsError: string | null;
   releases: ReleaseRow[];
   actions: ActionItem[];
   tasks: TaskRow[];

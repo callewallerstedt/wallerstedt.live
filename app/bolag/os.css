@@ -260,7 +260,6 @@ body:has(.os-root) > .footer {
 /* A slim toolbar, not a second app header: the OS header above it already
    carries the brand and the section name. */
 .os-root .ac-shell--embedded .ac-topbar {
-  order: -2;
   position: relative;
   flex-shrink: 0;
   padding-top: 0;
@@ -272,7 +271,8 @@ body:has(.os-root) > .footer {
 
 .os-root .ac-shell--embedded .ac-topbar-inner {
   max-width: var(--ac-max);
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 12px;
 }
 
 @media (min-width: 768px) {
@@ -299,66 +299,80 @@ body:has(.os-root) > .footer {
   background: var(--muted);
 }
 
-/* The vault's own tab bar becomes a segmented control directly under the
-   toolbar. Two stacked bottom bars on a phone is the layout bug this fixes. */
-.os-root .ac-shell--embedded .ac-bottom-nav {
-  order: -1;
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
-  z-index: auto;
-  flex-shrink: 0;
-  padding-bottom: 0;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-bottom: 1px solid var(--os-border);
+/* One toolbar: the tab control on the left, the refresh action on the right.
+   The vault's own bottom bar is not rendered when embedded, so a phone has a
+   single bottom navigation — the dashboard's. */
+.os-root .ac-embed-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--muted);
 }
 
-.os-root .ac-shell--embedded .ac-bottom-nav-inner {
-  max-width: var(--ac-max);
-  gap: 4px;
-  padding: 8px 12px;
-}
-
-@media (min-width: 768px) {
-  .os-root .ac-shell--embedded .ac-bottom-nav-inner {
-    padding: 8px 20px;
-    justify-items: start;
-    grid-template-columns: repeat(5, minmax(0, 8rem));
-  }
-}
-
-.os-root .ac-shell--embedded .ac-bottom-nav button {
-  flex-direction: row;
+.os-root .ac-embed-tabs button {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 40px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 9px;
+  border-radius: 7px;
   font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
   color: var(--muted-foreground);
 }
 
-.os-root .ac-shell--embedded .ac-bottom-nav button .ac-nav-icon {
-  height: 20px;
-}
-
-.os-root .ac-shell--embedded .ac-bottom-nav button.is-active {
+.os-root .ac-embed-tabs button:hover {
   color: var(--foreground);
-  background: var(--brand-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--brand) 40%, transparent);
 }
 
-.os-root .ac-shell--embedded .ac-bottom-nav button.is-add .ac-nav-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--brand-gradient, var(--brand));
-  background-image: linear-gradient(135deg, var(--brand-from), var(--brand-to));
-  color: var(--brand-foreground);
-  margin-bottom: 0;
+.os-root .ac-embed-tabs button.is-active {
+  color: var(--foreground);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.16);
+}
+
+.os-root .ac-embed-tabs button svg {
+  flex-shrink: 0;
+}
+
+/* On a phone five labels do not fit beside the refresh action, so only the
+   selected tab keeps its label — enough to say where you are without
+   reducing the row to five unlabelled glyphs. */
+@media (max-width: 30rem) {
+  .os-root .ac-embed-tabs {
+    flex: 1;
+  }
+
+  .os-root .ac-embed-tabs button {
+    flex: 0 1 auto;
+    justify-content: center;
+    min-width: 40px;
+    padding: 0 6px;
+  }
+
+  .os-root .ac-embed-tabs button.is-active {
+    flex: 1 1 auto;
+  }
+
+  .os-root .ac-embed-tabs button:not(.is-active) span {
+    display: none;
+  }
+}
+
+/* The vault's stat tiles were sized for a phone column. Given the dashboard's
+   wider content area, let them find their own width and stop `overflow-wrap:
+   anywhere` from splitting "kr" off the end of an amount. */
+.os-root .accounting-app .ac-stat-grid {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.os-root .accounting-app .ac-stat-card > strong {
+  overflow-wrap: break-word;
 }
 
 /* Cards inside the vault should read like OS cards: hairline ring, flat. */

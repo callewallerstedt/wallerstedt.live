@@ -9,12 +9,6 @@ import { taxUpcoming } from "./calendar";
 import { COMPANY } from "./company";
 import { berlinYmd, parseCatalogDate } from "./format";
 import { buildLedgerSnapshot, type RawLedgerEntry } from "./ledger";
-import {
-  fetchGithubProjects,
-  fetchVercelProjects,
-  matchProjectLedger,
-  mergeVercelIntoProjects,
-} from "./projects";
 import { osPath } from "./paths";
 import type { OsPageSlug } from "./route";
 import { hasOsSession } from "./session";
@@ -110,8 +104,6 @@ function emptySnapshot(overrides: Partial<OsSnapshot> = {}): OsSnapshot {
     sources,
     ledger: null,
     ledgerError: null,
-    projects: [],
-    projectsError: null,
     releases: catalogReleases(todayYmd()),
     actions: [],
     tasks: [],
@@ -147,32 +139,6 @@ export const loadLedgerBundle = cache(async (): Promise<{
   }
 });
 
-export const loadProjectBundle = cache(async (): Promise<{
-  projects: OsSnapshot["projects"];
-  projectsError: string | null;
-}> => {
-  try {
-    const [{ ledger }, github] = await Promise.all([loadLedgerBundle(), fetchGithubProjects(null)]);
-    let projects = github.map((project) => {
-      const money = matchProjectLedger(project.name, ledger);
-      return { ...project, revenueCents: money.revenueCents, costCents: money.costCents };
-    });
-    if (sourceById(detectSources(), "vercel")?.wired) {
-      try {
-        projects = mergeVercelIntoProjects(projects, await fetchVercelProjects());
-      } catch {
-        // Keep GitHub rows; Vercel is optional enrichment.
-      }
-    }
-    return { projects, projectsError: null };
-  } catch (error) {
-    return {
-      projects: [],
-      projectsError: error instanceof Error ? error.message : "GitHub unavailable",
-    };
-  }
-});
-
 export const loadSpotifyBundle = cache(async () => {
   const sources = detectSources();
   if (!sourceById(sources, "spotify")?.wired) return null;
@@ -187,22 +153,16 @@ export const loadWealthBundle = cache(async () => {
 
 export async function loadOverviewSnapshot(accessKey: string): Promise<OsSnapshot> {
   const nowYmd = todayYmd();
-  const [ledgerBundle, projectBundle, taskBundle] = await Promise.all([
-    loadLedgerBundle(),
-    loadProjectBundle(),
-    listTasks(),
-  ]);
+  const [ledgerBundle, taskBundle] = await Promise.all([loadLedgerBundle(), listTasks()]);
   const upcoming = buildUpcoming(accessKey, ledgerBundle.ledger, nowYmd);
   const context = {
     ledger: ledgerBundle.ledger,
-    projects: projectBundle.projects,
     upcoming,
     nowYmd,
     vaultBase: vaultBase(accessKey),
   };
   return emptySnapshot({
     ...ledgerBundle,
-    ...projectBundle,
     tasks: taskBundle.tasks,
     tasksError: taskBundle.error,
     upcoming,
@@ -214,10 +174,6 @@ export async function loadMusicSnapshot(): Promise<OsSnapshot> {
   return emptySnapshot({ spotify: await loadSpotifyBundle() });
 }
 
-export async function loadProjectsSnapshot(): Promise<OsSnapshot> {
-  return emptySnapshot(await loadProjectBundle());
-}
-
 export async function loadWealthSnapshot(): Promise<OsSnapshot> {
   const [ledgerBundle, wealth] = await Promise.all([loadLedgerBundle(), loadWealthBundle()]);
   return emptySnapshot({ ...ledgerBundle, wealth });
@@ -227,8 +183,6 @@ export async function loadPageSnapshot(accessKey: string, page: OsPageSlug): Pro
   switch (page) {
     case "music":
       return loadMusicSnapshot();
-    case "projects":
-      return loadProjectsSnapshot();
     // Money absorbed Tax, Work, Invest and Wealth, so it needs the trading book
     // alongside the ledger.
     case "money":

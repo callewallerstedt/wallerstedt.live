@@ -135,23 +135,6 @@ test("actions only fire from real ledger or repo signals", () => {
         detail: "Standard quarterly VAT calendar — not confirmed from Skatteverket",
       },
     ],
-    projects: [
-      {
-        name: "design",
-        status: "active",
-        currentTask: null,
-        nextAction: null,
-        repo: "callewallerstedt/design",
-        repoUrl: "https://github.com/callewallerstedt/design",
-        website: null,
-        revenueCents: null,
-        costCents: null,
-        hours: null,
-        notes: null,
-        lastActivity: "2026-08-01T00:00:00.000Z",
-        kind: "site",
-      },
-    ],
     ledger: {
       asOf: "2026-09-02",
       generatedOn: "2026-09-02",
@@ -202,13 +185,12 @@ test("actions only fire from real ledger or repo signals", () => {
   assert.ok(actions.some((action) => action.id === "receipts"));
   assert.ok(actions.some((action) => action.id === "drafts"));
   assert.ok(actions.some((action) => action.id === "bank-negative"));
-  assert.ok(actions.some((action) => action.id === "stale-callewallerstedt/design"));
   assert.ok(actions.some((action) => action.id === "tax-vat"));
   assert.ok(!actions.some((action) => /spotify/i.test(action.title)));
-  // Urgent money problems sort above a quiet repo.
+  // Urgent money problems sort above the merely upcoming.
   assert.ok(
     actions.findIndex((action) => action.id === "receipts") <
-      actions.findIndex((action) => action.id === "stale-callewallerstedt/design"),
+      actions.findIndex((action) => action.id === "tax-vat"),
   );
 });
 

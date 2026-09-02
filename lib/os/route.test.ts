@@ -70,6 +70,7 @@ test("retired tabs redirect into the tab that absorbed them", () => {
   assert.equal(osLegacyTarget(["customers"]), "money");
   assert.equal(osLegacyTarget(["investments"]), "money");
   assert.equal(osLegacyTarget(["content"]), "music");
+  assert.equal(osLegacyTarget(["projects"]), "");
   assert.equal(osLegacyTarget(["money"]), null);
   assert.equal(osLegacyTarget(["nope"]), null);
   assert.equal(osLegacyTarget(undefined), null);

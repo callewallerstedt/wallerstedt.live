@@ -13,20 +13,6 @@ export function detectSources(): SourceState[] {
       detail: "Prisma AccountingEntry",
     },
     {
-      id: "github",
-      label: "GitHub",
-      wired: true,
-      detail: "Public repos for callewallerstedt",
-    },
-    {
-      id: "vercel",
-      label: "Vercel",
-      wired: present("VERCEL_TOKEN", "VERCEL_ACCESS_TOKEN"),
-      detail: present("VERCEL_TOKEN", "VERCEL_ACCESS_TOKEN")
-        ? "Project list token"
-        : "No VERCEL_TOKEN",
-    },
-    {
       id: "spotify",
       label: "Spotify",
       wired: present(

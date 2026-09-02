@@ -2,13 +2,7 @@
 
 import { useMemo, useOptimistic, useRef, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
-import {
-  CalendarIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  PlusIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CheckIcon, ChevronDownIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
@@ -19,7 +13,18 @@ import { TASK_AREA_LABELS, TASK_AREAS } from "@/lib/os/task-meta";
 import type { ActionItem, TaskArea, TaskRow } from "@/lib/os/types";
 import { cn } from "@/lib/utils";
 
-type Patch = Partial<Pick<TaskRow, "title" | "done" | "area" | "priority" | "dueDate">>;
+type Patch = Partial<Pick<TaskRow, "title" | "notes" | "done" | "area" | "priority" | "dueDate">>;
+
+type Action =
+  | { type: "patch"; id: string; patch: Patch }
+  | { type: "remove"; id: string }
+  | { type: "add"; task: TaskRow };
+
+const PRIORITY_LABELS: Record<TaskRow["priority"], string> = {
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+};
 
 function endpoint(accessKey: string, id?: string) {
   return `/api/os/${encodeURIComponent(accessKey)}/tasks${id ? `/${id}` : ""}`;
@@ -34,6 +39,12 @@ function dueLabel(task: TaskRow, todayYmd: string) {
   if (task.dueDate === todayYmd) return "Today";
   if (task.dueDate < todayYmd) return `Overdue · ${formatDate(task.dueDate)}`;
   return formatDate(task.dueDate);
+}
+
+/** The first line of a description, for the collapsed row's summary. */
+function notesPreview(notes: string) {
+  const first = notes.trim().split("\n")[0]?.trim() ?? "";
+  return first.length > 80 ? `${first.slice(0, 79)}…` : first;
 }
 
 /**
@@ -62,7 +73,7 @@ export function TaskList({
   const [pending, startTransition] = useTransition();
   const [optimistic, applyOptimistic] = useOptimistic(
     serverTasks,
-    (state: TaskRow[], action: { type: "patch"; id: string; patch: Patch } | { type: "remove"; id: string } | { type: "add"; task: TaskRow }) => {
+    (state: TaskRow[], action: Action) => {
       if (action.type === "add") return [action.task, ...state];
       if (action.type === "remove") return state.filter((task) => task.id !== action.id);
       return state.map((task) => (task.id === action.id ? { ...task, ...action.patch } : task));
@@ -148,9 +159,7 @@ export function TaskList({
           body: JSON.stringify(next),
         });
         if (body.task) {
-          setServerTasks((current) =>
-            current.map((task) => (task.id === id ? body.task! : task)),
-          );
+          setServerTasks((current) => current.map((task) => (task.id === id ? body.task! : task)));
         }
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
@@ -170,6 +179,19 @@ export function TaskList({
         setFailure(problem instanceof Error ? problem.message : "Could not delete.");
       }
     });
+  }
+
+  function itemProps(task: TaskRow) {
+    return {
+      expanded: openId === task.id,
+      onDelete: () => remove(task.id),
+      onPatch: (next: Patch) => patch(task.id, next),
+      onToggleExpanded: () =>
+        setOpenId((current) => (current === task.id ? null : task.id)),
+      pending,
+      task,
+      todayYmd,
+    };
   }
 
   return (
@@ -219,16 +241,7 @@ export function TaskList({
       ) : null}
 
       {visible.map((task) => (
-        <TaskItem
-          key={task.id}
-          expanded={openId === task.id}
-          onDelete={() => remove(task.id)}
-          onPatch={(next) => patch(task.id, next)}
-          onToggleExpanded={() => setOpenId((current) => (current === task.id ? null : task.id))}
-          pending={pending}
-          task={task}
-          todayYmd={todayYmd}
-        />
+        <TaskItem key={task.id} {...itemProps(task)} />
       ))}
 
       {hiddenCount > 0 && moreHref ? (
@@ -246,16 +259,7 @@ export function TaskList({
             Done ({done.length})
           </summary>
           {done.map((task) => (
-            <TaskItem
-              key={task.id}
-              expanded={openId === task.id}
-              onDelete={() => remove(task.id)}
-              onPatch={(next) => patch(task.id, next)}
-              onToggleExpanded={() => setOpenId((current) => (current === task.id ? null : task.id))}
-              pending={pending}
-              task={task}
-              todayYmd={todayYmd}
-            />
+            <TaskItem key={task.id} {...itemProps(task)} />
           ))}
         </details>
       ) : null}
@@ -263,6 +267,11 @@ export function TaskList({
   );
 }
 
+/**
+ * Collapsed it is a single line. Expanded it reads as information — the
+ * description and a few facts. The controls only appear behind the pencil, so
+ * an open row is never a wall of date pickers and a delete button.
+ */
 function TaskItem({
   task,
   todayYmd,
@@ -280,8 +289,19 @@ function TaskItem({
   onDelete: () => void;
   onToggleExpanded: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const due = dueLabel(task, todayYmd);
   const isOverdue = overdue(task, todayYmd);
+  const preview = notesPreview(task.notes);
+  const summary = [due, task.area === "company" ? null : TASK_AREA_LABELS[task.area], preview || null]
+    .filter(Boolean)
+    .join(" · ");
+
+  function toggle() {
+    // Collapsing always drops back to the reading view.
+    if (expanded) setEditing(false);
+    onToggleExpanded();
+  }
 
   return (
     <div className="border-t border-border">
@@ -303,7 +323,7 @@ function TaskItem({
         <button
           aria-expanded={expanded}
           className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={onToggleExpanded}
+          onClick={toggle}
           type="button"
         >
           <span className="min-w-0 flex-1">
@@ -315,16 +335,14 @@ function TaskItem({
             >
               {task.title}
             </span>
-            {due || task.area !== "company" ? (
+            {summary ? (
               <span
                 className={cn(
                   "mt-0.5 block truncate text-xs",
                   isOverdue ? "text-destructive" : "text-muted-foreground",
                 )}
               >
-                {[due, task.area === "company" ? null : TASK_AREA_LABELS[task.area]]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {summary}
               </span>
             ) : null}
           </span>
@@ -338,50 +356,103 @@ function TaskItem({
         </button>
       </div>
 
-      {expanded ? (
-        <div className="flex flex-col gap-3 bg-muted/40 px-3 py-3">
-          <Input
-            aria-label="Task title"
-            className="min-h-11 md:min-h-9"
-            defaultValue={task.title}
-            onBlur={(event) => {
-              const value = event.target.value.trim();
-              if (value && value !== task.title) onPatch({ title: value });
-            }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarIcon className="size-4" />
+      {expanded && !editing ? (
+        <div className="flex flex-col gap-3 bg-muted/40 px-3 pt-1 pb-3">
+          <div className="flex items-start gap-3">
+            <p
+              className={cn(
+                "min-w-0 flex-1 text-sm leading-relaxed whitespace-pre-wrap",
+                task.notes ? "text-foreground/90" : "text-muted-foreground italic",
+              )}
+            >
+              {task.notes || "No description yet."}
+            </p>
+            <button
+              aria-label={`Edit ${task.title}`}
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground ring-1 ring-foreground/15 hover:text-foreground"
+              onClick={() => setEditing(true)}
+              type="button"
+              title="Edit"
+            >
+              <PencilIcon className="size-4" />
+            </button>
+          </div>
+          <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+            <Detail label="Due" tone={isOverdue ? "warn" : "default"} value={due ?? "Not set"} />
+            <Detail label="Area" value={TASK_AREA_LABELS[task.area]} />
+            <Detail label="Priority" value={PRIORITY_LABELS[task.priority]} />
+            <Detail label="Added" value={formatDate(task.createdAt.slice(0, 10))} />
+          </dl>
+        </div>
+      ) : null}
+
+      {expanded && editing ? (
+        <div className="flex flex-col gap-3 bg-muted/40 px-3 pt-2 pb-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Title
+            <Input
+              className="min-h-11 md:min-h-9"
+              defaultValue={task.title}
+              onBlur={(event) => {
+                const value = event.target.value.trim();
+                if (value && value !== task.title) onPatch({ title: value });
+              }}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Description
+            <textarea
+              className="min-h-20 w-full rounded-lg bg-card px-2.5 py-2 text-sm text-foreground ring-1 ring-foreground/15"
+              defaultValue={task.notes}
+              onBlur={(event) => {
+                if (event.target.value !== task.notes) onPatch({ notes: event.target.value });
+              }}
+              placeholder="Anything you need to remember about this."
+              rows={3}
+            />
+          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Due
               <input
-                aria-label="Due date"
                 className="min-h-9 rounded-lg bg-card px-2 text-xs text-foreground ring-1 ring-foreground/15"
                 defaultValue={task.dueDate ?? ""}
                 onChange={(event) => onPatch({ dueDate: event.target.value || null })}
                 type="date"
               />
             </label>
-            <select
-              aria-label="Area"
-              className="min-h-9 rounded-lg bg-card px-2 text-xs ring-1 ring-foreground/15"
-              onChange={(event) => onPatch({ area: event.target.value as TaskArea })}
-              value={task.area}
-            >
-              {TASK_AREAS.map((area) => (
-                <option key={area} value={area}>
-                  {TASK_AREA_LABELS[area]}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Priority"
-              className="min-h-9 rounded-lg bg-card px-2 text-xs ring-1 ring-foreground/15"
-              onChange={(event) => onPatch({ priority: event.target.value as TaskRow["priority"] })}
-              value={task.priority}
-            >
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-            </select>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Area
+              <select
+                className="min-h-9 rounded-lg bg-card px-2 text-xs ring-1 ring-foreground/15"
+                onChange={(event) => onPatch({ area: event.target.value as TaskArea })}
+                value={task.area}
+              >
+                {TASK_AREAS.map((area) => (
+                  <option key={area} value={area}>
+                    {TASK_AREA_LABELS[area]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Priority
+              <select
+                className="min-h-9 rounded-lg bg-card px-2 text-xs ring-1 ring-foreground/15"
+                onChange={(event) => onPatch({ priority: event.target.value as TaskRow["priority"] })}
+                value={task.priority}
+              >
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button className="min-h-9" onClick={() => setEditing(false)} size="sm" type="button" variant="outline">
+              <CheckIcon className="size-4" />
+              Done
+            </Button>
             <Button
               className="ml-auto min-h-9 text-destructive"
               onClick={onDelete}
@@ -395,6 +466,23 @@ function TaskItem({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function Detail({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "warn";
+}) {
+  return (
+    <div>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={cn("mt-0.5 font-medium", tone === "warn" && "text-destructive")}>{value}</dd>
     </div>
   );
 }
@@ -417,9 +505,7 @@ export function ActionQueue({
     <Panel
       title={title}
       action={
-        actions.length ? (
-          <span className="text-xs text-muted-foreground">{actions.length}</span>
-        ) : null
+        actions.length ? <span className="text-xs text-muted-foreground">{actions.length}</span> : null
       }
     >
       {visible.length ? (

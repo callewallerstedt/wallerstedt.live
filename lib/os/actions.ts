@@ -1,5 +1,5 @@
 import { daysUntil } from "./format";
-import type { ActionItem, LedgerSnapshot, ProjectRow, UpcomingRow } from "./types";
+import type { ActionItem, LedgerSnapshot, UpcomingRow } from "./types";
 
 const TONE_RANK: Record<ActionItem["tone"], number> = { warn: 0, brand: 1, muted: 2 };
 
@@ -10,12 +10,11 @@ const TONE_RANK: Record<ActionItem["tone"], number> = { warn: 0, brand: 1, muted
  */
 export function buildActions(input: {
   ledger: LedgerSnapshot | null;
-  projects: ProjectRow[];
   upcoming: UpcomingRow[];
   nowYmd: string;
   vaultBase: string;
 }): ActionItem[] {
-  const { ledger, projects, upcoming, nowYmd, vaultBase } = input;
+  const { ledger, upcoming, nowYmd, vaultBase } = input;
   const items: ActionItem[] = [];
 
   if (ledger?.pendingDraftCount) {
@@ -75,27 +74,6 @@ export function buildActions(input: {
       date: null,
       tone: "warn",
       source: "cash",
-    });
-  }
-
-  // A long tail of dormant side repos would drown out the money items, so only
-  // the few most recently abandoned ones are worth surfacing.
-  const stale = projects
-    .filter((project) => project.lastActivity)
-    .map((project) => ({ project, days: daysUntil(project.lastActivity!.slice(0, 10), nowYmd) }))
-    .filter((row): row is { project: ProjectRow; days: number } => row.days != null && row.days >= 21)
-    .sort((a, b) => a.days - b.days)
-    .slice(0, 3);
-
-  for (const { project, days } of stale) {
-    items.push({
-      id: `stale-${project.repo ?? project.name}`,
-      title: `${project.name} has been quiet for ${days} days`,
-      detail: `Last commit ${project.lastActivity!.slice(0, 10)}`,
-      href: project.repoUrl,
-      date: null,
-      tone: "muted",
-      source: "project",
     });
   }
 

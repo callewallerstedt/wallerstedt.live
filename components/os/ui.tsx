@@ -14,11 +14,11 @@ import { cn } from "@/lib/utils";
 export function PageFrame({ children }: { children: ReactNode }) {
   return (
     <div
-      className="mx-auto flex w-full max-w-[1180px] flex-col gap-3 px-3 pt-3 sm:px-5 sm:pt-5 md:pb-6"
+      className="mx-auto flex w-full max-w-[1180px] flex-col gap-2 px-3 pt-2 sm:px-4 sm:pt-3 md:pb-5"
       style={{
         paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
         paddingRight: "max(0.75rem, env(safe-area-inset-right))",
-        paddingBottom: "calc(5.5rem + env(safe-area-inset-bottom))",
+        paddingBottom: "calc(5.25rem + env(safe-area-inset-bottom))",
       }}
     >
       {children}
@@ -36,11 +36,11 @@ export function PageTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-      <div className="min-w-0">
-        <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">{children}</h1>
-        {aside ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{aside}</p> : null}
-      </div>
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+      <h1 className="text-lg font-semibold tracking-tight sm:text-xl">{children}</h1>
+      {aside ? (
+        <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{aside}</p>
+      ) : null}
       {action}
     </div>
   );
@@ -49,7 +49,7 @@ export function PageTitle({
 /** A labelled band above a group of cards. Keeps long pages scannable. */
 export function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="mt-1 flex items-baseline justify-between gap-2">
+    <div className="mt-0.5 flex items-baseline justify-between gap-2">
       <h2 className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         {children}
       </h2>
@@ -170,7 +170,7 @@ export function Panel({
   return (
     <section className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
       {title ? (
-        <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+        <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-1.5">
           <h2 className="text-sm font-semibold">{title}</h2>
           {action}
         </div>
@@ -349,7 +349,7 @@ export function EntryList({
 
 export function OsPageSkeleton() {
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-3 p-3 sm:p-5">
+    <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-2 p-3 sm:p-4">
       <div className="h-7 w-40 animate-pulse rounded bg-muted" />
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (

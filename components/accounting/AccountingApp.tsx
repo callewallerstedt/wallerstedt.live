@@ -15,6 +15,14 @@ import {
   useState,
 } from "react";
 import { AccountingApi, AccountingApiError, asNumber, type AccountingUploadProgress } from "./api";
+import {
+  EllipsisIcon,
+  HouseIcon,
+  PlusIcon,
+  ReceiptTextIcon,
+  SparklesIcon,
+} from "lucide-react";
+
 import { AccountingIcons as Icon } from "./AccountingIcons";
 import { PwaRegistration } from "./PwaRegistration";
 import type {
@@ -955,7 +963,7 @@ export function AccountingApp({ accessKey, embedded = false }: { accessKey: stri
       <header className="ac-topbar">
         <div className="ac-topbar-inner">
           {embedded ? (
-            <p className="ac-brand-subtitle">Poster, kvitton och AI</p>
+            <EmbeddedTabs active={tab} onChange={changeTab} />
           ) : (
             <div className="ac-brand-lockup">
               <span className="ac-logo" aria-hidden="true">
@@ -968,10 +976,14 @@ export function AccountingApp({ accessKey, embedded = false }: { accessKey: stri
             </div>
           )}
           <div className="ac-topbar-actions">
-            <span className={`ac-online-pill ${online ? "is-online" : "is-offline"}`} role="status">
-              {online ? <Icon.Cloud size={16} /> : <Icon.WifiOff size={16} />}
-              <span>{online ? "Online" : "Offline"}</span>
-            </span>
+            {/* Embedded, the offline banner below already says when the
+                connection is gone, so the always-on pill is just noise. */}
+            {embedded && online ? null : (
+              <span className={`ac-online-pill ${online ? "is-online" : "is-offline"}`} role="status">
+                {online ? <Icon.Cloud size={16} /> : <Icon.WifiOff size={16} />}
+                <span>{online ? "Online" : "Offline"}</span>
+              </span>
+            )}
             <button
               aria-label="Uppdatera data"
               className="ac-icon-button"
@@ -1122,7 +1134,7 @@ export function AccountingApp({ accessKey, embedded = false }: { accessKey: stri
         )}
       </div>
 
-      <BottomNav active={tab} onChange={changeTab} />
+      {embedded ? null : <BottomNav active={tab} onChange={changeTab} />}
 
       {toast && (
         <div className="ac-toast" role="status">
@@ -1233,6 +1245,42 @@ function LoginGate({ online, onLogin }: { online: boolean; onLogin: (password: s
         <p className="ac-login-footnote"><Icon.Info size={17} /> Den privata länken räcker inte ensam – ditt lösenord krävs också.</p>
       </section>
     </main>
+  );
+}
+
+const EMBEDDED_TABS: Array<{ id: AppTab; label: string; icon: typeof HouseIcon }> = [
+  { id: "home", label: "Hem", icon: HouseIcon },
+  { id: "ledger", label: "Poster", icon: ReceiptTextIcon },
+  { id: "add", label: "Ny", icon: PlusIcon },
+  { id: "chat", label: "AI", icon: SparklesIcon },
+  { id: "settings", label: "Mer", icon: EllipsisIcon },
+];
+
+/**
+ * Inside the dashboard the vault's tabs are a compact segmented control in the
+ * toolbar rather than a second bottom bar, and they use the dashboard's icon
+ * set so the two do not look like different apps stacked on each other.
+ */
+function EmbeddedTabs({ active, onChange }: { active: AppTab; onChange: (tab: AppTab) => void }) {
+  return (
+    <div className="ac-embed-tabs" role="tablist" aria-label="Bokföring">
+      {EMBEDDED_TABS.map((item) => {
+        const ItemIcon = item.icon;
+        return (
+          <button
+            aria-selected={active === item.id}
+            className={active === item.id ? "is-active" : ""}
+            key={item.id}
+            onClick={() => onChange(item.id)}
+            role="tab"
+            type="button"
+          >
+            <ItemIcon size={17} strokeWidth={1.9} />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

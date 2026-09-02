@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowUpRightIcon } from "lucide-react";
 
 import {
   formatCompactCount,
@@ -17,6 +16,7 @@ import { osPath } from "@/lib/os/paths";
 import type { LedgerSnapshot, OsSnapshot, SpotifyHistory } from "@/lib/os/types";
 import { DualTrendChart } from "@/components/os/charts";
 import { ActionQueue, TaskList } from "@/components/os/tasks";
+import { AppearanceSettings, SignOutRow } from "@/components/os/settings";
 import {
   ConnectFootnote,
   EmptyState,
@@ -81,7 +81,7 @@ function RevenueChart({ ledger, title = "Revenue vs expense" }: { ledger: Ledger
 function CashAndProfitCharts({ ledger }: { ledger: LedgerSnapshot }) {
   const labels = ledger.months.map((row) => formatMonthLabel(row.month));
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-2 sm:grid-cols-2">
       <Panel
         title="Cash 1930"
         action={<span className="text-sm font-semibold tabular-nums">{formatSekTile(ledger.bankCents)}</span>}
@@ -154,17 +154,14 @@ export function OverviewPage({
         />
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <TaskList
-          accessKey={accessKey}
-          error={snapshot.tasksError}
-          limit={6}
-          moreHref={tasksHref}
-          tasks={snapshot.tasks}
-          todayYmd={todayYmd}
-        />
-        <ActionQueue actions={snapshot.actions} limit={6} />
-      </div>
+      <TaskList
+        accessKey={accessKey}
+        error={snapshot.tasksError}
+        limit={7}
+        moreHref={tasksHref}
+        tasks={snapshot.tasks}
+        todayYmd={todayYmd}
+      />
 
       {ledger ? <RevenueChart ledger={ledger} /> : null}
 
@@ -228,14 +225,14 @@ export function TasksPage({
         <KpiCard label="Flagged" value={formatNumber(snapshot.actions.length)} hint="From the books" />
       </KpiGrid>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <TaskList
           accessKey={accessKey}
           error={snapshot.tasksError}
           tasks={snapshot.tasks}
           todayYmd={todayYmd}
         />
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <ActionQueue actions={snapshot.actions} />
           <Panel title="Dates ahead">
             {snapshot.upcoming.length ? (
@@ -309,7 +306,7 @@ export function MoneyPage({ snapshot, accessKey }: { snapshot: OsSnapshot; acces
         <KpiCard label="Accounting YTD" value={formatSekTile(ledger.accountingCents)} hint="6530 / 6991" />
       </KpiGrid>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <Panel title="Expense accounts this year">
           {ledger.categories.length ? (
             ledger.categories.map((row) => (
@@ -335,7 +332,7 @@ export function MoneyPage({ snapshot, accessKey }: { snapshot: OsSnapshot; acces
         </Panel>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <Panel title="Largest expenses this year">
           <EntryList entries={ledger.largestExpenses} vaultBase={vault} emptyLabel="No expenses booked" />
         </Panel>
@@ -507,7 +504,7 @@ function SpotifyPanel({ history, followers }: { history: SpotifyHistory; followe
         />
       </Panel>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <Panel title="Top tracks">
           {history.top.slice(0, 8).map((song) => (
             <Row
@@ -542,7 +539,7 @@ export function MusicPage({ snapshot, todayYmd }: { snapshot: OsSnapshot; todayY
       <PageTitle aside="Streaming and catalog. None of this is booked revenue.">Music</PageTitle>
       <SpotifyPanel history={snapshot.spotifyHistory} followers={snapshot.spotify?.followers ?? null} />
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <Panel title="Coming up">
           {upcoming.length ? (
             upcoming.map((row) => (
@@ -581,57 +578,36 @@ export function MusicPage({ snapshot, todayYmd }: { snapshot: OsSnapshot; todayY
   );
 }
 
-export function ProjectsPage({ snapshot }: { snapshot: OsSnapshot }) {
-  const projects = snapshot.projects;
-  const withRevenue = projects.filter((project) => project.revenueCents);
-
+export function SettingsPage({
+  snapshot,
+  accessKey,
+}: {
+  snapshot: OsSnapshot;
+  accessKey: string;
+}) {
   return (
     <PageFrame>
-      <PageTitle aside="Public GitHub repositories, matched against the ledger where the names line up.">
-        Projects
-      </PageTitle>
+      <PageTitle aside="Appearance, company details and data sources.">Settings</PageTitle>
+      <AppearanceSettings />
 
-      {snapshot.projectsError ? (
-        <NoticeCard title="GitHub could not be reached" detail={snapshot.projectsError} />
-      ) : null}
-
-      <KpiGrid columns={3}>
-        <KpiCard label="Repos" value={formatNumber(projects.length)} hint="Public" />
-        <KpiCard label="Earning" value={formatNumber(withRevenue.length)} hint="Matched ledger" />
-        <KpiCard
-          label="Active"
-          value={formatNumber(
-            projects.filter(
-              (project) =>
-                (project.lastActivity ?? "").slice(0, 7) === new Date().toISOString().slice(0, 7),
-            ).length,
-          )}
-          hint="This month"
-        />
-      </KpiGrid>
-
-      <Panel title="Repositories">
-        {projects.length ? (
-          projects.map((project) => (
-            <Row
-              key={project.repo ?? project.name}
-              external
-              href={project.repoUrl}
-              primary={project.name}
-              secondary={[project.status, project.lastActivity?.slice(0, 10)].filter(Boolean).join(" · ")}
-              badge={project.revenueCents ? <Pill tone="brand">{formatSekTile(project.revenueCents)}</Pill> : undefined}
-              value={project.repoUrl ? <ArrowUpRightIcon className="size-4 text-muted-foreground" /> : undefined}
-            />
-          ))
-        ) : (
-          <EmptyState
-            title="No repositories"
-            detail="GitHub returned no public repositories for this account."
-          />
-        )}
+      <Panel title="Company">
+        <Row primary="Name" value={snapshot.company.name} valueTone="muted" />
+        <Row primary="VAT number" value={snapshot.company.vat} valueTone="muted" />
+        <Row primary="Owner" value={snapshot.company.owner} valueTone="muted" />
       </Panel>
 
-      <ConnectFootnote sources={snapshot.sources.filter((source) => source.id === "vercel")} />
+      <Panel title="Data sources" footer="Unconnected sources simply do not appear anywhere in the dashboard.">
+        {snapshot.sources.map((source) => (
+          <Row
+            key={source.id}
+            primary={source.label}
+            secondary={source.detail}
+            badge={source.wired ? <Pill tone="brand">Connected</Pill> : <Pill>Not connected</Pill>}
+          />
+        ))}
+      </Panel>
+
+      <SignOutRow accessKey={accessKey} />
     </PageFrame>
   );
 }

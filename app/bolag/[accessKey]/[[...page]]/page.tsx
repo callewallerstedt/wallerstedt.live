@@ -6,7 +6,7 @@ import {
   MoneyPage,
   MusicPage,
   OverviewPage,
-  ProjectsPage,
+  SettingsPage,
   TasksPage,
 } from "@/components/os/pages";
 import { OsPageSkeleton } from "@/components/os/ui";
@@ -30,8 +30,8 @@ async function OsPageBody({ accessKey, page }: { accessKey: string; page: OsPage
       return <MoneyPage accessKey={accessKey} snapshot={snapshot} />;
     case "music":
       return <MusicPage snapshot={snapshot} todayYmd={todayYmd} />;
-    case "projects":
-      return <ProjectsPage snapshot={snapshot} />;
+    case "settings":
+      return <SettingsPage accessKey={accessKey} snapshot={snapshot} />;
     default:
       return <OverviewPage accessKey={accessKey} snapshot={snapshot} todayYmd={todayYmd} />;
   }

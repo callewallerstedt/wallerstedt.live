@@ -13,9 +13,9 @@ Six tabs, a collapsible sidebar on desktop and a fixed tab bar on phones:
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
 | **Music** | Spotify for Artists export, DistroKid payouts and the release calendar |
-| **Projects** | Public GitHub repositories, matched to ledger revenue where names line up |
+| **Settings** | Theme, accent, company details, data sources and sign-out |
 
-`Content`, `Customers`, `Accounting`, `Investments`, `Wealth`, `Upcoming` and `Alerts` were merged into those six; their URLs redirect rather than 404.
+`Content`, `Customers`, `Accounting`, `Investments`, `Wealth`, `Upcoming`, `Alerts` and `Projects` were merged away; their URLs redirect rather than 404.
 
 ### Tasks need a migration
 
@@ -24,6 +24,39 @@ The to-do list is stored in Postgres (`CompanyTask`). Until the migration is app
 ```bash
 npm run prisma:deploy
 ```
+
+### Task agent API
+
+Tasks can be written by an agent the same way ledger posts can, at
+`/api/os/<ACCOUNTING_ACCESS_KEY>/agent/v1`. It takes the same
+`ACCOUNTING_AGENT_API_TOKEN` bearer as the accounting agent API, and also
+accepts the signed-in dashboard cookie.
+
+```bash
+BASE=https://wallerstedt.live/api/os/$ACCOUNTING_ACCESS_KEY/agent/v1
+
+# What the API offers
+curl -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" "$BASE"
+
+# Add a to-do with a full description
+curl -X POST "$BASE/tasks"   -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN"   -H "Content-Type: application/json"   -d '{
+        "title": "Ring revisorn om K10",
+        "notes": "Fråga om utdelningsutrymmet för 2026.",
+        "area": "admin",
+        "priority": "high",
+        "dueDate": "2026-09-30"
+      }'
+
+# Read, change and remove
+curl -H "Authorization: Bearer $TOKEN" "$BASE/tasks?status=open&area=admin"
+curl -X PATCH "$BASE/tasks/<id>" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json" -d '{"done": true}'
+curl -X DELETE "$BASE/tasks/<id>" -H "Authorization: Bearer $TOKEN"
+```
+
+`area` is one of `company`, `money`, `music`, `project`, `admin`; `priority` is
+`low`, `normal` or `high`. A `POST` whose title matches an existing open task
+returns that task with `"created": false` instead of duplicating it, so a retry
+is safe. Tasks never touch bokföring.
 
 
 ## Bookkeeping web push (iPhone Home Screen)

@@ -74,6 +74,23 @@ export async function listTasks(): Promise<{ tasks: TaskRow[]; error: string | n
   }
 }
 
+/**
+ * An agent that retries a create should not end up with two identical rows, so
+ * an open task with the same title is treated as the same task.
+ */
+export async function findOpenTaskByTitle(title: string): Promise<TaskRow | null> {
+  const row = await getAccountingDb().companyTask.findFirst({
+    where: { status: "open", title: title.slice(0, 300) },
+    orderBy: { createdAt: "desc" },
+  });
+  return row ? toRow(row) : null;
+}
+
+export async function getTask(id: string): Promise<TaskRow | null> {
+  const row = await getAccountingDb().companyTask.findUnique({ where: { id } });
+  return row ? toRow(row) : null;
+}
+
 export async function createTask(input: {
   title: string;
   notes?: string;

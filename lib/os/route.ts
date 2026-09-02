@@ -7,7 +7,7 @@ export const OS_PAGE_SLUGS = [
   "vault",
   "money",
   "music",
-  "projects",
+  "settings",
 ] as const;
 
 /**
@@ -22,6 +22,7 @@ export const OS_LEGACY_REDIRECTS: Record<string, (typeof OS_PAGE_SLUGS)[number] 
   wealth: "money",
   upcoming: "tasks",
   alerts: "tasks",
+  projects: "",
 };
 
 export type OsPageSlug = (typeof OS_PAGE_SLUGS)[number] | "";

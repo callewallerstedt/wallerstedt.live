@@ -3,23 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  FolderKanbanIcon,
   LandmarkIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
-  MoonIcon,
   MusicIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
-  SunIcon,
+  Settings2Icon,
   WalletIcon,
 } from "lucide-react";
 
 import { OsBrandLockup, OsBrandMark } from "@/components/os/brand";
-import { useAccent, useOsTheme } from "@/components/os/providers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { accentMeta, accents, type Accent } from "@/lib/accent";
 import { routeHref } from "@/lib/os/href";
 import { osPath } from "@/lib/os/paths";
 import type { OsPageSlug } from "@/lib/os/route";
@@ -36,7 +32,7 @@ export const OS_PAGES = [
   { slug: "vault" as const, label: "Bokföring", short: "Books", icon: LandmarkIcon },
   { slug: "money" as const, label: "Money", short: "Money", icon: WalletIcon },
   { slug: "music" as const, label: "Music", short: "Music", icon: MusicIcon },
-  { slug: "projects" as const, label: "Projects", short: "Repos", icon: FolderKanbanIcon },
+  { slug: "settings" as const, label: "Settings", short: "Settings", icon: Settings2Icon },
 ];
 
 export const OS_PAGE_TITLES: Record<string, string> = Object.fromEntries(
@@ -180,46 +176,7 @@ export function OsTabBar({ accessKey, taskCount }: { accessKey: string; taskCoun
   );
 }
 
-function AccentSwatches({
-  accent,
-  collapsed,
-  onAccentChange,
-}: {
-  accent: Accent;
-  collapsed: boolean;
-  onAccentChange: (accent: Accent) => void;
-}) {
-  return (
-    <div className={cn("flex gap-1.5", collapsed ? "flex-col" : "px-0.5")}>
-      {accents.map((id) => (
-        <button
-          key={id}
-          aria-label={`${accentMeta[id].label} accent`}
-          aria-pressed={accent === id}
-          className={cn(
-            "size-5 rounded-lg ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring",
-            accent === id && "ring-2 ring-foreground",
-          )}
-          onClick={() => onAccentChange(id)}
-          style={swatchStyle(id)}
-          title={accentMeta[id].hint}
-          type="button"
-        />
-      ))}
-    </div>
-  );
-}
-
-function swatchStyle(id: Accent): React.CSSProperties {
-  const map: Record<Accent, [string, string]> = {
-    ember: ["oklch(0.74 0.18 52)", "oklch(0.58 0.22 32)"],
-    sun: ["oklch(0.86 0.16 92)", "oklch(0.7 0.18 58)"],
-    ice: ["oklch(0.82 0.1 220)", "oklch(0.58 0.16 250)"],
-  };
-  const [from, to] = map[id];
-  return { backgroundImage: `linear-gradient(135deg, ${from}, ${to})` };
-}
-
+/** Deliberately near-empty: everything configurable lives under Settings. */
 export function OsHeader({
   collapsed,
   onCollapsedChange,
@@ -227,14 +184,11 @@ export function OsHeader({
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 }) {
-  const { theme, toggle } = useOsTheme();
-  const { accent, setAccent } = useAccent();
-
   return (
     <header
-      className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 md:h-14"
+      className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 md:h-11"
       style={{
-        minHeight: "calc(3.5rem + env(safe-area-inset-top))",
+        minHeight: "calc(2.75rem + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
         zIndex: zIndex.sticky,
       }}
@@ -250,23 +204,8 @@ export function OsHeader({
       >
         {collapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
       </Button>
-      <OsBrandMark className="md:hidden" size={30} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">Wallerstedt Productions AB</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <AccentSwatches accent={accent} collapsed={false} onAccentChange={setAccent} />
-        <Button
-          aria-label="Toggle colour theme"
-          className="size-9 shrink-0 touch-manipulation md:size-8"
-          onClick={toggle}
-          size="icon-sm"
-          type="button"
-          variant="outline"
-        >
-          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-        </Button>
-      </div>
+      <OsBrandMark className="md:hidden" size={24} />
+      <p className="truncate text-xs font-medium text-muted-foreground">Wallerstedt Productions AB</p>
     </header>
   );
 }
