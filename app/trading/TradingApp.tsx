@@ -4,9 +4,11 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  alignedReturnPct,
   applyLiveCandles,
   applyLiveQuotes,
   buildEquityCurve,
+  firstFillDate,
   formatBerlinClock,
   formatBerlinDateTime,
   formatPrice,
@@ -14,10 +16,15 @@ import {
   formatSignedPct,
   getPositionMetrics,
   getTradingDeskStats,
+  seriesTotalPct,
+  sliceFrom,
   stampLiveEquity,
+  TRADING_INDEXES,
   type TradingBook,
   type TradingCandle,
+  type TradingIndexId,
   type TradingLiveSnapshot,
+  type TradingPoint,
   type TradingPosition,
 } from "@/lib/trading";
 
@@ -29,6 +36,15 @@ import { PositionChart } from "./PositionChart";
 import { Sparkline } from "./Sparkline";
 
 const POLL_MS = 8000;
+
+type ChartUnit = "sek" | "pct";
+
+type BenchmarkSeries = {
+  id: TradingIndexId;
+  label: string;
+  color: string;
+  points: TradingPoint[];
+};
 
 function pnlClass(value: number) {
   if (value > 0) return "is-positive";
@@ -58,6 +74,11 @@ export function TradingApp({
   const [live, setLive] = useState<TradingLiveSnapshot | null>(initialLive);
   const [clock, setClock] = useState("");
   const [symbol, setSymbol] = useState<string | null>(book.positions[0]?.symbol ?? null);
+  const [unit, setUnit] = useState<ChartUnit>("sek");
+  const [selectedIndexes, setSelectedIndexes] = useState<TradingIndexId[]>([]);
+  const [benchmarks, setBenchmarks] = useState<BenchmarkSeries[] | null>(null);
+  const [benchStatus, setBenchStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [benchTick, setBenchTick] = useState(0);
   const chartRef = useRef<HTMLElement>(null);
 
   const refreshLive = useCallback(async () => {
@@ -101,6 +122,29 @@ export function TradingApp({
     };
   }, [refreshLive]);
 
+  useEffect(() => {
+    if (selectedIndexes.length === 0 || benchmarks) return;
+    let cancelled = false;
+    setBenchStatus("loading");
+    void (async () => {
+      try {
+        const response = await fetch(`/api/trading/${encodeURIComponent(accessKey)}/benchmarks`, {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("benchmarks failed");
+        const json = (await response.json()) as { series?: BenchmarkSeries[] };
+        if (cancelled) return;
+        setBenchmarks(json.series ?? []);
+        setBenchStatus("idle");
+      } catch {
+        if (!cancelled) setBenchStatus("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessKey, benchTick, benchmarks, selectedIndexes.length]);
+
   const liveBook = useMemo(() => applyLiveQuotes(book, live), [book, live]);
   const liveCharts = useMemo(() => applyLiveCandles(charts, live, liveBook.timezone), [charts, live, liveBook.timezone]);
   const quotes = live?.quotes ?? {};
@@ -109,6 +153,24 @@ export function TradingApp({
     () => stampLiveEquity(buildEquityCurve(liveBook, liveCharts), liveBook, quotes),
     [liveBook, liveCharts, quotes],
   );
+  const comparePoints = useMemo(
+    () => sliceFrom(equityPoints, firstFillDate(liveBook)),
+    [equityPoints, liveBook],
+  );
+  const curvePct = seriesTotalPct(comparePoints);
+  const capitalPct = liveBook.experiment.capitalSek
+    ? (stats.openPnlSek / liveBook.experiment.capitalSek) * 100
+    : 0;
+  const dayPct = liveBook.experiment.capitalSek
+    ? (stats.dayPnlSek / liveBook.experiment.capitalSek) * 100
+    : 0;
+  const activeOverlays = (benchmarks ?? []).filter((row) => selectedIndexes.includes(row.id));
+  const comparisons = activeOverlays.map((row) => ({
+    id: row.id,
+    label: row.label,
+    color: row.color,
+    ...alignedReturnPct(comparePoints, row.points),
+  }));
   const selected = liveBook.positions.find((position) => position.symbol === symbol) ?? null;
   const selectedMetrics = selected ? getPositionMetrics(selected, liveBook, quotes, stats.marketUsd) : null;
   const liveOn = live?.session === "open" && !live.stale;
@@ -118,6 +180,21 @@ export function TradingApp({
     if (!selected) return;
     chartRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [selected?.symbol]);
+
+  const toggleIndex = (id: TradingIndexId) => {
+    setSelectedIndexes((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  };
+
+  useEffect(() => {
+    if (selectedIndexes.length > 0) setUnit("pct");
+  }, [selectedIndexes]);
+
+  const retryBenchmarks = () => {
+    setBenchmarks(null);
+    setBenchTick((tick) => tick + 1);
+  };
 
   return (
     <main className="accounting-app ac-shell trading-app">
@@ -148,10 +225,12 @@ export function TradingApp({
             <div className="trading-hero-top">
               <div className="ac-hero-main">
                 <span id="equity-heading">Total utveckling</span>
-                <strong className={pnlClass(stats.openPnlSek)}>{formatSek(stats.equitySek)}</strong>
+                <strong className={pnlClass(unit === "pct" ? curvePct : stats.openPnlSek)}>
+                  {unit === "pct" ? formatSignedPct(curvePct) : formatSek(stats.equitySek)}
+                </strong>
                 <small>
-                  {formatSignedPct(stats.openPnlSek / liveBook.experiment.capitalSek * 100)} totalt ·{" "}
-                  <span className={pnlClass(stats.dayPnlSek)}>{formatSignedPct((stats.dayPnlSek / liveBook.experiment.capitalSek) * 100)} idag</span>
+                  {formatSignedPct(capitalPct)} {unit === "pct" ? "vs startkapital" : "totalt"} ·{" "}
+                  <span className={pnlClass(stats.dayPnlSek)}>{formatSignedPct(dayPct)} idag</span>
                   {live?.fetchedAt ? ` · ${formatBerlinDateTime(live.fetchedAt, liveBook.timezone)}` : ""}
                 </small>
               </div>
@@ -160,7 +239,69 @@ export function TradingApp({
                 <strong>{formatFx(liveBook.fxUsdSek)}</strong>
               </div>
             </div>
-            <EquityChart points={equityPoints} />
+            <div className="trading-compare">
+              <div className="trading-chart__legend" role="group" aria-label="Visa som">
+                <button
+                  type="button"
+                  className={unit === "sek" ? "is-on" : ""}
+                  aria-pressed={unit === "sek"}
+                  onClick={() => setUnit("sek")}
+                >
+                  SEK
+                </button>
+                <button
+                  type="button"
+                  className={unit === "pct" ? "is-on" : ""}
+                  aria-pressed={unit === "pct"}
+                  onClick={() => setUnit("pct")}
+                >
+                  %
+                </button>
+              </div>
+              <div className="trading-chart__legend trading-compare-indexes" role="group" aria-label="Jämför mot index">
+                <span className="trading-compare-label">Jämför</span>
+                {TRADING_INDEXES.map((index) => {
+                  const on = selectedIndexes.includes(index.id);
+                  return (
+                    <button
+                      key={index.id}
+                      type="button"
+                      className={on ? "is-on" : ""}
+                      aria-pressed={on}
+                      style={on ? { color: index.color } : undefined}
+                      onClick={() => toggleIndex(index.id)}
+                    >
+                      {index.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {benchStatus === "loading" && selectedIndexes.length > 0 ? (
+              <p className="trading-compare-status">Hämtar index…</p>
+            ) : null}
+            {benchStatus === "error" ? (
+              <p className="trading-compare-status">
+                Kunde inte hämta index.{" "}
+                <button type="button" onClick={retryBenchmarks}>
+                  Försök igen
+                </button>
+              </p>
+            ) : null}
+            {unit === "pct" && comparisons.length > 0 ? (
+              <div className="trading-alpha">
+                {comparisons.map((row) => (
+                  <span key={row.id} style={{ color: row.color }}>
+                    vs {row.label} {formatSignedPct(row.benchmarkPct)} · α {formatSignedPct(row.alpha)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <EquityChart
+              points={comparePoints}
+              unit={unit}
+              overlays={unit === "pct" ? activeOverlays : []}
+            />
             <div className="trading-stat-row">
               <div>
                 <span>Marknad</span>

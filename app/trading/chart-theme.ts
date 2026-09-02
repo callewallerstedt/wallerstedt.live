@@ -14,7 +14,7 @@ export const TRADING_CHART_SMA = "#e0bd85";
 export const TRADING_CHART_TARGET = "#c4b5fd";
 export const TRADING_CHART_STOP = "#e29a9a";
 
-export function tradingChartOptions(charts: Charts, height: number) {
+export function tradingChartOptions(charts: Charts, height: number, scale: "log" | "linear" = "log") {
   const { ColorType, CrosshairMode, LineStyle, PriceScaleMode } = charts;
 
   return {
@@ -42,7 +42,7 @@ export function tradingChartOptions(charts: Charts, height: number) {
       ticksVisible: true,
       entireTextOnly: true,
       minimumWidth: 80,
-      mode: PriceScaleMode.Logarithmic,
+      mode: scale === "log" ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
       scaleMargins: { top: 0.12, bottom: 0.1 },
     },
     timeScale: {

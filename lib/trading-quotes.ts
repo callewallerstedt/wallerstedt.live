@@ -1,4 +1,11 @@
-import { formatIsoDate, type TradingLiveSnapshot, type TradingQuote } from "@/lib/trading";
+import {
+  formatIsoDate,
+  TRADING_INDEXES,
+  type TradingIndexId,
+  type TradingLiveSnapshot,
+  type TradingPoint,
+  type TradingQuote,
+} from "@/lib/trading";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
 const FX_SYMBOL = "USDSEK=X";
@@ -8,6 +15,9 @@ type YahooChart = {
     result?: Array<{
       meta?: {
         symbol?: string;
+        shortName?: string;
+        longName?: string;
+        exchangeTimezoneName?: string;
         regularMarketPrice?: number;
         regularMarketChangePercent?: number;
         chartPreviousClose?: number;
@@ -19,8 +29,21 @@ type YahooChart = {
         fiftyTwoWeekLow?: number;
         regularMarketTime?: number;
       };
+      timestamp?: number[];
+      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
     }>;
   };
+};
+
+export const TRADING_BENCHMARKS = TRADING_INDEXES;
+
+export type TradingBenchmarkId = TradingIndexId;
+
+export type TradingBenchmarkSeries = {
+  id: TradingBenchmarkId;
+  label: string;
+  color: string;
+  points: TradingPoint[];
 };
 
 function asFinite(value: unknown) {
@@ -57,8 +80,8 @@ function parseQuote(symbol: string, payload: YahooChart): TradingQuote | null {
   };
 }
 
-async function fetchYahooChart(symbol: string): Promise<YahooChart> {
-  const url = `${YAHOO_CHART}/${encodeURIComponent(symbol)}?interval=1d&range=5d&includePrePost=true`;
+async function fetchYahooChart(symbol: string, range = "5d"): Promise<YahooChart> {
+  const url = `${YAHOO_CHART}/${encodeURIComponent(symbol)}?interval=1d&range=${encodeURIComponent(range)}&includePrePost=true`;
   const response = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -126,4 +149,53 @@ export async function fetchTradingLive(symbols: string[]): Promise<TradingLiveSn
 
 export function liveQuoteDay(live: TradingLiveSnapshot, timeZone: string) {
   return formatIsoDate(live.fetchedAt, timeZone);
+}
+
+function unixToDate(unix: number, timeZone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(unix * 1000));
+}
+
+function parseHistory(payload: YahooChart) {
+  const result = payload.chart?.result?.[0];
+  const timestamps = result?.timestamp ?? [];
+  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  const timeZone = result?.meta?.exchangeTimezoneName || "UTC";
+  const points: Array<{ time: string; value: number }> = [];
+  for (let i = 0; i < timestamps.length; i += 1) {
+    const close = closes[i];
+    if (typeof close !== "number" || !Number.isFinite(close)) continue;
+    points.push({ time: unixToDate(timestamps[i]!, timeZone), value: close });
+  }
+  return points;
+}
+
+let benchmarkCache: { at: number; series: TradingBenchmarkSeries[] } | null = null;
+
+export async function fetchTradingBenchmarks(): Promise<TradingBenchmarkSeries[]> {
+  if (benchmarkCache && Date.now() - benchmarkCache.at < 5 * 60 * 1000) {
+    return benchmarkCache.series;
+  }
+
+  const rows = await Promise.allSettled(
+    TRADING_BENCHMARKS.map(async (benchmark) => {
+      const payload = await fetchYahooChart(benchmark.yahoo, "2y");
+      return {
+        id: benchmark.id,
+        label: benchmark.label,
+        color: benchmark.color,
+        points: parseHistory(payload),
+      } satisfies TradingBenchmarkSeries;
+    }),
+  );
+
+  const series = rows.flatMap((row) => (row.status === "fulfilled" && row.value.points.length ? [row.value] : []));
+  if (series.length) {
+    benchmarkCache = { at: Date.now(), series };
+  }
+  return series;
 }

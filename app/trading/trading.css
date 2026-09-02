@@ -225,6 +225,48 @@
 .trading-spark.is-negative { color: var(--ac-negative); }
 .trading-spark--empty { width: 64px; height: 20px; }
 
+.trading-compare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trading-compare-label {
+  padding: 0 2px;
+  color: var(--ac-faint);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trading-compare-indexes {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.trading-compare-status {
+  margin: 0;
+  color: var(--ac-muted);
+  font-size: 12px;
+}
+
+.trading-compare-status button {
+  color: var(--ac-ink);
+  text-decoration: underline;
+}
+
+.trading-alpha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--ac-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 .trading-equity-chart,
 .trading-chart__frame {
   position: relative;
@@ -313,5 +355,10 @@
 
   .trading-chart__canvas {
     height: 260px;
+  }
+
+  .trading-compare,
+  .trading-compare-indexes {
+    justify-content: flex-start;
   }
 }
