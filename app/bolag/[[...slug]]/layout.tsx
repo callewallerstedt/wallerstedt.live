@@ -1,9 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { OsLogin } from "@/components/os/login";
 import { OsProviders } from "@/components/os/providers";
 import { OsShell } from "@/components/os/shell";
+import { routeHref } from "@/lib/os/href";
+import { osPath } from "@/lib/os/paths";
+import { configuredOsAccessKey, resolveOsRoute } from "@/lib/os/route";
 import { hasOsSession, requireOsAccessKey } from "@/lib/os/session";
 import { getOsSnapshot } from "@/lib/os/snapshot";
 
@@ -11,20 +15,12 @@ import "../os.css";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ accessKey: string }>;
-}): Promise<Metadata> {
-  const { accessKey } = await params;
+export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Bolag | Wallerstedt Productions AB",
     description: "Owner dashboard for Wallerstedt Productions AB.",
     referrer: "no-referrer",
     robots: { index: false, follow: false, noarchive: true, noimageindex: true },
-    other: {
-      "os-access": accessKey ? "private" : "private",
-    },
   };
 }
 
@@ -40,15 +36,21 @@ export default async function OsLayout({
   params,
 }: {
   children: ReactNode;
-  params: Promise<{ accessKey: string }>;
+  params: Promise<{ slug?: string[] }>;
 }) {
-  const { accessKey } = await params;
-  await requireOsAccessKey(accessKey);
-  const signedIn = await hasOsSession(accessKey);
+  const { slug } = await params;
+  const resolved = resolveOsRoute(slug, configuredOsAccessKey());
+  if (!resolved) notFound();
+  await requireOsAccessKey(resolved.accessKey);
+  if (resolved.keyedAlias) {
+    redirect(routeHref(osPath(resolved.page)));
+  }
+
+  const signedIn = await hasOsSession(resolved.accessKey);
   let alertCount = 0;
   if (signedIn) {
     try {
-      alertCount = (await getOsSnapshot(accessKey)).alerts.length;
+      alertCount = (await getOsSnapshot(resolved.accessKey)).alerts.length;
     } catch {
       alertCount = 0;
     }
@@ -58,11 +60,11 @@ export default async function OsLayout({
     <div className="os-root dark" data-accent="ember">
       <OsProviders>
         {signedIn ? (
-          <OsShell accessKey={accessKey} alertCount={alertCount}>
+          <OsShell accessKey={resolved.accessKey} alertCount={alertCount}>
             {children}
           </OsShell>
         ) : (
-          <OsLogin accessKey={accessKey} />
+          <OsLogin />
         )}
       </OsProviders>
     </div>

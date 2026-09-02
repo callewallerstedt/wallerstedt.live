@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-export function OsLogin({ accessKey }: { accessKey: string }) {
+export function OsLogin() {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,14 +23,14 @@ export function OsLogin({ accessKey }: { accessKey: string }) {
     setSubmitting(true);
     setError("");
     try {
-      const response = await fetch(`/api/accounting/${encodeURIComponent(accessKey)}/session/login`, {
+      const response = await fetch("/api/bolag/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
       const body = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
       if (!response.ok) {
-        setError(body?.error || body?.message || "Inloggningen misslyckades.");
+        setError(body?.message || body?.error || "Inloggningen misslyckades.");
         return;
       }
       router.refresh();
