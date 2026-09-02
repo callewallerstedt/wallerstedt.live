@@ -1093,6 +1093,7 @@ export function AccountingApp({ accessKey }: { accessKey: string }) {
           />
         ) : (
           <SettingsView
+            accessKey={accessKey}
             api={api}
             dashboard={dashboard}
             onBackupComplete={loadDashboard}
@@ -3441,6 +3442,7 @@ function EntryEditor({
 }
 
 function SettingsView({
+  accessKey,
   api,
   dashboard,
   onBackupComplete,
@@ -3448,6 +3450,7 @@ function SettingsView({
   onLogout,
   onLogoutAll,
 }: {
+  accessKey: string;
   api: AccountingApi;
   dashboard: DashboardData | null;
   onBackupComplete: () => Promise<void>;
@@ -3500,6 +3503,17 @@ function SettingsView({
           </section>
 
           <PwaRegistration api={api} visible />
+
+          <section className="ac-card" aria-labelledby="os-heading">
+            <div className="ac-section-icon"><Icon.Wallet /></div>
+            <div>
+              <h2 id="os-heading">Företags-OS</h2>
+              <p>Samma ledger och inloggning, ny översikt. Vaulten är oförändrad.</p>
+              <a className="ac-button ac-button--secondary" href={`/bolag/${encodeURIComponent(accessKey)}`}>
+                Öppna OS
+              </a>
+            </div>
+          </section>
 
           <section className="ac-card ac-security-card" aria-labelledby="security-heading">
             <div className="ac-section-icon"><Icon.Shield /></div>

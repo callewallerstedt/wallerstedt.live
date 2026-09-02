@@ -12,6 +12,8 @@ export default function robots(): MetadataRoute.Robots {
           "/tesla-trips",
           "/admin",
           "/vault",
+          "/bolag",
+          "/os",
           "/trading",
           "/api/tesla",
           "/api/accounting",

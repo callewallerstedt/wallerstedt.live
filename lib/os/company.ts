@@ -1,0 +1,37 @@
+export const COMPANY = {
+  name: "Wallerstedt Productions AB",
+  shortName: "WP AB",
+  owner: "Calle Wallerstedt",
+  vat: "SE559559790601",
+  locale: "sv-SE",
+  timeZone: "Europe/Berlin",
+  currency: "SEK",
+  corpTaxRate: 0.206,
+  spotifyArtistId: "7qBBYMwk5wXAjSXWWhPCxK",
+  githubUser: "callewallerstedt",
+  accounts: {
+    bank: 1930,
+    capitalInsurance: 1385,
+    taxAccount: 1630,
+    corpTax: 2510,
+    vatOut: 2610,
+    vatIn: 2641,
+    vat: 2650,
+    withholding: 2710,
+    employer: 2730,
+    otherLiability: 2893,
+  },
+} as const;
+
+export const LEDGER_BALANCE_ACCOUNTS = [
+  COMPANY.accounts.bank,
+  COMPANY.accounts.capitalInsurance,
+  COMPANY.accounts.taxAccount,
+  COMPANY.accounts.corpTax,
+  COMPANY.accounts.vatOut,
+  COMPANY.accounts.vatIn,
+  COMPANY.accounts.vat,
+  COMPANY.accounts.withholding,
+  COMPANY.accounts.employer,
+  COMPANY.accounts.otherLiability,
+] as const;
