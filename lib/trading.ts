@@ -103,8 +103,10 @@ export type TradingQuote = {
   prePrice: number | null;
   prePct: number | null;
   preTime: string | null;
+  preMark: number | null;
   postPrice: number | null;
   postPct: number | null;
+  postMark: number | null;
 };
 
 export type TradingLiveSnapshot = {
@@ -229,6 +231,10 @@ function parsePosition(value: unknown): TradingPosition {
   const shares = asNumber(row.shares, 1);
   const side = row.side === "short" ? "short" : "long";
   const computedPct = fill === 0 ? 0 : ((last - fill) / fill) * 100 * (side === "short" ? -1 : 1);
+  const stop = asNumber(row.stop);
+  const target = asNumber(row.target);
+  const stopPct = asNumber(row.stopPct, fill && stop ? ((stop - fill) / fill) * 100 : 0);
+  const targetPct = asNumber(row.targetPct, fill && target ? ((target - fill) / fill) * 100 : 0);
 
   return {
     symbol: asString(row.symbol).toUpperCase(),
@@ -237,13 +243,22 @@ function parsePosition(value: unknown): TradingPosition {
     shares,
     fill,
     filledAt: asString(row.filledAt),
-    stop: asNumber(row.stop),
-    stopPct: asNumber(row.stopPct),
-    target: asNumber(row.target),
-    targetPct: asNumber(row.targetPct),
+    stop: stop || (fill && stopPct ? Number((fill * (1 + stopPct / 100)).toFixed(2)) : 0),
+    stopPct,
+    target: target || (fill && targetPct ? Number((fill * (1 + targetPct / 100)).toFixed(2)) : 0),
+    targetPct,
     last,
     pnlPct: typeof row.pnlPct === "number" ? row.pnlPct : Number(computedPct.toFixed(1)),
   };
+}
+
+export function positionFromDraft(value: unknown, now = new Date()): TradingPosition {
+  const row = isRecord(value) ? value : {};
+  return parsePosition({
+    ...row,
+    filledAt: asString(row.filledAt, now.toISOString()),
+    last: asNumber(row.last, asNumber(row.fill)),
+  });
 }
 
 function parseClosed(value: unknown): ClosedTrade {
@@ -515,6 +530,16 @@ export function firstFillDate(book: TradingBook) {
   return dates[0];
 }
 
+export const EQUITY_RANGES = [
+  { key: "1d", label: "Idag", days: 1 },
+  { key: "1w", label: "1 Vecka", days: 7 },
+  { key: "1m", label: "1 Månad", days: 31 },
+  { key: "1y", label: "1 År", days: 365 },
+  { key: "all", label: "Sedan Start", days: null },
+] as const;
+
+export type EquityRange = (typeof EQUITY_RANGES)[number]["key"];
+
 export function sliceFrom(points: TradingPoint[], startTime?: string) {
   if (!startTime || points.length === 0) return points;
   const before = [...points].reverse().find((point) => point.time < startTime && point.value !== 0);
@@ -522,6 +547,19 @@ export function sliceFrom(points: TradingPoint[], startTime?: string) {
   if (!fromStart.length) return before ? [before] : points;
   if (before && fromStart[0]?.time !== before.time) return [before, ...fromStart];
   return fromStart;
+}
+
+export function sliceByRange(points: TradingPoint[], range: EquityRange, firstFill?: string) {
+  if (range === "all") return sliceFrom(points, firstFill);
+  const last = points.at(-1)?.time;
+  if (!last) return points;
+  const days = EQUITY_RANGES.find((item) => item.key === range)?.days ?? 1;
+  const end = Date.parse(`${last}T12:00:00Z`);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - days);
+  const startTime = start.toISOString().slice(0, 10);
+  const floor = firstFill && firstFill > startTime ? firstFill : startTime;
+  return sliceFrom(points, floor);
 }
 
 export function alignedReturnPct(subject: TradingPoint[], benchmark: TradingPoint[]) {

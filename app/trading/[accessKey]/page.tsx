@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 
 import { tradingAccessKeyMatches } from "@/lib/trading-access";
 import { fetchTradingLive } from "@/lib/trading-quotes";
-import { applyLiveCandles, applyLiveQuotes } from "@/lib/trading";
 import { getTradingBook, getTradingCharts } from "@/lib/trading-server";
 
 import { TradingApp } from "../TradingApp";
@@ -24,8 +23,6 @@ export default async function PrivateTradingPage({
     getTradingCharts(book),
     fetchTradingLive(book.positions.map((position) => position.symbol)).catch(() => null),
   ]);
-  const liveBook = applyLiveQuotes(book, live);
-  const liveCharts = applyLiveCandles(charts, live, liveBook.timezone);
 
-  return <TradingApp accessKey={accessKey} book={liveBook} charts={liveCharts} initialLive={live} />;
+  return <TradingApp accessKey={accessKey} book={book} charts={charts} initialLive={live} />;
 }

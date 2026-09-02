@@ -12,6 +12,7 @@ import {
 } from "@/lib/trading";
 
 import { ChartCanvas } from "./ChartCanvas";
+import { TRADING_CHART_POST, TRADING_CHART_PRE } from "./chart-theme";
 
 export function PositionChart({
   position,
@@ -52,6 +53,16 @@ export function PositionChart({
           </small>
         </div>
         <div className="trading-chart__legend">
+          {quote?.preMark != null ? (
+            <span className="trading-chart__key" style={{ color: TRADING_CHART_PRE }}>
+              Pre {formatPrice(quote.preMark)}
+            </span>
+          ) : null}
+          {quote?.postMark != null ? (
+            <span className="trading-chart__key" style={{ color: TRADING_CHART_POST }}>
+              AH {formatPrice(quote.postMark)}
+            </span>
+          ) : null}
           <button type="button" data-line="ema" className={showEma ? "is-on" : ""} onClick={() => setShowEma((value) => !value)}>
             EMA20
           </button>
@@ -64,7 +75,15 @@ export function PositionChart({
         {!mounted || candles.length === 0 ? (
           <div className="trading-chart__loading">{candles.length === 0 ? "Ingen graf ännu." : "Laddar graf…"}</div>
         ) : (
-          <ChartCanvas candles={candles} position={position} fillClock={fillClock} showEma={showEma} showSma={showSma} />
+          <ChartCanvas
+            candles={candles}
+            position={position}
+            fillClock={fillClock}
+            showEma={showEma}
+            showSma={showSma}
+            prePrice={quote?.preMark ?? quote?.prePrice}
+            postPrice={quote?.postMark ?? quote?.postPrice}
+          />
         )}
       </div>
       <div className="trading-metric-grid">
@@ -98,6 +117,20 @@ export function PositionChart({
           </strong>
           <small>{quote?.week52High != null ? formatPrice(quote.week52High) : "high"}</small>
         </div>
+        {quote?.preMark != null ? (
+          <div>
+            <span>Pre</span>
+            <strong>{formatPrice(quote.preMark)}</strong>
+            <small>{quote.prePct != null ? formatSignedPct(quote.prePct) : "premarket"}</small>
+          </div>
+        ) : null}
+        {quote?.postMark != null ? (
+          <div>
+            <span>AH</span>
+            <strong>{formatPrice(quote.postMark)}</strong>
+            <small>{quote.postPct != null ? formatSignedPct(quote.postPct) : "after hours"}</small>
+          </div>
+        ) : null}
       </div>
     </div>
   );
