@@ -93,41 +93,73 @@ function MiniCharts({ ledger }: { ledger: LedgerSnapshot }) {
 }
 
 function SpotifyBlock({ history, followers }: { history: SpotifyHistory; followers: number | null }) {
-  const labels = history.months.map((row) => formatMonthLabel(row.month));
+  const dailyLabels = history.daily.map((row, index) => {
+    if (index === 0 || index === history.daily.length - 1 || row.date.endsWith("-01")) {
+      return formatMonthLabel(row.date.slice(0, 7));
+    }
+    return "";
+  });
   return (
     <section className="overflow-hidden rounded-md bg-card ring-1 ring-foreground/10">
       <div className="flex items-baseline justify-between gap-2 px-2 py-1">
         <p className="text-[10px] font-medium text-muted-foreground">Spotify for Artists</p>
-        <p className="text-[10px] text-muted-foreground">Scrape {formatDate(history.scrapedAt)}</p>
+        <p className="text-[10px] text-muted-foreground">{history.throughLabel} · scrape {formatDate(history.scrapedAt)}</p>
       </div>
       <div className="px-1 pb-1">
         <KpiGrid>
           <KpiCard
-            label="Streams"
-            value={formatCompactCount(history.totalStreams)}
+            label="Own Total"
+            value={formatCompactCount(history.ownStreams)}
             hint={`${formatDate(history.from)}–${formatDate(history.to)}`}
           />
-          <KpiCard label="Last 30d" value={formatCompactCount(history.last30)} hint="Of scrape window" />
+          <KpiCard
+            label="Last day own"
+            value={formatNumber(history.lastCompleteOwn)}
+            hint={formatDate(history.lastCompleteDay)}
+          />
+          <KpiCard
+            label="S4A-era est."
+            value={formatUsd(history.estimatedOwnEarningsUsd)}
+            hint={`Own × $${history.ratePerStreamUsd} from summary`}
+          />
+          <KpiCard
+            label="DK Spotify"
+            value={formatUsd(history.distrokid.spotifyEarnUsd)}
+            hint={`${formatCompactCount(history.distrokid.spotifyQty)} qty · not bokföring`}
+          />
+          <KpiCard
+            label="Memories"
+            value={formatNumber(history.memories.firstDayStreams)}
+            hint={`per day on ${formatDate(history.memories.from)} · ${formatCompactCount(history.memories.streams)} yr`}
+          />
           {followers != null ? (
             <KpiCard label="Followers" value={formatNumber(followers)} hint="Public artist API" />
           ) : (
-            <KpiCard label="Own catalog" value={formatCompactCount(history.ownStreams)} hint="Tagged own in scrape" />
+            <KpiCard
+              label="Label catalog"
+              value={formatCompactCount(history.labelStreams)}
+              hint="Same scrape window"
+            />
           )}
-          <KpiCard
-            label="DistroKid"
-            value={formatUsd(history.distrokid.totalEarnedUsd)}
-            hint={`Lifetime to ${formatDate(history.distrokid.scrapedAt)}`}
-          />
         </KpiGrid>
       </div>
+      <div className="flex items-baseline justify-between px-2">
+        <p className="text-[10px] font-medium text-muted-foreground">Daily Own Total</p>
+        <p className="flex gap-2 text-[10px] text-muted-foreground">
+          <span className="text-brand">Own {formatCompactCount(history.ownStreams)}</span>
+          <span>Label {formatCompactCount(history.labelStreams)}</span>
+        </p>
+      </div>
       <DualTrendChart
-        compact
         unit="count"
-        labels={labels}
-        series={[{ key: "streams", label: "Streams", values: history.months.map((row) => row.streams), fill: true }]}
+        labels={dailyLabels}
+        series={[
+          { key: "own", label: "Own Total", values: history.daily.map((row) => row.own), fill: true },
+          { key: "label", label: "Label Total", values: history.daily.map((row) => row.label), tone: "muted" },
+        ]}
       />
       <ul>
-        {history.top.slice(0, 4).map((song) => (
+        {history.top.slice(0, 6).map((song) => (
           <li key={song.id} className="flex items-baseline gap-2 border-t border-border px-2 py-1">
             <p className="min-w-0 flex-1 truncate text-[13px] font-medium">{song.name}</p>
             <p className="text-[10px] text-muted-foreground">{song.category}</p>
@@ -135,6 +167,15 @@ function SpotifyBlock({ history, followers }: { history: SpotifyHistory; followe
           </li>
         ))}
       </ul>
+      <p className="px-2 py-1 text-[10px] leading-snug text-muted-foreground">
+        DistroKid mix {formatDate(history.distrokid.scrapedAt)}:{" "}
+        {history.distrokid.stores
+          .slice(0, 5)
+          .map((store) => `${store.store} ${formatUsd(store.earnUsd)}`)
+          .join(" · ")}
+        . Callespc CSV Own Total {formatNumber(history.csvVerified.ownTotal)} over {history.csvVerified.days}d
+        (last day {formatNumber(history.csvVerified.ownLastDay)}) matches the 15 Apr 00:08 backup — not live.
+      </p>
     </section>
   );
 }

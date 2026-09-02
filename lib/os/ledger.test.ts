@@ -258,12 +258,29 @@ test("spotify history is the S4A scrape, not invented stream counts", async () =
   const history = loadSpotifyHistory();
   assert.equal(history.source, "callewallerstedt/spotifyanalytics");
   assert.equal(history.scrapedAt, "2026-04-15");
+  assert.equal(history.throughLabel, "through Apr 2026");
+  assert.equal(history.from, "2025-04-14");
+  assert.equal(history.to, "2026-04-14");
   assert.equal(history.totalStreams, 21630138);
-  assert.equal(history.last30, 1658057);
-  assert.equal(history.top[0]?.name, "Memories");
-  assert.equal(history.top[0]?.streams, 6177931);
+  assert.equal(history.ownStreams, 10815255);
+  assert.equal(history.labelStreams, 10814883);
+  assert.equal(history.lastCompleteOwn, 38427);
+  assert.equal(history.memories.name, "Memories");
+  assert.equal(history.memories.firstDayStreams, 16236);
+  assert.equal(history.memories.streams, 6177931);
+  assert.equal(history.ratePerStreamUsd, 0.00294);
+  assert.equal(history.estimatedOwnEarningsUsd, 31796.85);
+  assert.equal(history.distrokid.spotifyQty, 23845399);
+  assert.equal(history.distrokid.spotifyEarnUsd, 40021.17);
+  assert.equal(history.csvVerified.days, 364);
+  assert.equal(history.csvVerified.ownTotal, 10654264);
+  assert.equal(history.csvVerified.ownLastDay, 32702);
   assert.equal(
-    history.months.reduce((sum, row) => sum + row.streams, 0),
+    history.daily.reduce((sum, row) => sum + row.own + row.label, 0),
+    history.totalStreams,
+  );
+  assert.equal(
+    history.months.reduce((sum, row) => sum + row.total, 0),
     history.totalStreams,
   );
 });

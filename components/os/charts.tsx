@@ -260,8 +260,12 @@ export function DualTrendChart({
         )
       })}
       {labels.map((item, index) => {
-        if (index % 3 !== 0 && index !== labels.length - 1) return null
-        const x = pad.l + (index / (labels.length - 1)) * innerW
+        if (!item) return null
+        const filled = labels.filter(Boolean).length
+        const sparse = filled < labels.length
+        const step = Math.max(1, Math.round((labels.length - 1) / 6))
+        if (!sparse && index % step !== 0 && index !== labels.length - 1) return null
+        const x = pad.l + (index / Math.max(1, labels.length - 1)) * innerW
         return (
           <text
             key={`${item}-${index}`}
