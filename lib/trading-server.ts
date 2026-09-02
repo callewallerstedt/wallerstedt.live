@@ -25,6 +25,11 @@ async function readBlobBook(): Promise<TradingBook | null> {
   }
 }
 
+function isMissingBlobCredentials(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /No blob credentials found/i.test(message);
+}
+
 export async function getTradingBook(): Promise<TradingBook> {
   return (await readBlobBook()) ?? (await readSeedBook());
 }
@@ -32,24 +37,19 @@ export async function getTradingBook(): Promise<TradingBook> {
 export async function saveTradingBook(book: TradingBook): Promise<TradingBook> {
   const parsed = parseTradingBook(book);
   const payload = `${JSON.stringify(parsed, null, 2)}\n`;
-  const writes: Array<Promise<unknown>> = [
-    writeFile(BOOK_FILE, payload, "utf8").catch(() => null),
-  ];
+  await writeFile(BOOK_FILE, payload, "utf8").catch(() => null);
   try {
     const { put } = await import("@vercel/blob");
-    writes.push(
-      put(BOOK_BLOB, payload, {
-        access: "private",
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        contentType: "application/json",
-        cacheControlMaxAge: 0,
-      }),
-    );
-  } catch {
-    /* local seed file is enough in dev */
+    await put(BOOK_BLOB, payload, {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json",
+      cacheControlMaxAge: 0,
+    });
+  } catch (error) {
+    if (!isMissingBlobCredentials(error)) throw error;
   }
-  await Promise.all(writes);
   return parsed;
 }
 
