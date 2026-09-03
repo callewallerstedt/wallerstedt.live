@@ -1,21 +1,25 @@
 import Link from "next/link";
 
+import "./site.css";
+
 export default function NotFound() {
   return (
-    <main className="song-main">
-      <div className="container section-heading" data-reveal>
-        <p className="eyebrow">Not found</p>
-        <h2>That piece is not here.</h2>
-        <p>Try the homepage or jump to a random song.</p>
-        <div className="button-row">
-          <Link className="button button--primary" href="/">
-            Back home
-          </Link>
-          <Link className="button button--secondary" href="/random">
-            Random song
-          </Link>
+    <div className="wl">
+      <div className="wl-aura" aria-hidden="true" />
+      <div className="wl-grain" aria-hidden="true" />
+      <main className="wl-404">
+        <div className="wl-404__inner">
+          <p className="wl-eyebrow wl-eyebrow--bare">404</p>
+          <h1 className="wl-display" style={{ fontSize: "clamp(2.6rem, 9vw, 7rem)" }}>
+            Nothing here.
+          </h1>
+          <div className="wl-btn-row" style={{ justifyContent: "center" }}>
+            <Link className="wl-btn wl-btn--solid" href="/">
+              <span>Back to the music</span>
+            </Link>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

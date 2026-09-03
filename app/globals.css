@@ -3061,3 +3061,14 @@ main > .section:last-child {
     min-height: 325px;
   }
 }
+
+/* Archived (pre-2026) public site shell. Kept so /archive still renders the old design. */
+.archive-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.archive-shell > main {
+  flex: 1 0 auto;
+}

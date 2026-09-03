@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif, Inter, Playfair_Display } from "next/font/google";
 
 import { AnalyticsTracker } from "@/components/AnalyticsTracker";
-import { Footer } from "@/components/Footer";
-import { MotionEffects } from "@/components/MotionEffects";
 import { PrivacyAwareAnalytics } from "@/components/PrivacyAwareAnalytics";
-import { SiteHeader } from "@/components/SiteHeader";
 import { artist } from "@/lib/artist";
-import { getSiteContent } from "@/lib/site-content";
 
 import "./globals.css";
 
@@ -21,19 +17,36 @@ const playfair = Playfair_Display({
   variable: "--font-display",
 });
 
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-ui",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
+
+const instrument = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://wallerstedt.live"),
   title: {
-    default: artist.shortName,
-    template: `%s | ${artist.shortName}`,
+    default: `${artist.shortName} — piano music`,
+    template: `%s · ${artist.shortName}`,
   },
-  description: "hi! I make piano music :)",
+  description: artist.tagline,
   icons: {
     icon: "/favicon.svg",
   },
   openGraph: {
     title: artist.shortName,
-    description: "hi! I make piano music :)",
+    description: artist.tagline,
     url: "https://wallerstedt.live",
     siteName: artist.shortName,
     images: [{ url: "/media/after-dark.jpg", width: 512, height: 512 }],
@@ -42,22 +55,19 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: artist.shortName,
-    description: "hi! I make piano music :)",
+    description: artist.tagline,
     images: ["/media/after-dark.jpg"],
   },
 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const siteContent = await getSiteContent();
-
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${playfair.variable}`}>
+      <body
+        className={`${inter.variable} ${playfair.variable} ${geist.variable} ${geistMono.variable} ${instrument.variable}`}
+      >
         <AnalyticsTracker />
-        <MotionEffects />
-        <SiteHeader />
         {children}
-        <Footer contactEmail={siteContent.contactEmail} />
         <PrivacyAwareAnalytics />
       </body>
     </html>

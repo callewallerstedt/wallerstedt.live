@@ -27,6 +27,8 @@ export const artist = {
   name: "Wallerstedt",
   shortName: "Wallerstedt",
   tagline: "Emotional piano music for late evenings, focus, and quiet rooms.",
+  /** Checked on Spotify 2026-09-03. Update by hand when it drifts. */
+  monthlyListeners: 514236,
   contact: "contact.wallerstedt@gmail.com",
   spotify: "https://open.spotify.com/artist/7qBBYMwk5wXAjSXWWhPCxK?si=YrgOKG1XSCeGS06AzwWUQQ",
   profileImage: "/media/artist-portrait.jpg",
