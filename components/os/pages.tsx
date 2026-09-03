@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import {
+  daysUntil,
   formatCompactCount,
   formatDate,
   formatMonthLabel,
@@ -14,7 +15,7 @@ import {
 import { routeHref } from "@/lib/os/href";
 import { osPath } from "@/lib/os/paths";
 import type { LedgerSnapshot, OsSnapshot, SpotifyHistory } from "@/lib/os/types";
-import { DualTrendChart } from "@/components/os/charts";
+import { CumulativeCurve, DualTrendChart, MonthlyBars } from "@/components/os/charts";
 import { ActionQueue, TaskList } from "@/components/os/tasks";
 import { AppearanceSettings, SignOutRow } from "@/components/os/settings";
 import {
@@ -78,6 +79,125 @@ function RevenueChart({ ledger, title = "Revenue vs expense" }: { ledger: Ledger
   );
 }
 
+/**
+ * The running result across the whole booked history, one point per entry, so
+ * every payment in and out is visible in the shape of the line.
+ */
+function RunningResult({ ledger }: { ledger: LedgerSnapshot }) {
+  const points = ledger.cumulative;
+  if (points.length < 2) return null;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const biggest = points.reduce((top, point) =>
+    Math.abs(point.deltaCents) > Math.abs(top.deltaCents) ? point : top,
+  );
+
+  return (
+    <Panel
+      title="Running result"
+      action={
+        <span className="text-sm font-semibold tabular-nums">{formatSekTile(last.totalCents)}</span>
+      }
+      footer={`${formatNumber(points.length)} booked movements from ${formatDate(first.date)}. Biggest single move: ${
+        biggest.label
+      } ${formatSekDelta(biggest.deltaCents)}. Hover any point for the entry behind it.`}
+    >
+      <CumulativeCurve points={points} />
+    </Panel>
+  );
+}
+
+/** The headline graph: profit or loss, month by month. */
+function ResultBars({ ledger }: { ledger: LedgerSnapshot }) {
+  if (!ledger.months.some((row) => row.resultCents)) return null;
+  const best = ledger.months.reduce((top, row) => (row.resultCents > top.resultCents ? row : top));
+  return (
+    <Panel
+      title="Result per month"
+      action={
+        <span className="text-xs text-muted-foreground">
+          Best {formatMonthLabel(best.month)} · {formatSekTile(best.resultCents)}
+        </span>
+      }
+      footer={`Revenue minus expenses for each of the last 12 months. ${formatSekTile(
+        ledger.profitYtdCents,
+      )} booked so far in ${ledger.year}.`}
+    >
+      <MonthlyBars
+        labels={ledger.months.map((row) => formatMonthLabel(row.month))}
+        values={ledger.months.map((row) => row.resultCents)}
+      />
+    </Panel>
+  );
+}
+
+/**
+ * What the company will owe. Both figures come off the booked ledger, so they
+ * move as entries are added and neither is the filed declaration.
+ */
+function TaxPanel({
+  ledger,
+  upcoming,
+  todayYmd,
+}: {
+  ledger: LedgerSnapshot;
+  upcoming: OsSnapshot["upcoming"];
+  todayYmd: string;
+}) {
+  const vatToPay = Math.max(0, ledger.vatPayableCents);
+  const setAside = ledger.corpTaxEstimateCents + vatToPay;
+  const dates = upcoming.filter((item) => item.kind === "tax").slice(0, 3);
+
+  return (
+    <Panel
+      title="Upcoming tax"
+      footer="Estimated from the booked ledger. Depreciation, periodiseringsfond and non-deductible costs are not applied, so the declaration will differ."
+    >
+      <Row
+        primary={`Bolagsskatt ${ledger.year}`}
+        secondary={`20.6% of ${formatSekTile(ledger.profitYtdCents)} booked result`}
+        value={formatSekTile(ledger.corpTaxEstimateCents)}
+      />
+      <Row
+        primary="Moms"
+        secondary={
+          ledger.vatPayableCents >= 0
+            ? "Utgående minus ingående moms"
+            : "Ingående moms exceeds utgående — to reclaim"
+        }
+        value={formatSekTile(ledger.vatPayableCents)}
+        valueTone={ledger.vatPayableCents < 0 ? "positive" : "default"}
+      />
+      <Row
+        primary="Set aside in total"
+        secondary={`Leaves ${formatSekTile(ledger.bankCents - setAside)} of the booked ${formatSekTile(
+          ledger.bankCents,
+        )}`}
+        value={formatSekTile(setAside)}
+        valueTone={ledger.bankCents - setAside < 0 ? "negative" : "default"}
+      />
+      {dates.map((item) => {
+        const days = daysUntil(todayYmd, item.date);
+        return (
+          <Row
+            key={item.id}
+            primary={item.title}
+            secondary={
+              days == null
+                ? item.detail
+                : days <= 0
+                  ? "Due today or passed"
+                  : `In ${days} day${days === 1 ? "" : "s"}`
+            }
+            value={formatDate(item.date)}
+            valueTone="muted"
+          />
+        );
+      })}
+    </Panel>
+  );
+}
+
 function CashAndProfitCharts({ ledger }: { ledger: LedgerSnapshot }) {
   const labels = ledger.months.map((row) => formatMonthLabel(row.month));
   return (
@@ -128,15 +248,15 @@ export function OverviewPage({
         <HeroStats
           items={[
             {
-              label: "Safe to spend",
-              value: formatSekTile(ledger.cashAfterTaxCents),
-              hint: "Cash 1930 after VAT and 20.6% corp tax",
-              tone: ledger.cashAfterTaxCents < 0 ? "negative" : "default",
-            },
-            {
               label: "Cash 1930",
               value: formatSekTile(ledger.bankCents),
-              hint: "Booked balance, not a live bank feed",
+              hint: "Booked balance",
+            },
+            {
+              label: `Result ${formatMonthLabel(ledger.month)}`,
+              value: formatSekTile(ledger.profitMonthCents),
+              hint: vsLast(ledger.profitMonthCents, ledger.profitLastMonthCents, ledger.lastMonth),
+              tone: ledger.profitMonthCents < 0 ? "negative" : "default",
             },
             {
               label: `Revenue ${formatMonthLabel(ledger.month)}`,
@@ -145,10 +265,9 @@ export function OverviewPage({
               tone: deltaTone(ledger.incomeMonthCents, ledger.incomeLastMonthCents),
             },
             {
-              label: `Result ${formatMonthLabel(ledger.month)}`,
-              value: formatSekTile(ledger.profitMonthCents),
-              hint: vsLast(ledger.profitMonthCents, ledger.profitLastMonthCents, ledger.lastMonth),
-              tone: ledger.profitMonthCents < 0 ? "negative" : "default",
+              label: `Bolagsskatt ${ledger.year}`,
+              value: formatSekTile(ledger.corpTaxEstimateCents),
+              hint: "20.6% of the result so far",
             },
           ]}
         />
@@ -163,7 +282,8 @@ export function OverviewPage({
         todayYmd={todayYmd}
       />
 
-      {ledger ? <RevenueChart ledger={ledger} /> : null}
+      {ledger ? <RunningResult ledger={ledger} /> : null}
+      {ledger ? <TaxPanel ledger={ledger} upcoming={snapshot.upcoming} todayYmd={todayYmd} /> : null}
 
       {ledger ? (
         <KpiGrid>
@@ -173,12 +293,8 @@ export function OverviewPage({
             hint={vsLast(ledger.expenseMonthCents, ledger.expenseLastMonthCents, ledger.lastMonth)}
           />
           <KpiCard label={`Revenue ${ledger.year}`} value={formatSekTile(ledger.incomeYtdCents)} hint="Booked YTD" />
-          <KpiCard label={`Result ${ledger.year}`} value={formatSekTile(ledger.profitYtdCents)} hint="Booked YTD" />
-          <KpiCard
-            label="VAT position"
-            value={formatSekTile(ledger.vatPayableCents)}
-            hint={ledger.vatPayableCents >= 0 ? "To pay Skatteverket" : "To reclaim"}
-          />
+          <KpiCard label={`Expenses ${ledger.year}`} value={formatSekTile(ledger.expenseYtdCents)} hint="Booked YTD" />
+          <KpiCard label={`Result ${ledger.year}`} value={formatSekTile(ledger.profitYtdCents)} hint="Before tax" />
         </KpiGrid>
       ) : null}
 
@@ -295,7 +411,9 @@ export function MoneyPage({ snapshot, accessKey }: { snapshot: OsSnapshot; acces
         ]}
       />
 
-      <RevenueChart ledger={ledger} title="Twelve months" />
+      <RunningResult ledger={ledger} />
+      <ResultBars ledger={ledger} />
+      <RevenueChart ledger={ledger} title="Revenue and expenses, twelve months" />
       <CashAndProfitCharts ledger={ledger} />
 
       <SectionLabel>Where the money goes</SectionLabel>

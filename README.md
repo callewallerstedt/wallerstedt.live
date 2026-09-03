@@ -8,7 +8,7 @@ Six tabs, a collapsible sidebar on desktop and a fixed tab bar on phones:
 
 | Tab | What it holds |
 | --- | --- |
-| **Overview** | Safe-to-spend, cash, this month's revenue and result, the to-do list, what needs attention, the twelve-month trend and the latest entries |
+| **Overview** | Cash, this month's revenue and result, estimated bolagsskatt, the to-do list, the running-result curve, upcoming tax and the latest entries |
 | **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead |
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |

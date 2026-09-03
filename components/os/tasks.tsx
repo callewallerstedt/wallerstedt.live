@@ -2,6 +2,7 @@
 
 import { useMemo, useOptimistic, useRef, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CheckIcon, ChevronDownIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Panel, Pill, Row } from "@/components/os/ui";
@@ -36,6 +37,8 @@ function overdue(task: TaskRow, todayYmd: string) {
 
 function dueLabel(task: TaskRow, todayYmd: string) {
   if (!task.dueDate) return null;
+  // A finished task is never late, whatever its date said.
+  if (task.done) return formatDate(task.dueDate);
   if (task.dueDate === todayYmd) return "Today";
   if (task.dueDate < todayYmd) return `Overdue · ${formatDate(task.dueDate)}`;
   return formatDate(task.dueDate);
@@ -69,6 +72,7 @@ export function TaskList({
   moreHref?: string;
   title?: string;
 }) {
+  const router = useRouter();
   const [serverTasks, setServerTasks] = useState(tasks);
   const [pending, startTransition] = useTransition();
   const [optimistic, applyOptimistic] = useOptimistic(
@@ -81,22 +85,37 @@ export function TaskList({
   );
   const [draft, setDraft] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [showDone, setShowDone] = useState(true);
+  // A row that was just ticked keeps its place in the open list until the
+  // accent sweep has played, then moves down into Done. Holding that here
+  // rather than in the row survives the row being re-parented.
+  const [sweepingId, setSweepingId] = useState<string | null>(null);
   const [failure, setFailure] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { open, done } = useMemo(() => {
+  const { open, done, doneCount } = useMemo(() => {
+    const stillOpen = (task: TaskRow) => !task.done || task.id === sweepingId;
     const sorted = [...optimistic].sort((a, b) => {
-      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (stillOpen(a) !== stillOpen(b)) return stillOpen(a) ? -1 : 1;
       const aOver = overdue(a, todayYmd);
       const bOver = overdue(b, todayYmd);
       if (aOver !== bOver) return aOver ? -1 : 1;
       return a.sortOrder - b.sortOrder;
     });
     return {
-      open: sorted.filter((task) => !task.done),
-      done: sorted.filter((task) => task.done),
+      open: sorted.filter(stillOpen),
+      done: sorted.filter((task) => !stillOpen(task)),
+      doneCount: optimistic.filter((task) => task.done).length,
     };
-  }, [optimistic, todayYmd]);
+  }, [optimistic, sweepingId, todayYmd]);
+
+  // When the server sends a newer list (a refresh, another tab, the agent API)
+  // adopt it rather than keeping this component's older copy.
+  const [seenTasks, setSeenTasks] = useState(tasks);
+  if (tasks !== seenTasks) {
+    setSeenTasks(tasks);
+    setServerTasks(tasks);
+  }
 
   const visible = limit ? open.slice(0, limit) : open;
   const hiddenCount = limit ? Math.max(0, open.length - limit) : 0;
@@ -141,6 +160,7 @@ export function TaskList({
           body: JSON.stringify({ title }),
         });
         if (body.task) setServerTasks((current) => [body.task!, ...current]);
+        router.refresh();
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
         setDraft(title);
@@ -161,6 +181,7 @@ export function TaskList({
         if (body.task) {
           setServerTasks((current) => current.map((task) => (task.id === id ? body.task! : task)));
         }
+        router.refresh();
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
       }
@@ -175,14 +196,22 @@ export function TaskList({
       try {
         await send(endpoint(accessKey, id), { method: "DELETE" });
         setServerTasks((current) => current.filter((task) => task.id !== id));
+        router.refresh();
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not delete.");
       }
     });
   }
 
+  function sweep(id: string) {
+    setSweepingId(id);
+    window.setTimeout(() => setSweepingId((current) => (current === id ? null : current)), 700);
+  }
+
   function itemProps(task: TaskRow) {
     return {
+      celebrating: sweepingId === task.id,
+      onCelebrate: () => sweep(task.id),
       expanded: openId === task.id,
       onDelete: () => remove(task.id),
       onPatch: (next: Patch) => patch(task.id, next),
@@ -199,7 +228,7 @@ export function TaskList({
       title={title}
       action={
         <span className="text-xs text-muted-foreground">
-          {open.length} open{done.length ? ` · ${done.length} done` : ""}
+          {optimistic.length - doneCount} open{doneCount ? ` · ${doneCount} done` : ""}
         </span>
       }
     >
@@ -253,15 +282,27 @@ export function TaskList({
         </Link>
       ) : null}
 
-      {!limit && done.length ? (
-        <details className="border-t border-border">
-          <summary className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Done ({done.length})
-          </summary>
-          {done.map((task) => (
-            <TaskItem key={task.id} {...itemProps(task)} />
-          ))}
-        </details>
+      {done.length ? (
+        <>
+          <div className="flex min-h-9 items-center justify-between gap-2 border-t border-border px-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Done ({done.length})
+            </p>
+            <button
+              aria-expanded={showDone}
+              className="text-xs font-semibold text-brand"
+              onClick={() => setShowDone((current) => !current)}
+              type="button"
+            >
+              {showDone ? "Hide" : "Show"}
+            </button>
+          </div>
+          {showDone
+            ? (limit ? done.slice(0, 5) : done).map((task) => (
+                <TaskItem key={task.id} {...itemProps(task)} />
+              ))
+            : null}
+        </>
       ) : null}
     </Panel>
   );
@@ -277,6 +318,8 @@ function TaskItem({
   todayYmd,
   expanded,
   pending,
+  celebrating,
+  onCelebrate,
   onPatch,
   onDelete,
   onToggleExpanded,
@@ -285,6 +328,8 @@ function TaskItem({
   todayYmd: string;
   expanded: boolean;
   pending: boolean;
+  celebrating: boolean;
+  onCelebrate: () => void;
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
   onToggleExpanded: () => void;
@@ -304,20 +349,32 @@ function TaskItem({
   }
 
   return (
-    <div className="border-t border-border">
+    <div
+      className="os-task-row overflow-hidden border-t border-border"
+      data-celebrate={celebrating ? "true" : undefined}
+    >
       <div className="flex items-center gap-3 px-3 py-1.5">
         <button
           aria-label={task.done ? `Reopen ${task.title}` : `Complete ${task.title}`}
           aria-pressed={task.done}
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 ring-foreground/20 transition-colors",
-            task.done && "bg-brand-gradient ring-0",
-          )}
+          className="-m-1.5 flex shrink-0 touch-manipulation p-1.5"
           disabled={pending}
-          onClick={() => onPatch({ done: !task.done })}
+          onClick={() => {
+            if (!task.done) onCelebrate();
+            onPatch({ done: !task.done });
+          }}
           type="button"
         >
-          {task.done ? <CheckIcon className="size-4 text-brand-foreground" /> : null}
+          <span
+            className={cn(
+              "os-task-check flex size-5 items-center justify-center rounded-md ring-1 ring-foreground/25 transition-colors",
+              task.done && "bg-brand-gradient ring-0",
+            )}
+          >
+            {task.done ? (
+              <CheckIcon className="size-3.5 text-brand-foreground" strokeWidth={3} />
+            ) : null}
+          </span>
         </button>
 
         <button
@@ -357,7 +414,7 @@ function TaskItem({
       </div>
 
       {expanded && !editing ? (
-        <div className="flex flex-col gap-3 bg-muted/40 px-3 pt-1 pb-3">
+        <div className="flex flex-col gap-2 bg-muted/40 px-3 pt-1 pb-2.5">
           <div className="flex items-start gap-3">
             <p
               className={cn(
@@ -377,12 +434,17 @@ function TaskItem({
               <PencilIcon className="size-4" />
             </button>
           </div>
-          <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
-            <Detail label="Due" tone={isOverdue ? "warn" : "default"} value={due ?? "Not set"} />
-            <Detail label="Area" value={TASK_AREA_LABELS[task.area]} />
-            <Detail label="Priority" value={PRIORITY_LABELS[task.priority]} />
-            <Detail label="Added" value={formatDate(task.createdAt.slice(0, 10))} />
-          </dl>
+          <p className="text-xs text-muted-foreground">
+            <span className={cn("font-medium", isOverdue ? "text-destructive" : "text-foreground")}>
+              {due ?? "No due date"}
+            </span>
+            {" · "}
+            {TASK_AREA_LABELS[task.area]}
+            {" · "}
+            {PRIORITY_LABELS[task.priority]} priority
+            {" · added "}
+            {formatDate(task.createdAt.slice(0, 10))}
+          </p>
         </div>
       ) : null}
 
@@ -466,23 +528,6 @@ function TaskItem({
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Detail({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className={cn("mt-0.5 font-medium", tone === "warn" && "text-destructive")}>{value}</dd>
     </div>
   );
 }

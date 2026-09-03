@@ -40,6 +40,15 @@ export type MonthPoint = {
   kfCents: number;
 };
 
+/** One step of the running result: what an entry did, and where it left us. */
+export type CumulativePoint = {
+  date: string;
+  label: string;
+  deltaCents: number;
+  totalCents: number;
+  kind: "income" | "expense";
+};
+
 export type CategoryRow = {
   key: string;
   label: string;
@@ -95,6 +104,7 @@ export type LedgerSnapshot = {
   pendingDraftCount: number;
   entryCount: number;
   months: MonthPoint[];
+  cumulative: CumulativePoint[];
   recent: LedgerEntryRow[];
   missingReceipts: LedgerEntryRow[];
   largestExpenses: LedgerEntryRow[];

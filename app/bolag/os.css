@@ -166,6 +166,66 @@ body:has(.os-root) > .footer {
   --brand-soft: color-mix(in oklch, var(--brand) 16%, transparent);
 }
 
+/* Ticking a task off should feel like something happened: the accent sweeps
+   across the whole row, the box pops and the tick draws itself. The row only
+   moves down into Done once the sweep has finished. */
+@keyframes os-task-sweep {
+  0% { transform: translateX(-100%); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes os-task-settle {
+  0% { background-color: color-mix(in oklch, var(--brand) 20%, transparent); }
+  100% { background-color: transparent; }
+}
+
+@keyframes os-check-pop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+@keyframes os-check-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.os-task-row {
+  position: relative;
+}
+
+.os-task-row[data-celebrate="true"] {
+  animation: os-task-settle 700ms ease-out forwards;
+}
+
+.os-task-row[data-celebrate="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklch, var(--brand-from) 55%, transparent) 45%,
+    color-mix(in oklch, var(--brand-to) 55%, transparent) 60%,
+    transparent 100%
+  );
+  animation: os-task-sweep 620ms cubic-bezier(0.3, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+.os-task-check svg path {
+  stroke-dasharray: 24;
+}
+
+.os-task-row[data-celebrate="true"] .os-task-check {
+  animation: os-check-pop 340ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+.os-task-row[data-celebrate="true"] .os-task-check svg path {
+  animation: os-check-draw 280ms 60ms ease-out backwards;
+}
+
 @layer utilities {
   .bg-brand-gradient {
     background-image: linear-gradient(135deg, var(--brand-from), var(--brand-to));
@@ -403,6 +463,20 @@ body:has(.os-root) > .footer {
     cursor: pointer;
   }
 
+  /* Same missing-preflight problem as the form controls: without it the
+     browser's default heading and paragraph margins survive, which was adding
+     up to 24px of dead space inside every card. The vault ships its own
+     typography rules, so it keeps them. */
+  .os-root
+    :where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, dd, figure, blockquote, pre):not(.accounting-app *) {
+    margin: 0;
+  }
+
+  .os-root :where(ul, ol):not(.accounting-app *) {
+    padding-left: 0;
+    list-style: none;
+  }
+
   .os-root :where(input, select, textarea) {
     font: inherit;
     color: inherit;
@@ -452,7 +526,9 @@ body:has(.os-root) > .footer {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .os-root * {
+  .os-root *,
+  .os-root *::before,
+  .os-root *::after {
     animation: none !important;
     transition: none !important;
   }

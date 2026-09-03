@@ -167,6 +167,7 @@ test("actions only fire from real ledger or repo signals", () => {
       pendingDraftCount: 1,
       entryCount: 3,
       months: [],
+      cumulative: [],
       recent: [],
       missingReceipts: [],
       largestExpenses: [],

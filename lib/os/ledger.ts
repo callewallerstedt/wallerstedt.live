@@ -5,6 +5,7 @@ import { lastNMonths, moneyToCents, monthEndYmd, monthKey, yearKey } from "./for
 import type {
   CategoryRow,
   CounterpartyRow,
+  CumulativePoint,
   LedgerEntryRow,
   LedgerSnapshot,
   MonthPoint,
@@ -212,6 +213,25 @@ export function buildLedgerSnapshot(
     };
   });
 
+  // Every income and expense in date order, carrying the running result with
+  // it, so a chart can show each individual movement rather than a monthly
+  // rollup. Older points are dropped first when the ledger gets long.
+  const cumulative: CumulativePoint[] = [];
+  let running = 0;
+  const movements = [...income, ...expenses]
+    .filter((entry): entry is typeof entry & { date: string } => Boolean(entry.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  for (const entry of movements) {
+    running += entry.kind === "income" ? entry.amountCents : -entry.amountCents;
+    cumulative.push({
+      date: entry.date,
+      label: entry.description,
+      deltaCents: entry.kind === "income" ? entry.amountCents : -entry.amountCents,
+      totalCents: running,
+      kind: entry.kind === "income" ? "income" : "expense",
+    });
+  }
+
   const balances = calculateAccountBalances(
     rawEntries.map((entry) => ({
       amount: entry.amount,
@@ -353,6 +373,7 @@ export function buildLedgerSnapshot(
     pendingDraftCount,
     entryCount: entries.length,
     months,
+    cumulative: cumulative.slice(-500),
     recent: entries.slice(0, 20),
     missingReceipts: missingReceipts.slice(0, 20),
     largestExpenses: ytdExpenses.slice(0, 10),

@@ -96,22 +96,22 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col justify-between rounded-xl bg-card p-3 ring-1 ring-foreground/10",
+        "flex min-w-0 flex-col justify-between rounded-xl bg-card px-2.5 py-2 ring-1 ring-foreground/10",
         emphasis && "ring-brand/40",
       )}
     >
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-xs leading-tight font-medium text-muted-foreground">{label}</p>
       <p
         className={cn(
-          "mt-1 text-xl font-semibold tabular-nums tracking-tight break-words sm:text-2xl",
+          "text-xl leading-tight font-semibold tabular-nums tracking-tight break-words sm:text-[1.4rem]",
           tone === "positive" && "text-positive",
           tone === "negative" && "text-destructive",
         )}
       >
         {value}
       </p>
-      {hint ? <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{hint}</p> : null}
-      {spark && spark.length > 1 ? <Sparkline values={spark} className="mt-2 h-7 w-full" /> : null}
+      {hint ? <p className="text-[0.7rem] leading-tight text-muted-foreground">{hint}</p> : null}
+      {spark && spark.length > 1 ? <Sparkline values={spark} className="mt-1 h-6 w-full" /> : null}
     </div>
   );
 }
@@ -135,12 +135,12 @@ export function HeroStats({
       {items.map((item) => (
         <div
           key={item.label}
-          className="min-w-0 rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-4"
+          className="min-w-0 rounded-xl bg-card px-3 py-2.5 ring-1 ring-foreground/10"
         >
-          <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+          <p className="text-xs leading-tight font-medium text-muted-foreground">{item.label}</p>
           <p
             className={cn(
-              "mt-1 text-2xl font-semibold tabular-nums tracking-tight break-words sm:text-3xl",
+              "mt-0.5 text-2xl leading-tight font-semibold tabular-nums tracking-tight break-words",
               item.tone === "positive" && "text-positive",
               item.tone === "negative" && "text-destructive",
             )}
@@ -148,7 +148,7 @@ export function HeroStats({
             {item.value}
           </p>
           {item.hint ? (
-            <p className="mt-1 text-xs leading-snug text-muted-foreground">{item.hint}</p>
+            <p className="mt-0.5 text-[0.7rem] leading-tight text-muted-foreground">{item.hint}</p>
           ) : null}
         </div>
       ))}
