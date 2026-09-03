@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
+import type { CompanyField } from "@/components/os/company-menu";
 import { OsHeader, OsSidebar, OsTabBar } from "@/components/os/sidebar";
 import { osPageFromPathname } from "@/lib/os/route";
 import { cn } from "@/lib/utils";
@@ -11,10 +12,12 @@ const SIDEBAR_KEY = "calle-os-sidebar-collapsed";
 
 export function OsShell({
   accessKey,
+  companyFields,
   taskCount = 0,
   children,
 }: {
   accessKey: string;
+  companyFields: CompanyField[];
   taskCount?: number;
   children: React.ReactNode;
 }) {
@@ -41,7 +44,11 @@ export function OsShell({
         taskCount={taskCount}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <OsHeader collapsed={collapsed} onCollapsedChange={changeCollapsed} />
+        <OsHeader
+          collapsed={collapsed}
+          companyFields={companyFields}
+          onCollapsedChange={changeCollapsed}
+        />
         <div
           className={cn(
             "min-h-0 min-w-0 flex-1",

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { OsBrandLockup, OsBrandMark } from "@/components/os/brand";
+import { CompanyMenu, type CompanyField } from "@/components/os/company-menu";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { routeHref } from "@/lib/os/href";
@@ -176,17 +177,19 @@ export function OsTabBar({ accessKey, taskCount }: { accessKey: string; taskCoun
   );
 }
 
-/** Deliberately near-empty: everything configurable lives under Settings. */
+/** Nothing but the logo, which opens the company card. */
 export function OsHeader({
   collapsed,
+  companyFields,
   onCollapsedChange,
 }: {
   collapsed: boolean;
+  companyFields: CompanyField[];
   onCollapsedChange: (collapsed: boolean) => void;
 }) {
   return (
     <header
-      className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 md:h-11"
+      className="relative flex shrink-0 items-center border-b border-border bg-background px-2 md:h-11"
       style={{
         minHeight: "calc(2.75rem + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
@@ -204,8 +207,9 @@ export function OsHeader({
       >
         {collapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
       </Button>
-      <OsBrandMark className="md:hidden" size={24} />
-      <p className="truncate text-xs font-medium text-muted-foreground">Wallerstedt Productions AB</p>
+      <div className="absolute left-1/2 -translate-x-1/2">
+        <CompanyMenu fields={companyFields} />
+      </div>
     </header>
   );
 }

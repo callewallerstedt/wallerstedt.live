@@ -278,7 +278,11 @@ function documentUrl(document: AccountingDocument, accessKey: string) {
 
 function isImageDocument(document: AccountingDocument) {
   const name = document.originalName || document.name || document.fileName || "";
-  return (document.mimeType || document.contentType || "").startsWith("image/") || /\.(jpe?g|png)$/i.test(name);
+  const type = document.mimeType || document.contentType || "";
+  // HEIC/HEIF only decode in Safari, so they are not treated as previewable
+  // images — they fall through to the generic viewer with an open-in-tab link.
+  if (/^image\/(heic|heif|avif)/i.test(type) || /\.(heic|heif)$/i.test(name)) return false;
+  return type.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name);
 }
 
 function isPdfDocument(document: AccountingDocument) {
@@ -302,6 +306,8 @@ function DocumentViewer({
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ distance: number; center: { x: number; y: number } } | null>(null);
   const image = isImageDocument(document);
+  const pdf = isPdfDocument(document);
+  const [failed, setFailed] = useState(false);
 
   const resetView = useCallback(() => {
     setScale(1);
@@ -331,7 +337,7 @@ function DocumentViewer({
       <div className="ac-document-viewer-toolbar">
         <strong>{name}</strong>
         <div>
-          {image && (
+          {image && !failed && (
             <>
               <button aria-label="Zooma ut" disabled={scale <= 1} onClick={() => changeScale(scale - 0.5)} type="button">−</button>
               <span>{Math.round(scale * 100)} %</span>
@@ -343,7 +349,7 @@ function DocumentViewer({
           <button aria-label="Stäng förhandsvisning" onClick={onClose} type="button"><Icon.Close size={20} /></button>
         </div>
       </div>
-      {image ? (
+      {image && !failed ? (
         <div
           className={`ac-document-viewer-canvas ${scale > 1 ? "is-zoomed" : ""}`}
           onDoubleClick={() => scale > 1 ? resetView() : changeScale(2.5)}
@@ -393,13 +399,62 @@ function DocumentViewer({
         >
           {/* Protected receipt URLs cannot use the server-side Next image optimizer. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img alt={name} draggable={false} src={url} style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }} />
+          <img
+            alt={name}
+            draggable={false}
+            onError={() => setFailed(true)}
+            src={url}
+            style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }}
+          />
         </div>
-      ) : isPdfDocument(document) ? (
-        <iframe className="ac-document-viewer-frame" src={url} title={name} />
+      ) : pdf && !failed && !inlinePdfUnsupported() ? (
+        // <object> falls back to its children when the browser cannot render
+        // the PDF, which an <iframe> silently will not do.
+        <object className="ac-document-viewer-frame" data={url} type="application/pdf">
+          <DocumentFallback name={name} url={url} reason="Den här webbläsaren kan inte visa PDF direkt." />
+        </object>
       ) : (
-        <iframe className="ac-document-viewer-frame" src={url} title={name} />
+        <DocumentFallback
+          name={name}
+          url={url}
+          reason={
+            failed
+              ? "Filen kunde inte visas här."
+              : pdf
+                ? "iOS visar inte PDF inbäddat."
+                : "Den här filtypen kan inte förhandsvisas."
+          }
+        />
       )}
+    </div>
+  );
+}
+
+/** iOS Safari renders an embedded PDF as a blank box, so it never gets one. */
+function inlinePdfUnsupported() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  const iPadOS = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  return /iPad|iPhone|iPod/.test(ua) || iPadOS;
+}
+
+function DocumentFallback({
+  name,
+  reason,
+  url,
+}: {
+  name: string;
+  reason: string;
+  url: string;
+}) {
+  return (
+    <div className="ac-document-viewer-fallback">
+      <span className="ac-document-viewer-fallback-icon"><Icon.File size={34} /></span>
+      <h2>{name}</h2>
+      <p>{reason}</p>
+      <a className="ac-button ac-button--primary" href={url} rel="noopener noreferrer" target="_blank">
+        <Icon.Download size={18} /> Öppna filen
+      </a>
     </div>
   );
 }

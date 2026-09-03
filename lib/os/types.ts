@@ -131,6 +131,7 @@ export type TaskRow = {
   dueDate: string | null;
   sortOrder: number;
   completedAt: string | null;
+  archivedAt: string | null;
   createdAt: string;
 };
 

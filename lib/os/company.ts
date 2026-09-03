@@ -3,6 +3,21 @@ export const COMPANY = {
   shortName: "WP AB",
   owner: "Calle Wallerstedt",
   vat: "SE559559790601",
+  orgNumber: "559559-7906",
+  /**
+   * Registry details. Taken from the public company record rather than from
+   * Bolagsverket's API, so correct them here if anything has changed.
+   */
+  registry: {
+    verksamhetsbeskrivning:
+      "Musikproduktion, artistverksamhet samt investering i värdepapper och därmed förenlig verksamhet.",
+    seat: "Kungsbacka kommun, Hallands län",
+    registeredOn: "2025-12-05",
+    shareCapitalSek: 25_000,
+    legalForm: "Privat aktiebolag",
+    boardMember: "Calle Wallerstedt",
+    deputy: "Lars Wallerstedt",
+  },
   locale: "sv-SE",
   timeZone: "Europe/Berlin",
   currency: "SEK",

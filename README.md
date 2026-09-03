@@ -15,6 +15,9 @@ Six tabs, a collapsible sidebar on desktop and a fixed tab bar on phones:
 | **Music** | Spotify for Artists export, DistroKid payouts and the release calendar |
 | **Settings** | Theme, accent, company details, data sources and sign-out |
 
+The header holds only the logo; pressing it drops down the registry details
+(org.nr, momsnummer, verksamhetsbeskrivning, säte) with a copy button on each.
+
 `Content`, `Customers`, `Accounting`, `Investments`, `Wealth`, `Upcoming`, `Alerts` and `Projects` were merged away; their URLs redirect rather than 404.
 
 ### Tasks need a migration
@@ -54,7 +57,8 @@ curl -X DELETE "$BASE/tasks/<id>" -H "Authorization: Bearer $TOKEN"
 ```
 
 `area` is one of `company`, `money`, `music`, `project`, `admin`; `priority` is
-`low`, `normal` or `high`. A `POST` whose title matches an existing open task
+`low`, `normal` or `high`. `PATCH` also takes `archived`, which hides a task
+from the working list without deleting it. A `POST` whose title matches an existing open task
 returns that task with `"created": false` instead of duplicating it, so a retry
 is safe. Tasks never touch bokföring.
 

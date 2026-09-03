@@ -38,6 +38,7 @@ export async function GET(request: Request, { params }: Params) {
         priority: ["low", "normal", "high"],
         dueDate: "YYYY-MM-DD or null",
         done: "boolean, PATCH only",
+        archived: "boolean, PATCH only — hides the task from the active list",
       },
       guarantees: {
         idempotency:

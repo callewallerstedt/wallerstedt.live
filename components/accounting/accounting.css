@@ -2781,6 +2781,43 @@ body:has(.accounting-app) > .footer {
   background: #fff;
 }
 
+.ac-document-viewer-fallback {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 32px 24px;
+  text-align: center;
+  color: #fff;
+}
+
+.ac-document-viewer-fallback-icon {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 4px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ac-document-viewer-fallback h2 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #fff;
+  font-size: 16px;
+}
+
+.ac-document-viewer-fallback p {
+  max-width: 28rem;
+  margin: 0 0 6px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 14px;
+}
+
 .ac-document-list {
   display: flex;
   flex-direction: column;

@@ -3,7 +3,14 @@
 import { useMemo, useOptimistic, useRef, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckIcon, ChevronDownIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import {
+  ArchiveIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
 
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
@@ -14,7 +21,9 @@ import { TASK_AREA_LABELS, TASK_AREAS } from "@/lib/os/task-meta";
 import type { ActionItem, TaskArea, TaskRow } from "@/lib/os/types";
 import { cn } from "@/lib/utils";
 
-type Patch = Partial<Pick<TaskRow, "title" | "notes" | "done" | "area" | "priority" | "dueDate">>;
+type Patch = Partial<Pick<TaskRow, "title" | "notes" | "done" | "area" | "priority" | "dueDate">> & {
+  archived?: boolean;
+};
 
 type Action =
   | { type: "patch"; id: string; patch: Patch }
@@ -80,12 +89,21 @@ export function TaskList({
     (state: TaskRow[], action: Action) => {
       if (action.type === "add") return [action.task, ...state];
       if (action.type === "remove") return state.filter((task) => task.id !== action.id);
-      return state.map((task) => (task.id === action.id ? { ...task, ...action.patch } : task));
+      return state.map((task) => {
+        if (task.id !== action.id) return task;
+        const { archived, ...rest } = action.patch;
+        return {
+          ...task,
+          ...rest,
+          ...(archived == null
+            ? {}
+            : { archivedAt: archived ? new Date().toISOString() : null }),
+        };
+      });
     },
   );
   const [draft, setDraft] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [showDone, setShowDone] = useState(true);
   // A row that was just ticked keeps its place in the open list until the
   // accent sweep has played, then moves down into Done. Holding that here
   // rather than in the row survives the row being re-parented.
@@ -93,9 +111,10 @@ export function TaskList({
   const [failure, setFailure] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { open, done, doneCount } = useMemo(() => {
+  const { open, done, doneCount, archived } = useMemo(() => {
+    const live = optimistic.filter((task) => !task.archivedAt);
     const stillOpen = (task: TaskRow) => !task.done || task.id === sweepingId;
-    const sorted = [...optimistic].sort((a, b) => {
+    const sorted = [...live].sort((a, b) => {
       if (stillOpen(a) !== stillOpen(b)) return stillOpen(a) ? -1 : 1;
       const aOver = overdue(a, todayYmd);
       const bOver = overdue(b, todayYmd);
@@ -105,7 +124,8 @@ export function TaskList({
     return {
       open: sorted.filter(stillOpen),
       done: sorted.filter((task) => !stillOpen(task)),
-      doneCount: optimistic.filter((task) => task.done).length,
+      doneCount: live.filter((task) => task.done).length,
+      archived: optimistic.filter((task) => task.archivedAt),
     };
   }, [optimistic, sweepingId, todayYmd]);
 
@@ -150,6 +170,7 @@ export function TaskList({
       dueDate: null,
       sortOrder: -Date.now(),
       completedAt: null,
+      archivedAt: null,
       createdAt: new Date().toISOString(),
     };
     startTransition(async () => {
@@ -211,6 +232,7 @@ export function TaskList({
   function itemProps(task: TaskRow) {
     return {
       celebrating: sweepingId === task.id,
+      onArchive: () => patch(task.id, { archived: true }),
       onCelebrate: () => sweep(task.id),
       expanded: openId === task.id,
       onDelete: () => remove(task.id),
@@ -228,7 +250,8 @@ export function TaskList({
       title={title}
       action={
         <span className="text-xs text-muted-foreground">
-          {optimistic.length - doneCount} open{doneCount ? ` · ${doneCount} done` : ""}
+          {optimistic.filter((task) => !task.archivedAt).length - doneCount} open
+          {doneCount ? ` · ${doneCount} done` : ""}
         </span>
       }
     >
@@ -284,26 +307,40 @@ export function TaskList({
 
       {done.length ? (
         <>
-          <div className="flex min-h-9 items-center justify-between gap-2 border-t border-border px-3">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Done ({done.length})
-            </p>
-            <button
-              aria-expanded={showDone}
-              className="text-xs font-semibold text-brand"
-              onClick={() => setShowDone((current) => !current)}
-              type="button"
-            >
-              {showDone ? "Hide" : "Show"}
-            </button>
-          </div>
-          {showDone
-            ? (limit ? done.slice(0, 5) : done).map((task) => (
-                <TaskItem key={task.id} {...itemProps(task)} />
-              ))
-            : null}
+          <p className="border-t border-border px-3 pt-2 pb-1 text-[0.7rem] font-semibold tracking-wide text-muted-foreground uppercase">
+            Done
+          </p>
+          {(limit ? done.slice(0, 5) : done).map((task) => (
+            <TaskItem key={task.id} {...itemProps(task)} />
+          ))}
         </>
       ) : null}
+
+      {!limit && archived.length ? (
+        <details className="border-t border-border">
+          <summary className="flex min-h-9 cursor-pointer items-center px-3 text-[0.7rem] font-semibold tracking-wide text-muted-foreground uppercase">
+            Past ({archived.length})
+          </summary>
+          {archived.map((task) => (
+            <div
+              className="flex items-center gap-3 border-t border-border px-3 py-1"
+              key={task.id}
+            >
+              <p className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground/70">
+                {task.title}
+              </p>
+              <button
+                className="shrink-0 text-xs font-semibold text-brand"
+                onClick={() => patch(task.id, { archived: false })}
+                type="button"
+              >
+                Restore
+              </button>
+            </div>
+          ))}
+        </details>
+      ) : null}
+
     </Panel>
   );
 }
@@ -319,6 +356,7 @@ function TaskItem({
   expanded,
   pending,
   celebrating,
+  onArchive,
   onCelebrate,
   onPatch,
   onDelete,
@@ -329,12 +367,18 @@ function TaskItem({
   expanded: boolean;
   pending: boolean;
   celebrating: boolean;
+  onArchive: () => void;
   onCelebrate: () => void;
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
   onToggleExpanded: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [dragX, setDragX] = useState(0);
+  // Distinguishes a horizontal swipe from a vertical scroll, and stops the tap
+  // that ends a swipe from also toggling the task.
+  const drag = useRef<{ x: number; y: number; axis: "none" | "x" | "y" } | null>(null);
+  const swiped = useRef(false);
   const due = dueLabel(task, todayYmd);
   const isOverdue = overdue(task, todayYmd);
   const preview = notesPreview(task.notes);
@@ -343,17 +387,77 @@ function TaskItem({
     .join(" · ");
 
   function toggle() {
+    if (swiped.current) return;
     // Collapsing always drops back to the reading view.
     if (expanded) setEditing(false);
     onToggleExpanded();
   }
 
+  const SWIPE_THRESHOLD = 88;
+
+  function onPointerDown(event: React.PointerEvent) {
+    if (editing) return;
+    drag.current = { x: event.clientX, y: event.clientY, axis: "none" };
+    swiped.current = false;
+  }
+
+  function onPointerMove(event: React.PointerEvent) {
+    const start = drag.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (start.axis === "none") {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      // Let a vertical drag scroll the page instead of swiping the row.
+      start.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (start.axis === "x") event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    if (start.axis !== "x") return;
+    swiped.current = true;
+    setDragX(Math.max(-140, Math.min(0, dx)));
+  }
+
+  function endDrag() {
+    const shouldArchive = dragX <= -SWIPE_THRESHOLD;
+    drag.current = null;
+    setDragX(0);
+    if (shouldArchive) onArchive();
+    // Let the click that ends this gesture pass before re-enabling taps.
+    window.setTimeout(() => {
+      swiped.current = false;
+    }, 0);
+  }
+
   return (
     <div
-      className="os-task-row overflow-hidden border-t border-border"
+      className="os-task-row relative overflow-hidden border-t border-border"
       data-celebrate={celebrating ? "true" : undefined}
     >
-      <div className="flex items-center gap-3 px-3 py-1.5">
+      {dragX < 0 ? (
+        <div
+          aria-hidden
+          className="absolute inset-y-0 right-0 flex items-center gap-1.5 pr-4 text-xs font-semibold text-muted-foreground"
+        >
+          <ArchiveIcon
+            className={cn("size-4", dragX <= -SWIPE_THRESHOLD && "text-brand")}
+          />
+          <span className={cn(dragX <= -SWIPE_THRESHOLD && "text-brand")}>
+            {dragX <= -SWIPE_THRESHOLD ? "Release" : "Archive"}
+          </span>
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "relative flex items-center gap-3 bg-card px-3 touch-pan-y",
+          task.done ? "py-1" : "py-1.5",
+          dragX === 0 && "motion-safe:transition-transform motion-safe:duration-200",
+        )}
+        onPointerCancel={endDrag}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        style={{ transform: dragX ? `translate3d(${dragX}px,0,0)` : undefined }}
+      >
         <button
           aria-label={task.done ? `Reopen ${task.title}` : `Complete ${task.title}`}
           aria-pressed={task.done}
@@ -379,20 +483,23 @@ function TaskItem({
 
         <button
           aria-expanded={expanded}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 text-left",
+            task.done ? "min-h-8" : "min-h-11",
+          )}
           onClick={toggle}
           type="button"
         >
           <span className="min-w-0 flex-1">
             <span
               className={cn(
-                "block truncate text-sm font-medium",
-                task.done && "text-muted-foreground line-through",
+                "block truncate font-medium",
+                task.done ? "text-[13px] text-muted-foreground/70" : "text-sm",
               )}
             >
               {task.title}
             </span>
-            {summary ? (
+            {summary && !task.done ? (
               <span
                 className={cn(
                   "mt-0.5 block truncate text-xs",

@@ -24,6 +24,7 @@ type TaskRecord = {
   dueDate: Date | null;
   sortOrder: number;
   completedAt: Date | null;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -39,6 +40,7 @@ function toRow(record: TaskRecord): TaskRow {
     dueDate: record.dueDate ? berlinYmd(record.dueDate) : null,
     sortOrder: record.sortOrder,
     completedAt: record.completedAt ? record.completedAt.toISOString() : null,
+    archivedAt: record.archivedAt ? record.archivedAt.toISOString() : null,
     createdAt: record.createdAt.toISOString(),
   };
 }
@@ -80,7 +82,7 @@ export async function listTasks(): Promise<{ tasks: TaskRow[]; error: string | n
  */
 export async function findOpenTaskByTitle(title: string): Promise<TaskRow | null> {
   const row = await getAccountingDb().companyTask.findFirst({
-    where: { status: "open", title: title.slice(0, 300) },
+    where: { status: "open", archivedAt: null, title: title.slice(0, 300) },
     orderBy: { createdAt: "desc" },
   });
   return row ? toRow(row) : null;
@@ -125,6 +127,7 @@ export async function updateTask(
     title?: string;
     notes?: string;
     done?: boolean;
+    archived?: boolean;
     area?: TaskArea;
     priority?: TaskRow["priority"];
     dueDate?: string | null;
@@ -141,6 +144,10 @@ export async function updateTask(
   if (input.done != null) {
     data.status = input.done ? "done" : "open";
     data.completedAt = input.done ? new Date() : null;
+  }
+  if (input.archived != null) {
+    // Archiving hides a task from the working list without destroying it.
+    data.archivedAt = input.archived ? new Date() : null;
   }
   if (!Object.keys(data).length) return null;
   try {
@@ -173,7 +180,9 @@ export async function reorderTasks(ids: string[]): Promise<void> {
 /** Cheap enough to run in the layout for the nav badge, and never throws. */
 export const openTaskCount = cache(async (): Promise<number> => {
   try {
-    return await getAccountingDb().companyTask.count({ where: { status: "open" } });
+    return await getAccountingDb().companyTask.count({
+      where: { status: "open", archivedAt: null },
+    });
   } catch {
     return 0;
   }

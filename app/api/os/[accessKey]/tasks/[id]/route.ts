@@ -16,6 +16,7 @@ const patchSchema = z
     title: z.string().trim().min(1).max(300).optional(),
     notes: z.string().max(4000).optional(),
     done: z.boolean().optional(),
+    archived: z.boolean().optional(),
     area: z.enum(TASK_AREAS as [string, ...string[]]).optional(),
     priority: z.enum(["low", "normal", "high"]).optional(),
     dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),

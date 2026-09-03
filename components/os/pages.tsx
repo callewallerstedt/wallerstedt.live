@@ -100,7 +100,7 @@ function RunningResult({ ledger }: { ledger: LedgerSnapshot }) {
       }
       footer={`${formatNumber(points.length)} booked movements from ${formatDate(first.date)}. Biggest single move: ${
         biggest.label
-      } ${formatSekDelta(biggest.deltaCents)}. Hover any point for the entry behind it.`}
+      } ${formatSekDelta(biggest.deltaCents)}. Hold and drag across the line to read each one.`}
     >
       <CumulativeCurve points={points} />
     </Panel>
@@ -323,7 +323,9 @@ export function TasksPage({
   accessKey: string;
   todayYmd: string;
 }) {
-  const open = snapshot.tasks.filter((task) => !task.done);
+  // Archived tasks are out of the working list, so they are out of the counts.
+  const live = snapshot.tasks.filter((task) => !task.archivedAt);
+  const open = live.filter((task) => !task.done);
   const dueSoon = open.filter((task) => task.dueDate != null && task.dueDate <= todayYmd).length;
 
   return (

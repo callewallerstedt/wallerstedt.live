@@ -1,6 +1,6 @@
 "use client"
 
-import { useId } from "react"
+import { useCallback, useId, useRef, useState } from "react"
 
 import { formatDate, formatSekTile } from "@/lib/os/format"
 
@@ -645,13 +645,30 @@ export function CumulativeCurve({
   }>;
 }) {
   const id = useId().replace(/:/g, "")
-  if (points.length < 2) return null
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   const width = 640
   const height = 210
   const pad = { l: 46, r: 12, t: 14, b: 24 }
   const innerW = width - pad.l - pad.r
   const innerH = height - pad.t - pad.b
+
+  // Map a pointer position onto the nearest entry, in the SVG's own units so
+  // the maths is independent of how wide the card happens to be.
+  const scrubTo = useCallback(
+    (clientX: number) => {
+      const box = svgRef.current?.getBoundingClientRect()
+      if (!box || box.width === 0 || points.length < 2) return
+      const svgX = ((clientX - box.left) / box.width) * width
+      const ratio = (svgX - pad.l) / innerW
+      const index = Math.round(ratio * (points.length - 1))
+      setActiveIndex(Math.min(points.length - 1, Math.max(0, index)))
+    },
+    [innerW, pad.l, points.length],
+  )
+
+  if (points.length < 2) return null
 
   const totals = points.map((point) => point.totalCents)
   const max = Math.max(0, ...totals)
@@ -674,14 +691,55 @@ export function CumulativeCurve({
     .map((point) => Math.abs(point.deltaCents))
     .sort((a, b) => b - a)[Math.min(points.length - 1, 7)] ?? 0
 
+  const active = activeIndex == null ? null : points[activeIndex] ?? null
+
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="h-52 w-full"
-      role="img"
-      aria-label="Running result over time"
-    >
-      <BrandGradientDefs id={id} />
+    <div className="select-none">
+      {/* The readout sits still while the finger moves, so it stays readable
+          instead of dodging around under the thumb. */}
+      <div className="flex min-h-8 items-center gap-2 px-3 pb-1 text-xs">
+        {active ? (
+          <>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              {formatDate(active.date)}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">{active.label}</span>
+            <span
+              className={`shrink-0 font-semibold tabular-nums ${
+                active.deltaCents < 0 ? "text-destructive" : "text-positive"
+              }`}
+            >
+              {active.deltaCents < 0 ? "−" : "+"}
+              {formatSekTile(Math.abs(active.deltaCents))}
+            </span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              {formatSekTile(active.totalCents)}
+            </span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">Hold and drag to read each entry</span>
+        )}
+      </div>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-52 w-full touch-none"
+        role="img"
+        aria-label="Running result over time"
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId)
+          scrubTo(event.clientX)
+        }}
+        onPointerMove={(event) => {
+          if (event.buttons === 0 && event.pointerType !== "mouse") return
+          if (event.buttons === 0 && activeIndex == null) return
+          scrubTo(event.clientX)
+        }}
+        onPointerUp={() => setActiveIndex(null)}
+        onPointerCancel={() => setActiveIndex(null)}
+        onPointerLeave={() => setActiveIndex(null)}
+      >
+        <BrandGradientDefs id={id} />
       <linearGradient id={`${id}-area`} x1="0%" y1="0%" x2="0%" y2="100%">
         <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.3" />
         <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
@@ -757,6 +815,30 @@ export function CumulativeCurve({
           {formatDate(points[index]!.date)}
         </text>
       ))}
-    </svg>
+
+      {activeIndex != null && active ? (
+        <g pointerEvents="none">
+          <line
+            x1={x(activeIndex)}
+            x2={x(activeIndex)}
+            y1={pad.t}
+            y2={pad.t + innerH}
+            stroke="var(--brand)"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+            opacity="0.8"
+          />
+          <circle
+            cx={x(activeIndex)}
+            cy={y(active.totalCents)}
+            r="5"
+            fill={active.deltaCents < 0 ? "var(--destructive)" : "var(--brand)"}
+            stroke="var(--card)"
+            strokeWidth="2"
+          />
+        </g>
+      ) : null}
+      </svg>
+    </div>
   )
 }
