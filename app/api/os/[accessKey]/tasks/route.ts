@@ -23,7 +23,7 @@ const createSchema = z.object({
 });
 
 const reorderSchema = z.object({
-  ids: z.array(z.string().uuid()).max(200),
+  ids: z.array(z.string().uuid()).min(1).max(200),
 });
 
 export async function GET(request: Request, { params }: Params) {
@@ -55,7 +55,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const { accessKey } = await params;
     await requireOwnerSession(request, accessKey, true);
     const input = parseWithSchema(reorderSchema, await parseJson(request, 20_000));
-    await reorderTasks(input.ids);
-    return privateJson({ ok: true, ...(await listTasks()) });
+    const tasks = await reorderTasks(input.ids);
+    return privateJson({ ok: true, tasks, error: null });
   });
 }

@@ -1,5 +1,5 @@
-import { OsPageSkeleton } from "@/components/os/ui";
+import { OsLoader } from "@/components/os/loader";
 
 export default function Loading() {
-  return <OsPageSkeleton />;
+  return <OsLoader />;
 }

@@ -24,6 +24,7 @@ export async function GET(request: Request, { params }: Params) {
         tasks: {
           list: `GET ${base}/tasks?status=open|done|all&area=<area>`,
           create: `POST ${base}/tasks`,
+          reorder: `PATCH ${base}/tasks  { "ids": [...] }`,
         },
         task: {
           get: `GET ${base}/tasks/{id}`,
@@ -44,6 +45,8 @@ export async function GET(request: Request, { params }: Params) {
         idempotency:
           "POST returns the existing open task when its title already matches, so a retry never duplicates a row.",
         scope: "Tasks are separate from bokföring. Writing one never touches the ledger.",
+        ordering:
+          "The list order is the priority order; the first three are what the dashboard shows as Focus. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
       },
     });
   });

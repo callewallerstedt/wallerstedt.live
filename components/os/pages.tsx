@@ -244,6 +244,18 @@ export function OverviewPage({
       <PageTitle aside={`${snapshot.company.name} · ${snapshot.company.vat}`}>Overview</PageTitle>
       <LedgerProblem snapshot={snapshot} />
 
+      {/* The list comes first: the point of opening the app is to see what to
+          do next, not to admire the balance. */}
+      <TaskList
+        accessKey={accessKey}
+        error={snapshot.tasksError}
+        limit={6}
+        moreHref={tasksHref}
+        tasks={snapshot.tasks}
+        title="Focus"
+        todayYmd={todayYmd}
+      />
+
       {ledger ? (
         <HeroStats
           items={[
@@ -272,15 +284,6 @@ export function OverviewPage({
           ]}
         />
       ) : null}
-
-      <TaskList
-        accessKey={accessKey}
-        error={snapshot.tasksError}
-        limit={7}
-        moreHref={tasksHref}
-        tasks={snapshot.tasks}
-        todayYmd={todayYmd}
-      />
 
       {ledger ? <RunningResult ledger={ledger} /> : null}
       {ledger ? <TaxPanel ledger={ledger} upcoming={snapshot.upcoming} todayYmd={todayYmd} /> : null}

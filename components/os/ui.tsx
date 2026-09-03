@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 export function PageFrame({ children }: { children: ReactNode }) {
   return (
     <div
-      className="mx-auto flex w-full max-w-[1180px] flex-col gap-2 px-3 pt-2 sm:px-4 sm:pt-3 md:pb-5"
+      className="os-enter mx-auto flex w-full max-w-[1180px] flex-col gap-2 px-3 pt-2 sm:px-4 sm:pt-3 md:pb-5"
       style={{
         paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
         paddingRight: "max(0.75rem, env(safe-area-inset-right))",

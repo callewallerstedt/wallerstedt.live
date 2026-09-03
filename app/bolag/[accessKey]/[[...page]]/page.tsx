@@ -9,7 +9,7 @@ import {
   SettingsPage,
   TasksPage,
 } from "@/components/os/pages";
-import { OsPageSkeleton } from "@/components/os/ui";
+import { OsLoader } from "@/components/os/loader";
 import { berlinYmd } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
 import { osPath } from "@/lib/os/paths";
@@ -53,7 +53,7 @@ export default async function Page({
   if (!(await hasOsSession(resolved.accessKey))) return null;
 
   return (
-    <Suspense fallback={<OsPageSkeleton />}>
+    <Suspense fallback={<OsLoader />}>
       <OsPageBody accessKey={resolved.accessKey} page={resolved.page} />
     </Suspense>
   );

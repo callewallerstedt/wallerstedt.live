@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAgentOrOwnerSession } from "@/lib/accounting/auth";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
 import { parseWithSchema } from "@/lib/accounting/validation";
-import { createTask, findOpenTaskByTitle, listTasks } from "@/lib/os/tasks";
+import { createTask, findOpenTaskByTitle, listTasks, reorderTasks } from "@/lib/os/tasks";
 import { TASK_AREAS } from "@/lib/os/task-meta";
 
 export const runtime = "nodejs";
@@ -51,5 +51,20 @@ export async function POST(request: Request, { params }: Params) {
       dueDate: input.dueDate ?? null,
     });
     return privateJson({ ok: true, task, created: true }, 201);
+  });
+}
+
+const reorderSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+});
+
+/** Reprioritise. A partial list moves those tasks to the top, in that order. */
+export async function PATCH(request: Request, { params }: Params) {
+  return route(async () => {
+    const { accessKey } = await params;
+    await requireAgentOrOwnerSession(request, accessKey, true);
+    const input = parseWithSchema(reorderSchema, await parseJson(request, 20_000));
+    const tasks = await reorderTasks(input.ids);
+    return privateJson({ ok: true, tasks });
   });
 }

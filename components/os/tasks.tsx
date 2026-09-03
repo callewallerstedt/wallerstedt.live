@@ -1,12 +1,21 @@
 "use client";
 
-import { useMemo, useOptimistic, useRef, useState, useTransition, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArchiveIcon,
   CheckIcon,
   ChevronDownIcon,
+  GripVerticalIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -108,6 +117,17 @@ export function TaskList({
   // accent sweep has played, then moves down into Done. Holding that here
   // rather than in the row survives the row being re-parented.
   const [sweepingId, setSweepingId] = useState<string | null>(null);
+  // While a row is being dragged the order is held locally so the list sorts
+  // live under the finger; the server is told once, on drop.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+  // The drop handler needs the latest order without reading it inside a state
+  // updater, which React double-invokes in development and would fire the save
+  // twice — the second one landing late and undoing a concurrent change.
+  const localOrderRef = useRef<string[] | null>(null);
+  const dragStartOrderRef = useRef<string>("");
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLElement>());
   const [failure, setFailure] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -121,13 +141,22 @@ export function TaskList({
       if (aOver !== bOver) return aOver ? -1 : 1;
       return a.sortOrder - b.sortOrder;
     });
+    const openTasks = sorted.filter(stillOpen);
+    if (localOrder) {
+      const position = new Map(localOrder.map((id, index) => [id, index]));
+      openTasks.sort(
+        (a, b) =>
+          (position.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (position.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+    }
     return {
-      open: sorted.filter(stillOpen),
+      open: openTasks,
       done: sorted.filter((task) => !stillOpen(task)),
       doneCount: live.filter((task) => task.done).length,
       archived: optimistic.filter((task) => task.archivedAt),
     };
-  }, [optimistic, sweepingId, todayYmd]);
+  }, [localOrder, optimistic, sweepingId, todayYmd]);
 
   // When the server sends a newer list (a refresh, another tab, the agent API)
   // adopt it rather than keeping this component's older copy.
@@ -180,7 +209,14 @@ export function TaskList({
           method: "POST",
           body: JSON.stringify({ title }),
         });
-        if (body.task) setServerTasks((current) => [body.task!, ...current]);
+        if (body.task) {
+          setServerTasks((current) => [body.task!, ...current]);
+          setJustAddedId(body.task.id);
+          window.setTimeout(
+            () => setJustAddedId((current) => (current === body.task!.id ? null : current)),
+            400,
+          );
+        }
         router.refresh();
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
@@ -224,6 +260,80 @@ export function TaskList({
     });
   }
 
+  function reorder(ids: string[]) {
+    setFailure("");
+    startTransition(async () => {
+      try {
+        const response = await fetch(endpoint(accessKey), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const body = (await response.json().catch(() => null)) as
+          | { ok?: boolean; tasks?: TaskRow[]; message?: string }
+          | null;
+        if (!response.ok || !body?.ok || !body.tasks) {
+          throw new Error(body?.message || "Could not save the new order.");
+        }
+        setServerTasks(body.tasks);
+        setSeenTasks(body.tasks);
+        setLocalOrder(null);
+        router.refresh();
+      } catch (problem) {
+        setLocalOrder(null);
+        setFailure(problem instanceof Error ? problem.message : "Could not reorder.");
+      }
+    });
+  }
+
+  // Dragging is tracked on the window so the pointer can leave the row it
+  // started on, which it always does.
+  useEffect(() => {
+    if (!dragId) return;
+
+    function move(event: PointerEvent) {
+      setLocalOrder((current) => {
+        if (!current) return current;
+        const from = current.indexOf(dragId!);
+        if (from < 0) return current;
+        let to = from;
+        for (const [id, element] of rowRefs.current) {
+          const index = current.indexOf(id);
+          if (index < 0) continue;
+          const box = element.getBoundingClientRect();
+          if (event.clientY >= box.top && event.clientY <= box.bottom) {
+            to = index;
+            break;
+          }
+        }
+        if (to === from) return current;
+        const next = [...current];
+        next.splice(to, 0, ...next.splice(from, 1));
+        localOrderRef.current = next;
+        return next;
+      });
+    }
+
+    function up() {
+      setDragId(null);
+      const order = localOrderRef.current;
+      localOrderRef.current = null;
+      // A grip tap that moved nothing should not write anything.
+      if (order && order.join() !== dragStartOrderRef.current) reorder(order);
+      else setLocalOrder(null);
+    }
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragId]);
+
   function sweep(id: string) {
     setSweepingId(id);
     window.setTimeout(() => setSweepingId((current) => (current === id ? null : current)), 700);
@@ -232,6 +342,19 @@ export function TaskList({
   function itemProps(task: TaskRow) {
     return {
       celebrating: sweepingId === task.id,
+      dragging: dragId === task.id,
+      justAdded: justAddedId === task.id,
+      registerRow: (element: HTMLElement | null) => {
+        if (element) rowRefs.current.set(task.id, element);
+        else rowRefs.current.delete(task.id);
+      },
+      onGrab: () => {
+        const order = open.map((row) => row.id);
+        localOrderRef.current = order;
+        dragStartOrderRef.current = order.join();
+        setLocalOrder(order);
+        setDragId(task.id);
+      },
       onArchive: () => patch(task.id, { archived: true }),
       onCelebrate: () => sweep(task.id),
       expanded: openId === task.id,
@@ -292,8 +415,8 @@ export function TaskList({
         </p>
       ) : null}
 
-      {visible.map((task) => (
-        <TaskItem key={task.id} {...itemProps(task)} />
+      {visible.map((task, index) => (
+        <TaskItem key={task.id} rank={index + 1} {...itemProps(task)} />
       ))}
 
       {hiddenCount > 0 && moreHref ? (
@@ -356,8 +479,13 @@ function TaskItem({
   expanded,
   pending,
   celebrating,
+  dragging,
+  justAdded,
+  rank,
+  registerRow,
   onArchive,
   onCelebrate,
+  onGrab,
   onPatch,
   onDelete,
   onToggleExpanded,
@@ -367,8 +495,13 @@ function TaskItem({
   expanded: boolean;
   pending: boolean;
   celebrating: boolean;
+  dragging: boolean;
+  justAdded: boolean;
+  rank?: number;
+  registerRow: (element: HTMLElement | null) => void;
   onArchive: () => void;
   onCelebrate: () => void;
+  onGrab: () => void;
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
   onToggleExpanded: () => void;
@@ -430,8 +563,13 @@ function TaskItem({
 
   return (
     <div
-      className="os-task-row relative overflow-hidden border-t border-border"
+      className={cn(
+        "os-task-row relative overflow-hidden border-t border-border",
+        justAdded && "os-pop-in",
+        dragging && "z-10 bg-card shadow-lg ring-1 ring-brand/40",
+      )}
       data-celebrate={celebrating ? "true" : undefined}
+      ref={registerRow}
     >
       {dragX < 0 ? (
         <div
@@ -481,6 +619,31 @@ function TaskItem({
           </span>
         </button>
 
+        {rank != null && !task.done ? (
+          <button
+            aria-label={`Reorder ${task.title}, currently number ${rank}`}
+            className={cn(
+              "flex size-6 shrink-0 touch-none items-center justify-center rounded-md text-[0.7rem] font-bold tabular-nums",
+              rank === 1
+                ? "bg-brand-gradient text-brand-foreground"
+                : rank <= 3
+                  ? "text-foreground ring-1 ring-brand/40"
+                  : "text-muted-foreground/70 ring-1 ring-foreground/12",
+              dragging ? "cursor-grabbing" : "cursor-grab",
+            )}
+            onPointerDown={(event) => {
+              // Only a primary press starts a drag; a right-click must not.
+              if (event.button !== 0) return;
+              event.preventDefault();
+              onGrab();
+            }}
+            title="Drag to reprioritise"
+            type="button"
+          >
+            {dragging ? <GripVerticalIcon className="size-3.5" /> : rank}
+          </button>
+        ) : null}
+
         <button
           aria-expanded={expanded}
           className={cn(
@@ -494,7 +657,11 @@ function TaskItem({
             <span
               className={cn(
                 "block truncate font-medium",
-                task.done ? "text-[13px] text-muted-foreground/70" : "text-sm",
+                task.done
+                  ? "text-[13px] text-muted-foreground/70"
+                  : rank != null && rank <= 3
+                    ? "text-[0.95rem]"
+                    : "text-sm",
               )}
             >
               {task.title}

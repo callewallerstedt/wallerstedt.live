@@ -8,7 +8,7 @@ Six tabs, a collapsible sidebar on desktop and a fixed tab bar on phones:
 
 | Tab | What it holds |
 | --- | --- |
-| **Overview** | Cash, this month's revenue and result, estimated bolagsskatt, the to-do list, the running-result curve, upcoming tax and the latest entries |
+| **Overview** | Focus first — the ranked to-do list, drag a number to reprioritise — then cash, this month's revenue and result, estimated bolagsskatt, the running-result curve, upcoming tax and the latest entries |
 | **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead |
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
@@ -49,6 +49,10 @@ curl -X POST "$BASE/tasks"   -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOK
         "priority": "high",
         "dueDate": "2026-09-30"
       }'
+
+# Reprioritise: a partial list moves exactly those to the top, in that order.
+# The first three are what the dashboard shows as Focus.
+curl -X PATCH "$BASE/tasks" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json" -d '{"ids": ["<id-1>", "<id-2>", "<id-3>"]}'
 
 # Read, change and remove
 curl -H "Authorization: Bearer $TOKEN" "$BASE/tasks?status=open&area=admin"

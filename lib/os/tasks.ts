@@ -168,13 +168,30 @@ export async function deleteTask(id: string): Promise<boolean> {
   }
 }
 
-export async function reorderTasks(ids: string[]): Promise<void> {
+/**
+ * Puts the given tasks in that order at the top of the list. Passing a partial
+ * list is deliberate and useful: "these three first" is one call, and everything
+ * unnamed keeps its relative order underneath.
+ */
+export async function reorderTasks(ids: string[]): Promise<TaskRow[]> {
   const db = getAccountingDb();
+  const wanted = [...new Set(ids)].slice(0, 200);
+  const live = await db.companyTask.findMany({
+    where: { archivedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    select: { id: true },
+  });
+  const known = new Set(live.map((row) => row.id));
+  const front = wanted.filter((id) => known.has(id));
+  const frontSet = new Set(front);
+  const order = [...front, ...live.map((row) => row.id).filter((id) => !frontSet.has(id))];
+
   await db.$transaction(
-    ids.slice(0, 200).map((id, index) =>
+    order.map((id, index) =>
       db.companyTask.update({ where: { id }, data: { sortOrder: index } }),
     ),
   );
+  return (await listTasks()).tasks;
 }
 
 /** Cheap enough to run in the layout for the nav badge, and never throws. */
