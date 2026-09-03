@@ -9,9 +9,15 @@ import { openTaskCount } from "@/lib/os/tasks";
 
 import "../os.css";
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ accessKey: string }>;
+}): Promise<Metadata> {
+  const { accessKey } = await params;
   return {
     title: "Bolag | Wallerstedt Productions AB",
+    manifest: `/bolag/${encodeURIComponent(accessKey)}/manifest.webmanifest`,
     description: "Owner dashboard for Wallerstedt Productions AB.",
     referrer: "no-referrer",
     robots: { index: false, follow: false, noarchive: true, noimageindex: true },
