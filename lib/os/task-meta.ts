@@ -1,4 +1,4 @@
-import type { TaskArea } from "./types";
+import type { TaskArea, TaskList } from "./types";
 
 /**
  * Client-safe task constants. Kept out of `tasks.ts` so importing a label into
@@ -16,4 +16,15 @@ export const TASK_AREA_LABELS: Record<TaskArea, string> = {
 
 export function isTaskArea(value: unknown): value is TaskArea {
   return typeof value === "string" && (TASK_AREAS as string[]).includes(value);
+}
+
+export const TASK_LISTS: TaskList[] = ["task", "video"];
+
+export function isTaskList(value: unknown): value is TaskList {
+  return value === "task" || value === "video";
+}
+
+/** Spotify's web search URL also deep-links into the app on a phone. */
+export function spotifySearchUrl(query: string) {
+  return `https://open.spotify.com/search/${encodeURIComponent(query.trim())}`;
 }

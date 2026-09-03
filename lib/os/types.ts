@@ -121,10 +121,16 @@ export type LedgerSnapshot = {
 
 export type TaskArea = "company" | "money" | "music" | "project" | "admin";
 
+/** The to-do list and the TikTok video-idea list share one table. */
+export type TaskList = "task" | "video";
+
 export type TaskRow = {
   id: string;
   title: string;
   notes: string;
+  list: TaskList;
+  /** Track a video idea is built around; drives the Spotify search button. */
+  song: string;
   done: boolean;
   priority: "low" | "normal" | "high";
   area: TaskArea;

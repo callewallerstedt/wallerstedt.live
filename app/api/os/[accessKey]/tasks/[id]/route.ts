@@ -15,6 +15,7 @@ const patchSchema = z
   .object({
     title: z.string().trim().min(1).max(300).optional(),
     notes: z.string().max(4000).optional(),
+    song: z.string().max(300).optional(),
     done: z.boolean().optional(),
     archived: z.boolean().optional(),
     area: z.enum(TASK_AREAS as [string, ...string[]]).optional(),

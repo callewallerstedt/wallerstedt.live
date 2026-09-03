@@ -62,7 +62,18 @@ curl -X DELETE "$BASE/tasks/<id>" -H "Authorization: Bearer $TOKEN"
 
 `area` is one of `company`, `money`, `music`, `project`, `admin`; `priority` is
 `low`, `normal` or `high`. `PATCH` also takes `archived`, which hides a task
-from the working list without deleting it. A `POST` whose title matches an existing open task
+from the working list without deleting it.
+
+`list` picks which list a row belongs to: `task` for the to-dos, `video` for
+TikTok video ideas. A video idea may carry a `song`, which the dashboard turns
+into a one-tap Spotify search beside the row. The two lists are ordered
+independently, so reordering one never disturbs the other.
+
+```bash
+curl -X POST "$BASE/tasks" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"title": "Soluppgång över Vallda, slowed", "list": "video", "song": "Memories"}'
+
+curl -H "Authorization: Bearer $TOKEN" "$BASE/tasks?list=video"
+``` A `POST` whose title matches an existing open task
 returns that task with `"created": false` instead of duplicating it, so a retry
 is safe. Tasks never touch bokföring.
 

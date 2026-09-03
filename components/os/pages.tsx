@@ -256,6 +256,19 @@ export function OverviewPage({
         todayYmd={todayYmd}
       />
 
+      <TaskList
+        accessKey={accessKey}
+        addPlaceholder="Add a video idea…"
+        emptyLabel="No video ideas yet. Add one when it comes to you."
+        error={snapshot.tasksError}
+        limit={5}
+        list="video"
+        moreHref={tasksHref}
+        tasks={snapshot.tasks}
+        title="Video ideas"
+        todayYmd={todayYmd}
+      />
+
       {ledger ? (
         <HeroStats
           items={[
@@ -326,8 +339,8 @@ export function TasksPage({
   accessKey: string;
   todayYmd: string;
 }) {
-  // Archived tasks are out of the working list, so they are out of the counts.
-  const live = snapshot.tasks.filter((task) => !task.archivedAt);
+  // Archived tasks and video ideas are out of the to-do counts.
+  const live = snapshot.tasks.filter((task) => !task.archivedAt && task.list === "task");
   const open = live.filter((task) => !task.done);
   const dueSoon = open.filter((task) => task.dueDate != null && task.dueDate <= todayYmd).length;
 
@@ -354,6 +367,16 @@ export function TasksPage({
           todayYmd={todayYmd}
         />
         <div className="flex flex-col gap-2">
+          <TaskList
+            accessKey={accessKey}
+            addPlaceholder="Add a video idea…"
+            emptyLabel="No video ideas yet. Add one when it comes to you."
+            error={snapshot.tasksError}
+            list="video"
+            tasks={snapshot.tasks}
+            title="Video ideas"
+            todayYmd={todayYmd}
+          />
           <ActionQueue actions={snapshot.actions} />
           <Panel title="Dates ahead">
             {snapshot.upcoming.length ? (

@@ -367,6 +367,10 @@ model CompanyTask {
   id          String    @id @default(uuid()) @db.Uuid
   title       String
   notes       String    @default("")
+  /** "task" for the to-do list, "video" for TikTok video ideas. */
+  list        String    @default("task")
+  /** Optional track a video idea is built around, used for the Spotify search. */
+  song        String    @default("")
   status      String    @default("open")
   priority    Int       @default(1)
   area        String    @default("company")
@@ -377,7 +381,7 @@ model CompanyTask {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@index([status, sortOrder])
+  @@index([list, status, sortOrder])
   @@index([status, dueDate])
   @@index([archivedAt])
   @@index([updatedAt])

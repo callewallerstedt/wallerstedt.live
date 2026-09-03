@@ -16,6 +16,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   GripVerticalIcon,
+  MusicIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -26,11 +27,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
-import { TASK_AREA_LABELS, TASK_AREAS } from "@/lib/os/task-meta";
-import type { ActionItem, TaskArea, TaskRow } from "@/lib/os/types";
+import { spotifySearchUrl, TASK_AREA_LABELS, TASK_AREAS } from "@/lib/os/task-meta";
+import type { ActionItem, TaskArea, TaskList as TaskListName, TaskRow } from "@/lib/os/types";
 import { cn } from "@/lib/utils";
 
-type Patch = Partial<Pick<TaskRow, "title" | "notes" | "done" | "area" | "priority" | "dueDate">> & {
+type Patch = Partial<
+  Pick<TaskRow, "title" | "notes" | "song" | "done" | "area" | "priority" | "dueDate">
+> & {
   archived?: boolean;
 };
 
@@ -81,6 +84,9 @@ export function TaskList({
   limit,
   moreHref,
   title = "To do",
+  list = "task",
+  emptyLabel = "Nothing on the list. Add the next thing you need to do.",
+  addPlaceholder = "Add a task…",
 }: {
   accessKey: string;
   tasks: TaskRow[];
@@ -89,9 +95,13 @@ export function TaskList({
   limit?: number;
   moreHref?: string;
   title?: string;
+  /** Which list this panel owns. Video ideas get the Spotify shortcut. */
+  list?: TaskListName;
+  emptyLabel?: string;
+  addPlaceholder?: string;
 }) {
   const router = useRouter();
-  const [serverTasks, setServerTasks] = useState(tasks);
+  const [serverTasks, setServerTasks] = useState(tasks.filter((task) => task.list === list));
   const [pending, startTransition] = useTransition();
   const [optimistic, applyOptimistic] = useOptimistic(
     serverTasks,
@@ -163,7 +173,7 @@ export function TaskList({
   const [seenTasks, setSeenTasks] = useState(tasks);
   if (tasks !== seenTasks) {
     setSeenTasks(tasks);
-    setServerTasks(tasks);
+    setServerTasks(tasks.filter((task) => task.list === list));
   }
 
   const visible = limit ? open.slice(0, limit) : open;
@@ -193,6 +203,8 @@ export function TaskList({
       id: `pending-${Date.now()}`,
       title,
       notes: "",
+      list,
+      song: "",
       done: false,
       priority: "normal",
       area: "company",
@@ -207,7 +219,7 @@ export function TaskList({
       try {
         const body = await send(endpoint(accessKey), {
           method: "POST",
-          body: JSON.stringify({ title }),
+          body: JSON.stringify({ title, list }),
         });
         if (body.task) {
           setServerTasks((current) => [body.task!, ...current]);
@@ -267,7 +279,7 @@ export function TaskList({
         const response = await fetch(endpoint(accessKey), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids }),
+          body: JSON.stringify({ ids, list }),
         });
         const body = (await response.json().catch(() => null)) as
           | { ok?: boolean; tasks?: TaskRow[]; message?: string }
@@ -275,7 +287,7 @@ export function TaskList({
         if (!response.ok || !body?.ok || !body.tasks) {
           throw new Error(body?.message || "Could not save the new order.");
         }
-        setServerTasks(body.tasks);
+        setServerTasks(body.tasks.filter((task) => task.list === list));
         setSeenTasks(body.tasks);
         setLocalOrder(null);
         router.refresh();
@@ -342,6 +354,7 @@ export function TaskList({
   function itemProps(task: TaskRow) {
     return {
       celebrating: sweepingId === task.id,
+      showSong: list === "video",
       dragging: dragId === task.id,
       justAdded: justAddedId === task.id,
       registerRow: (element: HTMLElement | null) => {
@@ -384,7 +397,7 @@ export function TaskList({
           className="min-h-11 flex-1 md:min-h-9"
           disabled={Boolean(error)}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Add a task…"
+          placeholder={addPlaceholder}
           ref={inputRef}
           value={draft}
         />
@@ -411,7 +424,7 @@ export function TaskList({
 
       {!error && !open.length && !done.length ? (
         <p className="border-t border-border px-3 py-6 text-center text-sm text-muted-foreground">
-          Nothing on the list. Add the next thing you need to do.
+          {emptyLabel}
         </p>
       ) : null}
 
@@ -482,6 +495,7 @@ function TaskItem({
   dragging,
   justAdded,
   rank,
+  showSong,
   registerRow,
   onArchive,
   onCelebrate,
@@ -498,6 +512,7 @@ function TaskItem({
   dragging: boolean;
   justAdded: boolean;
   rank?: number;
+  showSong: boolean;
   registerRow: (element: HTMLElement | null) => void;
   onArchive: () => void;
   onCelebrate: () => void;
@@ -515,7 +530,12 @@ function TaskItem({
   const due = dueLabel(task, todayYmd);
   const isOverdue = overdue(task, todayYmd);
   const preview = notesPreview(task.notes);
-  const summary = [due, task.area === "company" ? null : TASK_AREA_LABELS[task.area], preview || null]
+  const summary = [
+    task.song || null,
+    due,
+    task.area === "company" ? null : TASK_AREA_LABELS[task.area],
+    preview || null,
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -623,12 +643,8 @@ function TaskItem({
           <button
             aria-label={`Reorder ${task.title}, currently number ${rank}`}
             className={cn(
-              "flex size-6 shrink-0 touch-none items-center justify-center rounded-md text-[0.7rem] font-bold tabular-nums",
-              rank === 1
-                ? "bg-brand-gradient text-brand-foreground"
-                : rank <= 3
-                  ? "text-foreground ring-1 ring-brand/40"
-                  : "text-muted-foreground/70 ring-1 ring-foreground/12",
+              "flex w-4 shrink-0 touch-none items-center justify-center text-[0.7rem] font-semibold tabular-nums",
+              rank === 1 ? "text-brand" : "text-muted-foreground/60",
               dragging ? "cursor-grabbing" : "cursor-grab",
             )}
             onPointerDown={(event) => {
@@ -644,6 +660,20 @@ function TaskItem({
           </button>
         ) : null}
 
+        {showSong ? (
+          <a
+            aria-label={`Search Spotify for ${task.song || task.title}`}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground ring-1 ring-foreground/12 hover:text-brand"
+            href={spotifySearchUrl(task.song || task.title)}
+            onClick={(event) => event.stopPropagation()}
+            rel="noreferrer"
+            target="_blank"
+            title="Find on Spotify"
+          >
+            <MusicIcon className="size-3.5" />
+          </a>
+        ) : null}
+
         <button
           aria-expanded={expanded}
           className={cn(
@@ -657,11 +687,7 @@ function TaskItem({
             <span
               className={cn(
                 "block truncate font-medium",
-                task.done
-                  ? "text-[13px] text-muted-foreground/70"
-                  : rank != null && rank <= 3
-                    ? "text-[0.95rem]"
-                    : "text-sm",
+                task.done ? "text-[13px] text-muted-foreground/70" : "text-sm",
               )}
             >
               {task.title}
@@ -735,6 +761,20 @@ function TaskItem({
               }}
             />
           </label>
+          {showSong ? (
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Song
+              <Input
+                className="min-h-11 md:min-h-9"
+                defaultValue={task.song}
+                onBlur={(event) => {
+                  const value = event.target.value.trim();
+                  if (value !== task.song) onPatch({ song: value });
+                }}
+                placeholder="Track the clip is built around"
+              />
+            </label>
+          ) : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Description
             <textarea

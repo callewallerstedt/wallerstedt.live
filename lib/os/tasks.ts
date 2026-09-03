@@ -3,10 +3,17 @@ import { cache } from "react";
 import { getAccountingDb } from "@/lib/accounting/db";
 
 import { berlinYmd } from "./format";
-import { isTaskArea } from "./task-meta";
-import type { TaskArea, TaskRow } from "./types";
+import { isTaskArea, isTaskList } from "./task-meta";
+import type { TaskArea, TaskList, TaskRow } from "./types";
 
-export { isTaskArea, TASK_AREAS, TASK_AREA_LABELS } from "./task-meta";
+export {
+  isTaskArea,
+  isTaskList,
+  spotifySearchUrl,
+  TASK_AREAS,
+  TASK_AREA_LABELS,
+  TASK_LISTS,
+} from "./task-meta";
 
 /** The migration may not have run yet on a given database. Never 500 for that. */
 function isMissingTable(error: unknown) {
@@ -18,6 +25,8 @@ type TaskRecord = {
   id: string;
   title: string;
   notes: string;
+  list: string;
+  song: string;
   status: string;
   priority: number;
   area: string;
@@ -34,6 +43,8 @@ function toRow(record: TaskRecord): TaskRow {
     id: record.id,
     title: record.title,
     notes: record.notes,
+    list: isTaskList(record.list) ? record.list : "task",
+    song: record.song,
     done: record.status === "done",
     priority: record.priority === 2 ? "high" : record.priority === 0 ? "low" : "normal",
     area: isTaskArea(record.area) ? record.area : "company",
@@ -80,9 +91,12 @@ export async function listTasks(): Promise<{ tasks: TaskRow[]; error: string | n
  * An agent that retries a create should not end up with two identical rows, so
  * an open task with the same title is treated as the same task.
  */
-export async function findOpenTaskByTitle(title: string): Promise<TaskRow | null> {
+export async function findOpenTaskByTitle(
+  title: string,
+  list: TaskList = "task",
+): Promise<TaskRow | null> {
   const row = await getAccountingDb().companyTask.findFirst({
-    where: { status: "open", archivedAt: null, title: title.slice(0, 300) },
+    where: { status: "open", archivedAt: null, list, title: title.slice(0, 300) },
     orderBy: { createdAt: "desc" },
   });
   return row ? toRow(row) : null;
@@ -96,13 +110,16 @@ export async function getTask(id: string): Promise<TaskRow | null> {
 export async function createTask(input: {
   title: string;
   notes?: string;
+  list?: TaskList;
+  song?: string;
   area?: TaskArea;
   priority?: TaskRow["priority"];
   dueDate?: string | null;
 }): Promise<TaskRow> {
   const db = getAccountingDb();
+  const list = input.list ?? "task";
   const first = await db.companyTask.findFirst({
-    where: { status: "open" },
+    where: { status: "open", list },
     orderBy: { sortOrder: "asc" },
     select: { sortOrder: true },
   });
@@ -111,6 +128,8 @@ export async function createTask(input: {
       data: {
         title: input.title.slice(0, 300),
         notes: (input.notes ?? "").slice(0, 4000),
+        list,
+        song: (input.song ?? "").slice(0, 300),
         area: input.area ?? "company",
         priority: priorityValue(input.priority),
         dueDate: input.dueDate ? new Date(`${input.dueDate}T00:00:00Z`) : null,
@@ -126,6 +145,7 @@ export async function updateTask(
   input: {
     title?: string;
     notes?: string;
+    song?: string;
     done?: boolean;
     archived?: boolean;
     area?: TaskArea;
@@ -136,6 +156,7 @@ export async function updateTask(
   const data: Record<string, unknown> = {};
   if (input.title != null) data.title = input.title.slice(0, 300);
   if (input.notes != null) data.notes = input.notes.slice(0, 4000);
+  if (input.song != null) data.song = input.song.slice(0, 300);
   if (input.area != null) data.area = input.area;
   if (input.priority != null) data.priority = priorityValue(input.priority);
   if (input.dueDate !== undefined) {
@@ -173,11 +194,11 @@ export async function deleteTask(id: string): Promise<boolean> {
  * list is deliberate and useful: "these three first" is one call, and everything
  * unnamed keeps its relative order underneath.
  */
-export async function reorderTasks(ids: string[]): Promise<TaskRow[]> {
+export async function reorderTasks(ids: string[], list: TaskList = "task"): Promise<TaskRow[]> {
   const db = getAccountingDb();
   const wanted = [...new Set(ids)].slice(0, 200);
   const live = await db.companyTask.findMany({
-    where: { archivedAt: null },
+    where: { archivedAt: null, list },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     select: { id: true },
   });
@@ -198,7 +219,7 @@ export async function reorderTasks(ids: string[]): Promise<TaskRow[]> {
 export const openTaskCount = cache(async (): Promise<number> => {
   try {
     return await getAccountingDb().companyTask.count({
-      where: { status: "open", archivedAt: null },
+      where: { status: "open", archivedAt: null, list: "task" },
     });
   } catch {
     return 0;

@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: Params) {
       },
       endpoints: {
         tasks: {
-          list: `GET ${base}/tasks?status=open|done|all&area=<area>`,
+          list: `GET ${base}/tasks?status=open|done|all&area=<area>&list=task|video`,
           create: `POST ${base}/tasks`,
           reorder: `PATCH ${base}/tasks  { "ids": [...] }`,
         },
@@ -34,6 +34,11 @@ export async function GET(request: Request, { params }: Params) {
       },
       fields: {
         title: "string, 1-300 characters, required on create",
+        list: [
+          "task — the to-do list",
+          "video — TikTok video ideas, shown under the to-dos",
+        ],
+        song: "string — the track a video idea uses; the dashboard turns it into a Spotify search",
         notes: "string, up to 4000 characters — the long description",
         area: TASK_AREAS,
         priority: ["low", "normal", "high"],
@@ -46,7 +51,7 @@ export async function GET(request: Request, { params }: Params) {
           "POST returns the existing open task when its title already matches, so a retry never duplicates a row.",
         scope: "Tasks are separate from bokföring. Writing one never touches the ledger.",
         ordering:
-          "The list order is the priority order; the first three are what the dashboard shows as Focus. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
+          "Each list is ordered independently. The list order is the priority order; the first three are what the dashboard shows as Focus. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
       },
     });
   });
