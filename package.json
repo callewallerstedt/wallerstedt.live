@@ -18,6 +18,7 @@
     "test:accounting": "tsx --test lib/accounting/*.test.ts",
     "test:os": "tsx --test lib/os/*.test.ts",
     "test:push": "tsx --test lib/push.test.ts",
+    "test:trading": "tsx --test lib/trading.test.ts lib/trading-quotes.test.ts lib/trading-agent.test.ts",
     "accounting:import": "node scripts/import-accounting.mjs",
     "music:sync": "node scripts/build-music-data.mjs",
     "accounting:restore": "tsx scripts/restore-accounting.ts"

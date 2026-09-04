@@ -1,4 +1,6 @@
 export const TRADING_TIMEZONE = "Europe/Berlin";
+/** The book holds US names, so a trading day starts and ends on the exchange's clock. */
+export const TRADING_MARKET_TIMEZONE = "America/New_York";
 
 export type TradingSide = "long" | "short";
 
@@ -89,11 +91,29 @@ export type TradingIndexId = (typeof TRADING_INDEXES)[number]["id"];
 
 export type TradingSession = "pre" | "open" | "post" | "closed";
 
+export type TradingMarkSession = "pre" | "regular" | "post";
+
 export type TradingQuote = {
   symbol: string;
+  /** Last regular-session print: live while the market is open, otherwise that session's close. */
   last: number;
+  /** What the position is worth right now — the extended-hours print during pre/after hours. */
+  mark: number;
+  markSession: TradingMarkSession;
+  markTime: string | null;
+  session: TradingSession;
+  /** Close of the session before the one `last` belongs to. */
   previousClose: number | null;
+  /** Last completed regular close — the baseline every extended-hours move is measured from. */
+  regularClose: number | null;
+  /** Baseline for "today" on `mark`. */
+  dayClose: number | null;
+  /** `mark` against `dayClose` — the live day move, extended hours included. */
   dayPct: number | null;
+  /** The regular session's own move, `last` against `previousClose`. */
+  regularPct: number | null;
+  /** Exchange-local date `last` belongs to. */
+  marketDate: string | null;
   dayHigh: number | null;
   dayLow: number | null;
   volume: number | null;
@@ -103,10 +123,9 @@ export type TradingQuote = {
   prePrice: number | null;
   prePct: number | null;
   preTime: string | null;
-  preMark: number | null;
   postPrice: number | null;
   postPct: number | null;
-  postMark: number | null;
+  postTime: string | null;
 };
 
 export type TradingLiveSnapshot = {
@@ -137,6 +156,8 @@ export type TradingDeskStats = {
 };
 
 export type TradingPositionMetrics = {
+  mark: number;
+  markSession: TradingMarkSession;
   marketUsd: number;
   marketSek: number;
   costUsd: number;
@@ -149,12 +170,29 @@ export type TradingPositionMetrics = {
   dayPct: number | null;
   prePrice: number | null;
   prePct: number | null;
+  postPrice: number | null;
+  postPct: number | null;
+  /** The extended-hours print that is live right now, if any. */
+  extendedPrice: number | null;
+  extendedPct: number | null;
   weightPct: number;
-  stopDistPct: number;
-  targetDistPct: number;
+  /** Move still needed, from the mark, to reach the stop or the target. */
+  stopDistPct: number | null;
+  targetDistPct: number | null;
+  /** How far the trade has travelled from the fill toward each side, 0–100. */
+  targetProgressPct: number | null;
+  stopProgressPct: number | null;
+  /** Where the mark and the fill sit on the stop→target rail, 0–100. */
+  railPct: number | null;
+  fillRailPct: number | null;
   rMultiple: number;
+  plannedR: number | null;
   riskUsd: number;
   riskSek: number;
+  openRiskUsd: number;
+  openRiskSek: number;
+  rewardUsd: number;
+  rewardSek: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -230,11 +268,13 @@ function parsePosition(value: unknown): TradingPosition {
   const last = asNumber(row.last, fill);
   const shares = asNumber(row.shares, 1);
   const side = row.side === "short" ? "short" : "long";
-  const computedPct = fill === 0 ? 0 : ((last - fill) / fill) * 100 * (side === "short" ? -1 : 1);
-  const stop = asNumber(row.stop);
-  const target = asNumber(row.target);
-  const stopPct = asNumber(row.stopPct, fill && stop ? ((stop - fill) / fill) * 100 : 0);
-  const targetPct = asNumber(row.targetPct, fill && target ? ((target - fill) / fill) * 100 : 0);
+
+  // A price wins over a stored percentage, and both percentages are re-derived on every read:
+  // a stop moved by the agent used to leave the old stopPct sitting next to it.
+  const stopPctSeed = asNumber(row.stopPct);
+  const targetPctSeed = asNumber(row.targetPct);
+  const stop = asNumber(row.stop) || (fill && stopPctSeed ? Number((fill * (1 + stopPctSeed / 100)).toFixed(2)) : 0);
+  const target = asNumber(row.target) || (fill && targetPctSeed ? Number((fill * (1 + targetPctSeed / 100)).toFixed(2)) : 0);
 
   return {
     symbol: asString(row.symbol).toUpperCase(),
@@ -243,12 +283,12 @@ function parsePosition(value: unknown): TradingPosition {
     shares,
     fill,
     filledAt: asString(row.filledAt),
-    stop: stop || (fill && stopPct ? Number((fill * (1 + stopPct / 100)).toFixed(2)) : 0),
-    stopPct,
-    target: target || (fill && targetPct ? Number((fill * (1 + targetPct / 100)).toFixed(2)) : 0),
-    targetPct,
+    stop,
+    stopPct: fill && stop ? Number((((stop - fill) / fill) * 100).toFixed(2)) : 0,
+    target,
+    targetPct: fill && target ? Number((((target - fill) / fill) * 100).toFixed(2)) : 0,
     last,
-    pnlPct: typeof row.pnlPct === "number" ? row.pnlPct : Number(computedPct.toFixed(1)),
+    pnlPct: fill ? Number((((last - fill) / fill) * 100 * (side === "short" ? -1 : 1)).toFixed(2)) : 0,
   };
 }
 
@@ -328,11 +368,28 @@ export function getTradingDeskStats(book: TradingBook, quotes: Record<string, Tr
   };
 }
 
+export function quoteMark(quote?: TradingQuote) {
+  if (!quote) return null;
+  const mark = quote.mark ?? quote.last;
+  return Number.isFinite(mark) && mark > 0 ? mark : null;
+}
+
+/** The close "today" is measured from. Fresh quotes carry it; older snapshots imply it. */
+export function quoteDayClose(quote?: TradingQuote) {
+  if (!quote) return null;
+  if (quote.dayClose != null && Number.isFinite(quote.dayClose) && quote.dayClose !== 0) return quote.dayClose;
+  return resolvePreviousClose(quoteMark(quote) ?? quote.last, quote.dayPct ?? null, quote.previousClose ?? null);
+}
+
 export function positionDayPnlUsd(position: TradingPosition, quote?: TradingQuote) {
-  const previous = resolvePreviousClose(position.last, quote?.dayPct ?? null, quote?.previousClose ?? null);
+  const previous = quoteDayClose(quote);
   if (previous == null) return 0;
   const delta = position.last - previous;
   return (position.side === "short" ? -delta : delta) * position.shares;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 export function getPositionMetrics(
@@ -342,34 +399,65 @@ export function getPositionMetrics(
   marketUsdTotal = 0,
 ): TradingPositionMetrics {
   const quote = quotes[position.symbol];
+  const markSession = quote?.markSession ?? "regular";
+  // position.last is already the live mark: applyLiveQuotes stamps the extended print onto it.
+  const mark = position.last;
+  const sign = position.side === "short" ? -1 : 1;
+  const move = mark - position.fill;
   const pnlUsd = positionPnlUsd(position);
   const costUsd = position.fill * position.shares;
-  const marketUsd = position.last * position.shares;
-  const riskUsd = Math.abs(position.fill - position.stop) * position.shares;
-  const stopDistPct = position.last ? ((position.stop - position.last) / position.last) * 100 : 0;
-  const targetDistPct = position.last ? ((position.target - position.last) / position.last) * 100 : 0;
+  const marketUsd = mark * position.shares;
   const riskPerShare = Math.abs(position.fill - position.stop);
-  const rMultiple = riskPerShare ? (position.last - position.fill) / riskPerShare * (position.side === "short" ? -1 : 1) : 0;
+  const riskUsd = riskPerShare * position.shares;
+
+  // Signed spans, so a short (target below the fill, stop above it) falls out of the same math.
+  const targetSpan = position.target ? position.target - position.fill : 0;
+  const stopSpan = position.stop ? position.stop - position.fill : 0;
+  const rail = position.target && position.stop ? position.target - position.stop : 0;
+  const openRiskUsd = position.stop ? Math.max(0, (mark - position.stop) * sign) * position.shares : 0;
+  const rewardUsd = position.target ? Math.max(0, (position.target - mark) * sign) * position.shares : 0;
+
+  const dayUsd = positionDayPnlUsd(position, quote);
+  const dayClose = quoteDayClose(quote);
+  const extendedPrice =
+    markSession === "pre" ? quote?.prePrice ?? null : markSession === "post" ? quote?.postPrice ?? null : null;
+  const extendedPct =
+    markSession === "pre" ? quote?.prePct ?? null : markSession === "post" ? quote?.postPct ?? null : null;
 
   return {
+    mark,
+    markSession,
     marketUsd,
     marketSek: marketUsd * book.fxUsdSek,
     costUsd,
     costSek: costUsd * book.fxUsdSek,
     pnlUsd,
     pnlSek: pnlUsd * book.fxUsdSek,
-    pnlPct: position.fill ? ((position.last - position.fill) / position.fill) * 100 * (position.side === "short" ? -1 : 1) : 0,
-    dayUsd: positionDayPnlUsd(position, quote),
-    daySek: positionDayPnlUsd(position, quote) * book.fxUsdSek,
-    dayPct: quote?.dayPct ?? null,
+    pnlPct: position.fill ? (move / position.fill) * 100 * sign : 0,
+    dayUsd,
+    daySek: dayUsd * book.fxUsdSek,
+    dayPct: dayClose != null ? changePct(dayClose, mark) : null,
     prePrice: quote?.prePrice ?? null,
     prePct: quote?.prePct ?? null,
+    postPrice: quote?.postPrice ?? null,
+    postPct: quote?.postPct ?? null,
+    extendedPrice,
+    extendedPct,
     weightPct: marketUsdTotal ? (marketUsd / marketUsdTotal) * 100 : 0,
-    stopDistPct,
-    targetDistPct,
-    rMultiple,
+    stopDistPct: position.stop && mark ? ((position.stop - mark) / mark) * 100 : null,
+    targetDistPct: position.target && mark ? ((position.target - mark) / mark) * 100 : null,
+    targetProgressPct: targetSpan ? clamp((move / targetSpan) * 100, 0, 100) : null,
+    stopProgressPct: stopSpan ? clamp((move / stopSpan) * 100, 0, 100) : null,
+    railPct: rail ? clamp(((mark - position.stop) / rail) * 100, 0, 100) : null,
+    fillRailPct: rail ? clamp(((position.fill - position.stop) / rail) * 100, 0, 100) : null,
+    rMultiple: riskPerShare ? (move * sign) / riskPerShare : 0,
+    plannedR: stopSpan && targetSpan ? Math.abs(targetSpan) / Math.abs(stopSpan) : null,
     riskUsd,
     riskSek: riskUsd * book.fxUsdSek,
+    openRiskUsd,
+    openRiskSek: openRiskUsd * book.fxUsdSek,
+    rewardUsd,
+    rewardSek: rewardUsd * book.fxUsdSek,
   };
 }
 
@@ -382,10 +470,13 @@ export function applyLiveQuotes(book: TradingBook, live: TradingLiveSnapshot | n
     updatedAt: live.fetchedAt || book.updatedAt,
     fxUsdSek,
     positions: book.positions.map((position) => {
-      const quote = live.quotes[position.symbol];
-      if (!quote?.last) return position;
-      const last = quote.last;
-      const pnlPct = position.fill ? Number((((last - position.fill) / position.fill) * 100 * (position.side === "short" ? -1 : 1)).toFixed(2)) : 0;
+      // Mark at the extended-hours print while one is running, so P&L, weights and the
+      // stop/target rails all move together instead of freezing at the last close.
+      const last = quoteMark(live.quotes[position.symbol]);
+      if (last == null) return position;
+      const pnlPct = position.fill
+        ? Number((((last - position.fill) / position.fill) * 100 * (position.side === "short" ? -1 : 1)).toFixed(2))
+        : 0;
       return { ...position, last, pnlPct };
     }),
     stats: { ...book.stats, openPnlSek: null },
@@ -398,37 +489,46 @@ export function applyLiveCandles(
   timeZone = TRADING_TIMEZONE,
 ): Record<string, TradingCandle[]> {
   if (!live) return charts;
-  const today = formatIsoDate(live.fetchedAt || new Date().toISOString(), timeZone);
+  const fallbackDay = formatIsoDate(live.fetchedAt || new Date().toISOString(), timeZone);
   const next: Record<string, TradingCandle[]> = {};
 
   for (const [symbol, candles] of Object.entries(charts)) {
     const quote = live.quotes[symbol];
+    // Daily candles carry the regular session only — the extended print rides on its own
+    // price line, and the quote's own market date says which bar it belongs to. Stamping
+    // the wall-clock day instead used to graft yesterday's close onto a fake bar at dawn.
     if (!quote?.last) {
       next[symbol] = candles;
       continue;
     }
-    const last = candles.at(-1);
-    if (last && last.time === today) {
+    const day = quote.marketDate || fallbackDay;
+    const high = Math.max(quote.dayHigh ?? quote.last, quote.last);
+    const low = Math.min(quote.dayLow ?? quote.last, quote.last);
+    const index = candles.findIndex((candle) => candle.time === day);
+
+    if (index >= 0) {
+      const candle = candles[index];
       next[symbol] = [
-        ...candles.slice(0, -1),
+        ...candles.slice(0, index),
         {
-          ...last,
+          ...candle,
           close: quote.last,
-          high: Math.max(last.high, quote.dayHigh ?? quote.last, quote.last),
-          low: Math.min(last.low, quote.dayLow ?? quote.last, quote.last),
+          high: Math.max(candle.high, high),
+          low: Math.min(candle.low, low),
         },
+        ...candles.slice(index + 1),
       ];
+      continue;
+    }
+
+    const last = candles.at(-1);
+    if (last && last.time > day) {
+      next[symbol] = candles;
       continue;
     }
     next[symbol] = [
       ...candles,
-      {
-        time: today,
-        open: quote.previousClose ?? last?.close ?? quote.last,
-        high: quote.dayHigh ?? quote.last,
-        low: quote.dayLow ?? quote.last,
-        close: quote.last,
-      },
+      { time: day, open: last?.close ?? quote.previousClose ?? quote.last, high, low, close: quote.last },
     ];
   }
 
@@ -437,7 +537,8 @@ export function applyLiveCandles(
 
 export function stampLiveEquity(points: TradingPoint[], book: TradingBook, quotes: Record<string, TradingQuote> = {}): TradingPoint[] {
   const stats = getTradingDeskStats(book, quotes);
-  const today = formatIsoDate(book.updatedAt || new Date().toISOString(), book.timezone);
+  // On the exchange's calendar: at 18:00 in New York it is still today's trade, not tomorrow's.
+  const today = formatIsoDate(book.updatedAt || new Date().toISOString(), TRADING_MARKET_TIMEZONE);
   const value = Number(stats.equitySek.toFixed(2));
   if (points.length === 0) return [{ time: today, value }];
   const last = points.at(-1)!;
@@ -626,12 +727,8 @@ export function buildEquityCurve(
     });
   }
 
-  const last = points.at(-1);
-  const stats = getTradingDeskStats(book);
-  if (last && Math.abs(last.value - stats.equitySek) > 1) {
-    last.value = Number(stats.equitySek.toFixed(2));
-  }
-
+  // The live mark belongs to today's point, which stampLiveEquity adds or replaces —
+  // overwriting the last close here would have flattened the day it closed on.
   return points;
 }
 

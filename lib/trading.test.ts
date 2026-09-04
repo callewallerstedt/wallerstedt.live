@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
   alignedReturnPct,
+  applyLiveCandles,
   applyLiveQuotes,
   changePct,
   firstFillDate,
@@ -12,6 +13,7 @@ import {
   getPortfolioStats,
   getTradingDeskStats,
   parseTradingBook,
+  positionFromDraft,
   rebaseToPercent,
   resolvePreviousClose,
   seriesTotalPct,
@@ -23,8 +25,16 @@ import {
 
 function quote(partial: Partial<TradingQuote> & Pick<TradingQuote, "symbol" | "last">): TradingQuote {
   return {
+    mark: partial.last,
+    markSession: "regular",
+    markTime: null,
+    session: "open",
     previousClose: null,
+    regularClose: null,
+    dayClose: null,
     dayPct: null,
+    regularPct: null,
+    marketDate: null,
     dayHigh: null,
     dayLow: null,
     volume: null,
@@ -34,10 +44,9 @@ function quote(partial: Partial<TradingQuote> & Pick<TradingQuote, "symbol" | "l
     prePrice: null,
     prePct: null,
     preTime: null,
-    preMark: null,
     postPrice: null,
     postPct: null,
-    postMark: null,
+    postTime: null,
     ...partial,
   };
 }
@@ -188,4 +197,163 @@ test("day P&L follows the printed day % instead of a 5-day chart close", () => {
   const metrics = getPositionMetrics(ko, liveBook, quotes);
   assert.ok(Math.abs(metrics.daySek + 12.88) < 0.2);
   assert.ok(Math.abs(metrics.dayPct! + 0.756) < 0.001);
+});
+
+test("positions mark at the extended-hours print, and the day move follows it", () => {
+  const raw = JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8"));
+  const book = parseTradingBook(raw);
+  // Premarket: Yahoo still reports yesterday's close as `last`, so `mark` carries the pre print
+  // and `dayClose` is that close — not the one before it.
+  const quotes = {
+    GM: quote({
+      symbol: "GM",
+      last: 87.22,
+      mark: 86.59,
+      markSession: "pre",
+      session: "pre",
+      previousClose: 84.87,
+      regularClose: 87.22,
+      dayClose: 87.22,
+      dayPct: -0.722,
+      regularPct: 2.769,
+      prePrice: 86.59,
+      prePct: -0.722,
+    }),
+  };
+  const liveBook = applyLiveQuotes(book, {
+    fetchedAt: "2026-09-04T14:00:00+02:00",
+    session: "pre",
+    stale: false,
+    fxUsdSek: 9.61,
+    quotes,
+  });
+  const gm = liveBook.positions.find((position) => position.symbol === "GM");
+  assert.ok(gm);
+  assert.equal(gm.last, 86.59);
+
+  const metrics = getPositionMetrics(gm, liveBook, quotes);
+  assert.equal(metrics.mark, 86.59);
+  assert.equal(metrics.markSession, "pre");
+  assert.ok(Math.abs(metrics.dayPct! + 0.722) < 0.001, `dayPct was ${metrics.dayPct}`);
+  assert.ok(Math.abs(metrics.extendedPct! + 0.722) < 0.001);
+  // One share, 86.59 against the 87.22 close.
+  assert.ok(Math.abs(metrics.dayUsd + 0.63) < 0.001);
+  assert.ok(Math.abs(metrics.pnlPct - 0.1387) < 0.001, `pnlPct was ${metrics.pnlPct}`);
+});
+
+test("target and stop progress read off the fill, both ways round", () => {
+  const book = parseTradingBook(
+    JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8")),
+  );
+  const long = positionFromDraft({
+    symbol: "GM",
+    shares: 1,
+    fill: 86.47,
+    stop: 83.42,
+    target: 92.12,
+    last: 89,
+    filledAt: "2026-09-01T15:30:00+02:00",
+  });
+  const ahead = getPositionMetrics(long, book);
+  // 2.53 of the 5.65 to target, and away from the stop entirely.
+  assert.ok(Math.abs(ahead.targetProgressPct! - 44.78) < 0.05, `${ahead.targetProgressPct}`);
+  assert.equal(ahead.stopProgressPct, 0);
+  assert.ok(Math.abs(ahead.railPct! - 64.14) < 0.05, `${ahead.railPct}`);
+  assert.ok(Math.abs(ahead.fillRailPct! - 35.06) < 0.05);
+  assert.ok(Math.abs(ahead.rMultiple - 0.8295) < 0.001);
+  assert.ok(Math.abs(ahead.plannedR! - 1.8525) < 0.001);
+  assert.ok(Math.abs(ahead.rewardUsd - 3.12) < 0.001);
+  assert.ok(Math.abs(ahead.openRiskUsd - 5.58) < 0.001);
+
+  const stopped = getPositionMetrics({ ...long, last: 83 }, book);
+  assert.equal(stopped.stopProgressPct, 100);
+  assert.equal(stopped.targetProgressPct, 0);
+  assert.equal(stopped.railPct, 0);
+  assert.equal(stopped.openRiskUsd, 0);
+
+  const short = positionFromDraft({
+    symbol: "XYZ",
+    side: "short",
+    shares: 2,
+    fill: 100,
+    stop: 110,
+    target: 90,
+    last: 95,
+    filledAt: "2026-09-01T15:30:00+02:00",
+  });
+  const shortMetrics = getPositionMetrics(short, book);
+  assert.equal(shortMetrics.targetProgressPct, 50);
+  assert.equal(shortMetrics.stopProgressPct, 0);
+  assert.equal(shortMetrics.railPct, 75);
+  assert.equal(shortMetrics.pnlPct, 5);
+  assert.equal(shortMetrics.rMultiple, 0.5);
+  assert.equal(shortMetrics.openRiskUsd, 30);
+  assert.equal(shortMetrics.rewardUsd, 10);
+});
+
+test("stop and target percentages are re-derived, never inherited stale", () => {
+  const position = positionFromDraft({
+    symbol: "GM",
+    shares: 1,
+    fill: 100,
+    stop: 95,
+    stopPct: -42,
+    target: 110,
+    targetPct: 999,
+    last: 100,
+    pnlPct: 87,
+    filledAt: "2026-09-01T15:30:00+02:00",
+  });
+  assert.equal(position.stopPct, -5);
+  assert.equal(position.targetPct, 10);
+  assert.equal(position.pnlPct, 0);
+
+  // A percentage on its own still places the price.
+  const fromPct = positionFromDraft({ symbol: "KO", shares: 1, fill: 100, stopPct: -4, targetPct: 8 });
+  assert.equal(fromPct.stop, 96);
+  assert.equal(fromPct.target, 108);
+});
+
+test("live candles land on the session the quote belongs to", () => {
+  const charts = {
+    GM: [
+      { time: "2026-09-02", open: 84, high: 85, low: 83.5, close: 84.87 },
+      { time: "2026-09-03", open: 85, high: 87.4, low: 85.1, close: 87.22 },
+    ],
+  };
+  // Premarket on the 4th: the quote still describes the 3rd, so no fourth bar appears.
+  const premarket = applyLiveCandles(charts, {
+    fetchedAt: "2026-09-04T14:00:00+02:00",
+    session: "pre",
+    stale: false,
+    fxUsdSek: 9.61,
+    quotes: {
+      GM: quote({
+        symbol: "GM",
+        last: 87.22,
+        mark: 86.59,
+        markSession: "pre",
+        marketDate: "2026-09-03",
+        dayHigh: 87.38,
+        dayLow: 85.121,
+      }),
+    },
+  });
+  assert.deepEqual(premarket.GM.map((candle) => candle.time), ["2026-09-02", "2026-09-03"]);
+  assert.equal(premarket.GM.at(-1)?.close, 87.22);
+  assert.equal(premarket.GM.at(-1)?.high, 87.4);
+  assert.equal(premarket.GM.at(-1)?.low, 85.1);
+
+  // Once the session opens the quote carries the new date and a bar is added.
+  const open = applyLiveCandles(charts, {
+    fetchedAt: "2026-09-04T18:00:00+02:00",
+    session: "open",
+    stale: false,
+    fxUsdSek: 9.61,
+    quotes: {
+      GM: quote({ symbol: "GM", last: 88.4, marketDate: "2026-09-04", dayHigh: 88.6, dayLow: 86.5 }),
+    },
+  });
+  assert.deepEqual(open.GM.map((candle) => candle.time), ["2026-09-02", "2026-09-03", "2026-09-04"]);
+  assert.deepEqual(open.GM.at(-1), { time: "2026-09-04", open: 87.22, high: 88.6, low: 86.5, close: 88.4 });
 });

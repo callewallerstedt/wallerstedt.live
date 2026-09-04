@@ -1,6 +1,5 @@
 import {
   changePct,
-  formatIsoDate,
   resolvePreviousClose,
   TRADING_INDEXES,
   usSessionPhase,
@@ -9,6 +8,7 @@ import {
   type TradingLiveSnapshot,
   type TradingPoint,
   type TradingQuote,
+  type TradingSession,
 } from "@/lib/trading";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
@@ -68,12 +68,30 @@ function toIso(unix?: number) {
   return new Date(unix * 1000).toISOString();
 }
 
-function latestWindow(periods: Array<Array<{ start?: number; end?: number }>> | undefined) {
-  const last = periods?.at(-1)?.at(-1);
-  const start = asFinite(last?.start);
-  const end = asFinite(last?.end);
-  if (start == null || end == null) return null;
+type Window = { start: number; end: number };
+
+function asWindow(period: { start?: number; end?: number } | undefined): Window | null {
+  const start = asFinite(period?.start);
+  const end = asFinite(period?.end);
+  if (start == null || end == null || end <= start) return null;
   return { start, end };
+}
+
+function latestWindow(periods: Array<Array<{ start?: number; end?: number }>> | undefined) {
+  return asWindow(periods?.at(-1)?.at(-1));
+}
+
+function inWindow(window: Window | null, atSec: number) {
+  return window != null && atSec >= window.start && atSec < window.end;
+}
+
+/** The exchange's own windows, so half-days and holidays land right without a hardcoded clock. */
+function sessionFromWindows(pre: Window | null, regular: Window | null, post: Window | null, atSec: number): TradingSession | null {
+  if (!pre && !regular && !post) return null;
+  if (inWindow(regular, atSec)) return "open";
+  if (inWindow(pre, atSec)) return "pre";
+  if (inWindow(post, atSec)) return "post";
+  return "closed";
 }
 
 function lastCloseInWindow(timestamps: number[], closes: Array<number | null | undefined>, start: number, end: number) {
@@ -87,48 +105,82 @@ function lastCloseInWindow(timestamps: number[], closes: Array<number | null | u
   return last;
 }
 
-function parseQuote(symbol: string, payload: YahooChart): TradingQuote | null {
+// Full precision on purpose: rounding here and again at the formatter turned one number
+// into two, so the premarket badge read +0.3% next to a day column reading +0.2%.
+function pct(from: number | null, to: number | null) {
+  if (from == null || to == null || from === 0) return null;
+  return changePct(from, to);
+}
+
+export function parseQuote(symbol: string, payload: YahooChart, atSec = Date.now() / 1000): TradingQuote | null {
   const result = payload.chart?.result?.[0];
   const meta = result?.meta;
   const last = asFinite(meta?.regularMarketPrice);
   if (!meta || last == null) return null;
 
-  const dayPct = asFinite(meta.regularMarketChangePercent);
-  const previousClose = resolvePreviousClose(last, dayPct, asFinite(meta.previousClose));
+  const zone = meta.exchangeTimezoneName || "America/New_York";
+  const regularPct = asFinite(meta.regularMarketChangePercent);
+  const previousClose = resolvePreviousClose(
+    last,
+    regularPct,
+    asFinite(meta.previousClose) ?? asFinite(meta.chartPreviousClose),
+  );
   const timestamps = result?.timestamp ?? [];
   const closes = result?.indicators?.quote?.[0]?.close ?? [];
-  const preWindow = latestWindow(meta.tradingPeriods?.pre);
-  const postWindow = latestWindow(meta.tradingPeriods?.post);
-  const currentPre = meta.currentTradingPeriod?.pre;
-  const livePreWindow =
-    asFinite(currentPre?.start) != null && asFinite(currentPre?.end) != null
-      ? { start: currentPre!.start!, end: currentPre!.end! }
-      : preWindow;
-  const pre = livePreWindow ? lastCloseInWindow(timestamps, closes, livePreWindow.start, livePreWindow.end) : null;
+  const preWindow = asWindow(meta.currentTradingPeriod?.pre) ?? latestWindow(meta.tradingPeriods?.pre);
+  const regularWindow = asWindow(meta.currentTradingPeriod?.regular) ?? latestWindow(meta.tradingPeriods?.regular);
+  const postWindow = asWindow(meta.currentTradingPeriod?.post) ?? latestWindow(meta.tradingPeriods?.post);
+  const regularTime = asFinite(meta.regularMarketTime);
+
+  // Yahoo leaves regularMarketPrice, regularMarketChangePercent and previousClose on the last
+  // completed session until the next opening bell. So before that bell `last` is yesterday's
+  // close and `previousClose` is the day before that — which is why premarket has to be
+  // measured against `last`, not against `previousClose`.
+  const regularStarted = regularWindow != null && regularTime != null ? regularTime >= regularWindow.start : true;
+  const regularDone = regularWindow != null && atSec >= regularWindow.end;
+  const regularClose = regularStarted && !regularDone ? previousClose : last;
+
+  // Premarket on day D is measured from the close of D-1; after hours on D from the close of D.
+  const preBase = regularStarted ? previousClose : last;
+  const postBase = regularStarted ? last : null;
+
+  const pre = preWindow ? lastCloseInWindow(timestamps, closes, preWindow.start, preWindow.end) : null;
   const post = postWindow ? lastCloseInWindow(timestamps, closes, postWindow.start, postWindow.end) : null;
-  const todayNy = formatIsoDate(new Date().toISOString(), "America/New_York");
-  const preIsToday = pre != null && unixToDate(pre.time, "America/New_York") === todayNy;
-  const postIsToday = post != null && unixToDate(post.time, "America/New_York") === todayNy;
-  const showPre = usSessionPhase() === "pre" && preIsToday;
+  const inPre = !regularStarted && pre != null && inWindow(preWindow, atSec);
+  const inPost = regularDone && post != null && inWindow(postWindow, atSec);
+  const markSession = inPre ? "pre" : inPost ? "post" : "regular";
+  const mark = inPre ? pre!.value : inPost ? post!.value : last;
+  const markTime = inPre ? toIso(pre!.time) : inPost ? toIso(post!.time) : toIso(meta.regularMarketTime);
+
+  // Nothing has happened "today" until the premarket ticks, so hold the day move at the close
+  // it starts from rather than reporting yesterday's session as if it were live.
+  const dayClose = preBase;
 
   return {
     symbol,
     last,
+    mark,
+    markSession,
+    markTime,
+    session: sessionFromWindows(preWindow, regularWindow, postWindow, atSec) ?? usSessionPhase(new Date(atSec * 1000)),
     previousClose,
-    dayPct,
+    regularClose,
+    dayClose,
+    dayPct: pct(dayClose, mark),
+    regularPct,
+    marketDate: regularTime != null ? unixToDate(regularTime, zone) : null,
     dayHigh: asFinite(meta.regularMarketDayHigh),
     dayLow: asFinite(meta.regularMarketDayLow),
     volume: asFinite(meta.regularMarketVolume),
     week52High: asFinite(meta.fiftyTwoWeekHigh),
     week52Low: asFinite(meta.fiftyTwoWeekLow),
     time: toIso(meta.regularMarketTime),
-    prePrice: showPre ? pre?.value ?? null : null,
-    prePct: showPre && pre && previousClose ? Number(changePct(previousClose, pre.value).toFixed(4)) : null,
-    preTime: showPre && pre ? toIso(pre.time) : null,
-    preMark: preIsToday ? pre?.value ?? null : null,
-    postPrice: postIsToday ? post?.value ?? null : null,
-    postPct: postIsToday && post && previousClose ? Number(changePct(previousClose, post.value).toFixed(4)) : null,
-    postMark: postIsToday ? post?.value ?? null : null,
+    prePrice: pre?.value ?? null,
+    prePct: pre ? pct(preBase, pre.value) : null,
+    preTime: pre ? toIso(pre.time) : null,
+    postPrice: post?.value ?? null,
+    postPct: post ? pct(postBase, post.value) : null,
+    postTime: post ? toIso(post.time) : null,
   };
 }
 
@@ -157,23 +209,24 @@ export async function fetchTradingLive(symbols: string[]): Promise<TradingLiveSn
 
   const quotes: Record<string, TradingQuote> = {};
   let fxUsdSek: number | null = null;
+  let session: TradingSession | null = null;
   let newest = 0;
 
   for (const row of rows) {
     if (row.status !== "fulfilled" || !row.value[1]) continue;
     const [symbol, quote] = row.value;
     if (symbol === "__FX__") {
-      fxUsdSek = quote.last;
+      // FX trades around the clock, so its windows say nothing about the equity session.
+      fxUsdSek = quote.mark;
       continue;
     }
     quotes[symbol] = quote;
-    for (const stamp of [quote.time, quote.preTime]) {
-      if (stamp) newest = Math.max(newest, Date.parse(stamp));
-    }
+    session ??= quote.session;
+    if (quote.markTime) newest = Math.max(newest, Date.parse(quote.markTime));
   }
 
   const fetchedAt = new Date().toISOString();
-  const session = usSessionPhase();
+  session ??= usSessionPhase();
   const staleMinutes = session === "pre" || session === "post" ? 20 : 15;
   const ageMs = newest ? Date.now() - newest : Number.POSITIVE_INFINITY;
 
@@ -184,10 +237,6 @@ export async function fetchTradingLive(symbols: string[]): Promise<TradingLiveSn
     fxUsdSek,
     quotes,
   };
-}
-
-export function liveQuoteDay(live: TradingLiveSnapshot, timeZone: string) {
-  return formatIsoDate(live.fetchedAt, timeZone);
 }
 
 function unixToDate(unix: number, timeZone: string) {

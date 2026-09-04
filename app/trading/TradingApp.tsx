@@ -28,6 +28,7 @@ import {
   type TradingLiveSnapshot,
   type TradingPoint,
   type TradingPosition,
+  type TradingPositionMetrics,
 } from "@/lib/trading";
 
 import "@/components/accounting/accounting.css";
@@ -48,7 +49,8 @@ type BenchmarkSeries = {
   points: TradingPoint[];
 };
 
-function pnlClass(value: number) {
+function pnlClass(value: number | null | undefined) {
+  if (value == null) return "";
   if (value > 0) return "is-positive";
   if (value < 0) return "is-negative";
   return "";
@@ -423,6 +425,7 @@ export function TradingApp({
                     <th>Vikt</th>
                     <th>Stop</th>
                     <th>Mål</th>
+                    <th>Framsteg</th>
                     <th>R</th>
                     <th>Spark</th>
                   </tr>
@@ -484,6 +487,7 @@ function PositionRow({
 }) {
   const metrics = getPositionMetrics(position, book, quotes, marketUsd);
   const spark = candles.slice(-24).map((candle) => candle.close);
+  const regularClose = quotes[position.symbol]?.last;
 
   return (
     <tr className={active ? "is-active" : ""} onClick={onClick}>
@@ -497,16 +501,16 @@ function PositionRow({
       </td>
       <td>{formatPrice(position.fill)}</td>
       <td>
-        {formatPrice(position.last)}
-        {metrics.prePct != null ? (
-          <small className={`trading-blotter__sub trading-pre ${pnlClass(metrics.prePct)}`}>
-            <SunIcon />
-            {formatSignedPct(metrics.prePct)}
-            {metrics.prePrice != null ? ` · ${formatPrice(metrics.prePrice)}` : ""}
+        {formatPrice(metrics.mark)}
+        {metrics.markSession !== "regular" ? (
+          <small className={`trading-blotter__sub trading-pre ${pnlClass(metrics.extendedPct)}`}>
+            {metrics.markSession === "pre" ? <SunIcon /> : <MoonIcon />}
+            {metrics.extendedPct == null ? "—" : formatSignedPct(metrics.extendedPct)}
+            {regularClose != null ? ` · st. ${formatPrice(regularClose)}` : ""}
           </small>
         ) : null}
       </td>
-      <td className={pnlClass(metrics.dayPct ?? 0)}>
+      <td className={pnlClass(metrics.dayPct)}>
         {metrics.dayPct == null ? "—" : formatSignedPct(metrics.dayPct)}
         <small className={`trading-blotter__sub ${pnlClass(metrics.daySek)}`}>{formatSek(metrics.daySek)}</small>
       </td>
@@ -519,13 +523,59 @@ function PositionRow({
         <small className={`trading-blotter__sub ${pnlClass(metrics.pnlSek)}`}>{formatSek(metrics.pnlSek)}</small>
       </td>
       <td>{metrics.weightPct.toFixed(0)}%</td>
-      <td>{formatPrice(position.stop)}</td>
-      <td>{formatPrice(position.target)}</td>
+      <td>
+        {formatPrice(position.stop)}
+        <small className="trading-blotter__sub">
+          {metrics.stopDistPct == null ? "—" : formatSignedPct(metrics.stopDistPct)}
+        </small>
+      </td>
+      <td>
+        {formatPrice(position.target)}
+        <small className="trading-blotter__sub">
+          {metrics.targetDistPct == null ? "—" : formatSignedPct(metrics.targetDistPct)}
+        </small>
+      </td>
+      <td>
+        <ProgressMeter metrics={metrics} />
+      </td>
       <td className={pnlClass(metrics.rMultiple)}>{metrics.rMultiple.toFixed(2)}</td>
       <td>
         <Sparkline positive={metrics.pnlPct >= 0} values={spark} />
       </td>
     </tr>
+  );
+}
+
+/** Whichever side the trade is actually travelling toward — the target, or the stop. */
+function ProgressMeter({ metrics }: { metrics: TradingPositionMetrics }) {
+  const toStop = metrics.stopProgressPct ?? 0;
+  const toTarget = metrics.targetProgressPct ?? 0;
+  if (metrics.stopProgressPct == null && metrics.targetProgressPct == null) {
+    return <small className="trading-blotter__sub">—</small>;
+  }
+  const losing = toStop > 0;
+  const value = losing ? toStop : toTarget;
+
+  return (
+    <span className={`trading-meter ${losing ? "is-negative" : "is-positive"}`}>
+      <span className="trading-meter__track">
+        <span className="trading-meter__fill" style={{ width: `${value.toFixed(1)}%` }} />
+      </span>
+      <small className="trading-blotter__sub">
+        {value.toFixed(0)}% {losing ? "mot stop" : "mot mål"}
+      </small>
+    </span>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg className="trading-pre__sun" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M13.2 10.1A5.6 5.6 0 0 1 6 2.9a5.6 5.6 0 1 0 7.2 7.2Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
 
