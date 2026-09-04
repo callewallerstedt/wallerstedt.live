@@ -12,7 +12,6 @@ import { buildLedgerSnapshot, type RawLedgerEntry } from "./ledger";
 import { osPath } from "./paths";
 import type { OsPageSlug } from "./route";
 import { hasOsSession } from "./session";
-import { loadSpotifyHistory } from "./spotify-history";
 import { listTasks } from "./tasks";
 import { connectBlocks, detectSources, sourceById } from "./sources";
 import type { LedgerSnapshot, OsSnapshot, ReleaseRow, UpcomingRow } from "./types";
@@ -111,7 +110,6 @@ function emptySnapshot(overrides: Partial<OsSnapshot> = {}): OsSnapshot {
     upcoming: [],
     wealth: null,
     spotify: null,
-    spotifyHistory: loadSpotifyHistory(),
     connect: connectBlocks(sources),
     ...overrides,
   };

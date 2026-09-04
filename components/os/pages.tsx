@@ -14,8 +14,9 @@ import {
 } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
 import { osPath } from "@/lib/os/paths";
-import type { LedgerSnapshot, OsSnapshot, SpotifyHistory } from "@/lib/os/types";
+import type { LedgerSnapshot, OsSnapshot } from "@/lib/os/types";
 import { CumulativeCurve, DualTrendChart, MonthlyBars } from "@/components/os/charts";
+import { MusicDashboard } from "@/components/os/music";
 import { ActionQueue, TaskList } from "@/components/os/tasks";
 import { AppearanceSettings, SignOutRow } from "@/components/os/settings";
 import {
@@ -586,141 +587,14 @@ export function MoneyPage({ snapshot, accessKey }: { snapshot: OsSnapshot; acces
   );
 }
 
-function SpotifyPanel({ history, followers }: { history: SpotifyHistory; followers: number | null }) {
-  const dailyLabels = history.daily.map((row, index) => {
-    if (index === 0 || index === history.daily.length - 1 || row.date.endsWith("-01")) {
-      return formatMonthLabel(row.date.slice(0, 7));
-    }
-    return "";
-  });
-
-  return (
-    <>
-      <NoticeCard
-        tone="muted"
-        title={`Snapshot from ${formatDate(history.scrapedAt)} — not live`}
-        detail={`Spotify for Artists export covering ${formatDate(history.from)} to ${formatDate(history.to)}. Numbers only move when the export is refreshed.`}
-      />
-
-      <KpiGrid>
-        <KpiCard label="Own streams" value={formatCompactCount(history.ownStreams)} hint={history.throughLabel} />
-        <KpiCard
-          label="Best recorded day"
-          value={formatNumber(history.lastCompleteOwn)}
-          hint={formatDate(history.lastCompleteDay)}
-        />
-        <KpiCard
-          label="Estimated earnings"
-          value={formatUsd(history.estimatedOwnEarningsUsd)}
-          hint={`Own streams × $${history.ratePerStreamUsd}`}
-        />
-        <KpiCard
-          label="DistroKid Spotify"
-          value={formatUsd(history.distrokid.spotifyEarnUsd)}
-          hint={`${formatCompactCount(history.distrokid.spotifyQty)} streams · not in bokföring`}
-        />
-        {followers != null ? (
-          <KpiCard label="Followers" value={formatNumber(followers)} hint="Live from the public artist API" />
-        ) : (
-          <KpiCard label="Label catalog" value={formatCompactCount(history.labelStreams)} hint="Same export window" />
-        )}
-        <KpiCard
-          label="Memories"
-          value={formatCompactCount(history.memories.streams)}
-          hint={`Peak ${formatNumber(history.memories.firstDayStreams)}/day`}
-        />
-      </KpiGrid>
-
-      <Panel
-        title="Daily streams"
-        action={
-          <span className="flex gap-3 text-xs">
-            <span className="text-brand">Own {formatCompactCount(history.ownStreams)}</span>
-            <span className="text-muted-foreground">Label {formatCompactCount(history.labelStreams)}</span>
-          </span>
-        }
-      >
-        <DualTrendChart
-          unit="count"
-          labels={dailyLabels}
-          series={[
-            { key: "own", label: "Own", values: history.daily.map((row) => row.own), fill: true },
-            { key: "label", label: "Label", values: history.daily.map((row) => row.label), tone: "muted" },
-          ]}
-        />
-      </Panel>
-
-      <div className="grid gap-2 lg:grid-cols-2">
-        <Panel title="Top tracks">
-          {history.top.slice(0, 8).map((song) => (
-            <Row
-              key={song.id}
-              primary={song.name}
-              secondary={`${song.category} · ${formatNumber(song.avgDaily)}/day average`}
-              value={formatCompactCount(song.streams)}
-            />
-          ))}
-        </Panel>
-        <Panel title="DistroKid by store" footer={`Payout mix scraped ${formatDate(history.distrokid.scrapedAt)}.`}>
-          {history.distrokid.stores.slice(0, 8).map((store) => (
-            <Row
-              key={store.store}
-              primary={store.store}
-              secondary={`${formatCompactCount(store.qty)} streams`}
-              value={formatUsd(store.earnUsd)}
-            />
-          ))}
-        </Panel>
-      </div>
-    </>
-  );
-}
-
 export function MusicPage({ snapshot, todayYmd }: { snapshot: OsSnapshot; todayYmd: string }) {
-  const upcoming = snapshot.releases.filter((row) => row.upcoming);
-  const released = snapshot.releases.filter((row) => !row.upcoming).slice(-12).reverse();
-
   return (
-    <PageFrame>
-      <PageTitle aside="Streaming and catalog. None of this is booked revenue.">Music</PageTitle>
-      <SpotifyPanel history={snapshot.spotifyHistory} followers={snapshot.spotify?.followers ?? null} />
-
-      <div className="grid gap-2 lg:grid-cols-2">
-        <Panel title="Coming up">
-          {upcoming.length ? (
-            upcoming.map((row) => (
-              <Row
-                key={`${row.slug}-${row.date}`}
-                href={row.spotifyUrl}
-                external={Boolean(row.spotifyUrl)}
-                primary={row.title}
-                secondary={row.date >= todayYmd ? "Scheduled" : undefined}
-                value={formatDate(row.date)}
-                valueTone="muted"
-              />
-            ))
-          ) : (
-            <EmptyState title="Nothing scheduled" detail="No future release dates in the public catalog." />
-          )}
-        </Panel>
-        <Panel title="Recently released">
-          {released.map((row) => (
-            <Row
-              key={`${row.slug}-${row.date}`}
-              href={row.spotifyUrl}
-              external={Boolean(row.spotifyUrl)}
-              primary={row.title}
-              value={formatDate(row.date)}
-              valueTone="muted"
-            />
-          ))}
-        </Panel>
-      </div>
-
-      <ConnectFootnote
-        sources={snapshot.sources.filter((source) => source.id === "tiktok" || source.id === "spotify")}
-      />
-    </PageFrame>
+    <MusicDashboard
+      followers={snapshot.spotify?.followers ?? null}
+      releases={snapshot.releases}
+      sources={snapshot.sources}
+      todayYmd={todayYmd}
+    />
   );
 }
 

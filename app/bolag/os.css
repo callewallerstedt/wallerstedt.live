@@ -166,6 +166,47 @@ body:has(.os-root) > .footer {
   --brand-soft: color-mix(in oklch, var(--brand) 16%, transparent);
 }
 
+/* ============================================================
+   Chart colours.
+
+   Data identity must not move when the accent does, so these are fixed hues
+   rather than tokens off `--brand`. Both columns are selected for their own
+   surface and validated as a set (lightness band, chroma floor, CVD
+   separation, contrast) — the dark row is stepped for the dark card, not an
+   automatic flip of the light one.
+   ============================================================ */
+.os-root {
+  --m-own: #eb6834;
+  --m-label: #4a3aa7;
+  --m-1: #2a78d6;
+  --m-2: #eb6834;
+  --m-3: #1baf7a;
+  --m-4: #eda100;
+  --m-5: #e87ba4;
+  --m-6: #008300;
+  --m-7: #4a3aa7;
+  --m-8: #e34948;
+  --m-other: oklch(0.62 0 0);
+  --m-grid: color-mix(in oklch, var(--foreground) 9%, transparent);
+  --m-crosshair: color-mix(in oklch, var(--foreground) 34%, transparent);
+  --m-brush-fill: color-mix(in oklch, var(--foreground) 16%, transparent);
+  --m-brush-mask: color-mix(in oklch, var(--background) 72%, transparent);
+}
+
+.os-root.dark {
+  --m-own: #d95926;
+  --m-label: #9085e9;
+  --m-1: #3987e5;
+  --m-2: #d95926;
+  --m-3: #199e70;
+  --m-4: #c98500;
+  --m-5: #d55181;
+  --m-6: #008300;
+  --m-7: #9085e9;
+  --m-8: #e66767;
+  --m-other: oklch(0.6 0 0);
+}
+
 /* Ticking a task off should feel like something happened: the accent sweeps
    across the whole row, the box pops and the tick draws itself. The row only
    moves down into Done once the sweep has finished. */
@@ -308,7 +349,17 @@ body:has(.os-root) > .footer {
   animation: os-pop-in 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Every control gives a little under the finger. */
+/* Every control gives a little under the finger, and none of them flash the
+   browser's blue tap highlight or select their own label on a double tap. */
+.os-root :where(button, a[href], [role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.os-root :where(button, [role="button"]):not(.accounting-app *) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .os-root :where(button, a[href], [role="button"]):active {
   transform: scale(0.985);
 }

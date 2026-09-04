@@ -19,6 +19,7 @@
     "test:os": "tsx --test lib/os/*.test.ts",
     "test:push": "tsx --test lib/push.test.ts",
     "accounting:import": "node scripts/import-accounting.mjs",
+    "music:sync": "node scripts/build-music-data.mjs",
     "accounting:restore": "tsx scripts/restore-accounting.ts"
   },
   "dependencies": {

@@ -12,13 +12,37 @@ Six tabs, a collapsible sidebar on desktop and a fixed tab bar on phones:
 | **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead |
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
-| **Music** | Spotify for Artists export, DistroKid payouts and the release calendar |
+| **Music** | The full streaming analytics: every song's daily history, a scrubbable chart with a drag-to-set range, growth and momentum, milestones, DistroKid payouts and the release calendar |
 | **Settings** | Theme, accent, company details, data sources and sign-out |
 
 The header holds only the logo; pressing it drops down the registry details
 (org.nr, momsnummer, verksamhetsbeskrivning, säte) with a copy button on each.
 
 `Content`, `Customers`, `Accounting`, `Investments`, `Wealth`, `Upcoming`, `Alerts` and `Projects` were merged away; their URLs redirect rather than 404.
+
+### Refreshing the streaming numbers
+
+The Music tab reads `lib/os/music-data.json`, built from a Spotify for Artists
+scrape. After a new scrape:
+
+```bash
+npm run music:sync
+```
+
+It reads `scraped_data.json`, `categories.json`, `earnings_data.json` and
+`revenue_summary.json` from `C:/Claude Code/Spotify scraper Analytics`. Point it
+somewhere else with a path argument (a folder or the scrape file itself):
+
+```bash
+npm run music:sync -- "D:/exports/2026-09"
+```
+
+The rebuild **adds on**: days already in `music-data.json` are kept, the new
+scrape only overwrites the days it covers, and a song that has dropped out of the
+scrape keeps the streams it earned. Own/label tags come from `categories.json`;
+they can also be changed per song in the tab itself, where they are remembered on
+that device. The axis stops at the last day every currently streaming song has
+reported, so a half-counted final day never reads as a cliff.
 
 ### Tasks need a migration
 
