@@ -236,6 +236,18 @@ body:has(.os-root) > .footer {
   position: relative;
 }
 
+.os-task-row[data-dragging="true"] {
+  transform: scale(1.015);
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 140ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-task-row[data-dragging="true"] {
+    transform: none;
+    transition: none;
+  }
+}
+
 .os-task-row[data-celebrate="true"] {
   animation: os-task-settle 700ms ease-out forwards;
 }
