@@ -42,7 +42,7 @@ import {
   useStickyState,
   type ChartSeries,
 } from "@/components/os/music-chart";
-import { EmptyState, KpiCard, KpiGrid, Panel, Pill, Row } from "@/components/os/ui";
+import { EmptyState, KpiCard, KpiGrid, Panel, Pill, Row, SectionLabel } from "@/components/os/ui";
 import type { ReleaseRow, SourceState } from "@/lib/os/types";
 import { zIndex } from "@/lib/z-index";
 import { cn } from "@/lib/utils";
@@ -841,7 +841,7 @@ export function MusicDashboard({
       </Panel>
 
       {/* Earnings */}
-      {earnings ? <EarningsSection earnings={earnings} ownStreams={windowSum(totals.own)} /> : null}
+      {earnings ? <EarningsSection earnings={earnings} /> : null}
 
       {/* Catalog dates */}
       <div className="grid gap-2 lg:grid-cols-2">
@@ -1205,58 +1205,170 @@ function SongSheet({
   );
 }
 
-// ── Earnings ──────────────────────────────────────────────────────────────────
-function EarningsSection({
-  earnings,
-  ownStreams,
+// ── Earnings ───────────────────────────────────────────────────────────────
+const regionNames =
+  typeof Intl !== "undefined" && "DisplayNames" in Intl
+    ? new Intl.DisplayNames(["en-GB"], { type: "region" })
+    : null;
+
+function countryName(code: string) {
+  try {
+    return regionNames?.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+type Breakdown = "store" | "country" | "release";
+
+/** A ranked row with its all-time bar and how the last three months went. */
+function EarnRow({
+  label,
+  sub,
+  value,
+  max,
+  recent,
+  growth,
+  dot,
 }: {
-  earnings: NonNullable<typeof musicData.earnings>;
-  ownStreams: number;
+  label: string;
+  sub?: string;
+  value: number;
+  max: number;
+  recent: number;
+  growth: number | null;
+  dot?: string;
 }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-border px-3 py-1.5 first:border-t-0">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-xs font-medium">
+          {dot ? <Swatch color={dot} /> : null}
+          <span className="truncate">{label}</span>
+          {sub ? <span className="shrink-0 text-muted-foreground">{sub}</span> : null}
+        </p>
+        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-brand-gradient"
+            style={{ width: `${Math.max(1.5, (value / max) * 100)}%` }}
+          />
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="text-xs font-semibold tabular-nums">{usd(value)}</p>
+        <p className="text-[0.65rem] leading-tight tabular-nums text-muted-foreground">
+          {/* Under a dollar the percentage is noise, so only the fact is shown. */}
+          {recent < 1 ? (
+            "nothing last 3mo"
+          ) : (
+            <>
+              {usd(recent)} last 3mo{" "}
+              <span className={cn("font-semibold", growthTone(growth))}>{growthLabel(growth)}</span>
+            </>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EarningsSection({ earnings }: { earnings: NonNullable<typeof musicData.earnings> }) {
   const [active, setActive] = useState<number | null>(null);
-  const months = earnings.months.slice(-24);
-  const series: ChartSeries[] = [
-    {
-      key: "own",
-      label: "My songs",
-      color: CATEGORY_COLOR.own,
-      values: months.map((row) => row.own),
-    },
-    {
-      key: "label",
-      label: "Label",
-      color: CATEGORY_COLOR.label,
-      values: months.map((row) => row.label),
-    },
-  ].filter((item) => item.values.some((value) => value > 0));
+  const [breakdown, setBreakdown] = useStickyState<Breakdown>("os-music-breakdown", "store");
+  const { account, transactions } = earnings;
+
+  if (!transactions) {
+    return account ? (
+      <KpiGrid>
+        <KpiCard label="Earned all time" value={usd(account.totalEarnedUsd ?? 0)} hint="DistroKid balance page" />
+        <KpiCard label="Withdrawn" value={usd(account.totalWithdrawnUsd ?? 0)} hint="paid out" />
+        <KpiCard label="Balance" value={usd(account.balanceUsd ?? 0)} hint="not yet withdrawn" />
+      </KpiGrid>
+    ) : null;
+  }
+
+  const months = transactions.months.slice(-24);
+  const firstPartial = months.findIndex((row) => row.partial);
+  const settled = transactions.months.filter((row) => !row.partial);
+  const lastThree = settled.slice(-3);
+  const perMonth = lastThree.length
+    ? lastThree.reduce((sum, row) => sum + row.earnUsd, 0) / lastThree.length
+    : 0;
+  const best = settled.reduce(
+    (top, row) => (row.earnUsd > (top?.earnUsd ?? 0) ? row : top),
+    settled[0],
+  );
+
+  const series: ChartSeries[] = transactions.byMonthStore.map((row, index) => ({
+    key: row.store,
+    label: row.store,
+    color: row.store === "Other" ? OTHER_COLOR : SERIES_COLORS[index],
+    values: row.values.slice(-24),
+  }));
 
   const readout = active ?? months.length - 1;
-  const rate = earnings.ratePerStreamUsd ?? 0;
-  const recent = months.slice(-3);
-  const recentAverage = recent.length
-    ? recent.reduce((sum, row) => sum + row.total, 0) / recent.length
-    : 0;
-  const yearAgo = earnings.withdrawals[0]
-    ? new Date(`${earnings.withdrawals[0].date}T00:00:00Z`).getTime() - 365 * 86_400_000
-    : 0;
-  const withdrawnRecently = earnings.withdrawals
-    .filter((row) => new Date(`${row.date}T00:00:00Z`).getTime() >= yearAgo)
-    .reduce((sum, row) => sum + row.amountUsd, 0);
+  const readoutMonth = months[readout];
+
+  const rows =
+    breakdown === "store"
+      ? transactions.stores.slice(0, 10).map((row) => ({
+          key: row.store,
+          label: row.store,
+          sub: row.pps ? `$${row.pps.toFixed(5)}/play` : undefined,
+          value: row.earnUsd,
+          recent: row.recentUsd,
+          growth: row.growth,
+          dot: undefined as string | undefined,
+        }))
+      : breakdown === "country"
+        ? transactions.countries.slice(0, 12).map((row) => ({
+            key: row.code,
+            label: countryName(row.code),
+            sub: `${brief(row.qty)} plays`,
+            value: row.earnUsd,
+            recent: row.recentUsd,
+            growth: row.growth,
+            dot: undefined as string | undefined,
+          }))
+        : transactions.titles.slice(0, 12).map((row) => ({
+            key: row.title,
+            label: row.title,
+            sub: undefined,
+            value: row.earnUsd,
+            recent: row.recentUsd,
+            growth: row.growth,
+            dot: row.category ? CATEGORY_COLOR[row.category] : undefined,
+          }));
+  const max = Math.max(...rows.map((row) => row.value), 1);
 
   return (
     <>
+      <SectionLabel>Earnings</SectionLabel>
+
       <KpiGrid>
         <KpiCard
           label="Earned all time"
-          value={usd(earnings.totalEarnedUsd ?? 0)}
-          hint={earnings.scrapedAt ? `DistroKid · ${fullDay(earnings.scrapedAt)}` : "DistroKid"}
+          value={usd(transactions.totalEarnedUsd)}
+          hint={`sales to ${shortMonth(transactions.to)} · export ${fullDay(transactions.exportedOn)}`}
         />
-        <KpiCard label="Withdrawn" value={usd(earnings.totalWithdrawnUsd ?? 0)} hint="paid out" />
-        <KpiCard label="Balance" value={usd(earnings.balanceUsd ?? 0)} hint="not yet withdrawn" />
         <KpiCard
-          label="Per stream"
-          value={`$${(rate).toFixed(5)}`}
-          hint={`≈ ${usd(ownStreams * rate)} on the window above`}
+          label="Per month"
+          value={usd(perMonth)}
+          hint={`last 3 settled · best ${usd(best?.earnUsd ?? 0)} in ${shortMonth(best?.month ?? "")}`}
+        />
+        <KpiCard
+          label="Balance"
+          value={usd(account?.balanceUsd ?? 0)}
+          hint={
+            account
+              ? `${usd(account.totalWithdrawnUsd ?? 0)} withdrawn · ${fullDay(account.scrapedAt)}`
+              : "not scraped"
+          }
+        />
+        <KpiCard
+          label="Per Spotify play"
+          value={`$${(transactions.ratePerSpotifyStreamUsd ?? 0).toFixed(5)}`}
+          hint="every store's money, over Spotify plays"
         />
       </KpiGrid>
 
@@ -1265,69 +1377,81 @@ function EarningsSection({
         action={
           <span className="text-right text-xs">
             <span className="block text-[0.68rem] text-muted-foreground">
-              {months[readout] ? shortMonth(months[readout].month) : ""}
+              {readoutMonth ? shortMonth(readoutMonth.month) : ""}
+              {readoutMonth?.partial ? " · still reporting" : ""}
             </span>
             <span className="block text-sm font-semibold tabular-nums">
-              {usd(months[readout]?.total ?? 0)}
+              {usd(readoutMonth?.earnUsd ?? 0)}
             </span>
           </span>
         }
-        footer={`Sales month, not payout month — DistroKid pays roughly ${earnings.avgDelayDays ?? 55} days later. Last three months average ${usd(recentAverage)}.`}
+        footer={`Sale month, not payout month — a month keeps filling in for about ${transactions.avgDelayDays ?? 45} days after it ends and is only settled after ten weeks. ${
+          transactions.completeThrough
+            ? `Everything after ${shortMonth(transactions.completeThrough)} is drawn faded because it is still arriving.`
+            : ""
+        }`}
       >
+        <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 px-3 pb-1">
+          {series.map((item) => (
+            <span key={item.key} className="flex items-center gap-1 text-[0.68rem]">
+              <Swatch color={item.color} />
+              <span className="max-w-[8rem] truncate text-muted-foreground">{item.label}</span>
+              <span className="font-semibold tabular-nums">
+                {usd(item.values[readout] ?? 0)}
+              </span>
+            </span>
+          ))}
+        </div>
         <div className="px-1 pb-1">
           <MusicChart
             dates={months.map((row) => `${row.month}-01`)}
             series={series}
             type="bar"
             stacked
-            height={150}
+            height={160}
             active={active}
             onActive={setActive}
+            dimFrom={firstPartial >= 0 ? firstPartial : undefined}
+            formatY={(value) => `$${briefNumber(value)}`}
             formatX={(day) => shortMonth(day.slice(0, 7))}
           />
         </div>
       </Panel>
 
-      <div className="grid gap-2 lg:grid-cols-2">
-        <Panel title="By store" footer="All-time payouts across every store DistroKid reports.">
-          <div className="px-3 py-2">
-            <RankedBars
-              rows={earnings.stores.slice(0, 8).map((store) => ({
-                key: store.store,
-                label: store.store,
-                value: store.earnUsd,
-                hint: store.qty ? `${brief(store.qty)} plays` : undefined,
-              }))}
-              format={usd}
-            />
-          </div>
-        </Panel>
-        <Panel title="By release" footer="Titles as DistroKid groups them, so a single and its album row both appear.">
-          <div className="px-3 py-2">
-            <RankedBars
-              rows={earnings.titles.slice(0, 8).map((title) => ({
-                key: title.title,
-                label: title.title,
-                value: title.earnUsd,
-              }))}
-              format={usd}
-            />
-          </div>
-        </Panel>
-      </div>
+      <Panel
+        title="Breakdown"
+        action={
+          <Segmented
+            label="Breakdown"
+            value={breakdown}
+            onChange={setBreakdown}
+            options={[
+              { value: "store", label: "Store" },
+              { value: "country", label: "Country" },
+              { value: "release", label: "Release" },
+            ]}
+          />
+        }
+        footer="Bars are all-time; the second figure is the last three settled months against the three before them."
+      >
+        {rows.map(({ key, ...row }) => (
+          <EarnRow key={key} {...row} max={max} />
+        ))}
+      </Panel>
 
-      {earnings.withdrawals.length ? (
+      {account?.withdrawals.length ? (
         <Panel
           title="Withdrawals"
           action={
             <span className="text-xs text-muted-foreground">
-              {earnings.withdrawals.length} payouts · {usd(withdrawnRecently)} in the last year
+              {account.withdrawals.length} payouts
             </span>
           }
+          footer={`Scraped from the DistroKid account on ${fullDay(account.scrapedAt)}; newer payouts will not appear until it is scraped again.`}
         >
           <div className="px-3 py-2">
             <RankedBars
-              rows={earnings.withdrawals.slice(0, 8).map((row) => ({
+              rows={account.withdrawals.slice(0, 8).map((row) => ({
                 key: row.date,
                 label: fullDay(row.date),
                 value: row.amountUsd,

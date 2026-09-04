@@ -5,6 +5,7 @@
  *   npm run music:sync                      # reads the default scraper folder
  *   npm run music:sync -- "D:/some/export"  # or any folder holding the JSON
  *   npm run music:sync -- ./scraped_data.json
+ *   npm run music:sync -- . ~/Downloads/results.csv   # explicit DistroKid export
  *
  * The rebuild is additive: every day the dashboard already knows about is kept,
  * and the new scrape only overwrites the days it actually covers. So an export
@@ -13,6 +14,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve, basename } from "node:path";
 
 const DEFAULT_SOURCE = "C:/Claude Code/Spotify scraper Analytics";
@@ -70,6 +72,28 @@ if (!existsSync(scrapePath)) {
   console.error(`No scraped_data.json at ${scrapePath}`);
   console.error('Pass the scraper folder: npm run music:sync -- "C:/path/to/folder"');
   process.exit(1);
+}
+
+/**
+ * The DistroKid "all transactions" export. It is the only honest source for
+ * earnings: the account page only carries running totals, and a downloaded
+ * export usually lands in Downloads before it is filed with the scraper.
+ */
+function findTransactions() {
+  const explicit = process.argv[3] ?? process.env.MUSIC_CSV;
+  if (explicit) {
+    const path = resolve(explicit);
+    if (!existsSync(path)) {
+      console.error(`No transactions CSV at ${path}`);
+      process.exit(1);
+    }
+    return path;
+  }
+  const candidates = [join(sourceDir, "results.csv"), join(homedir(), "Downloads", "results.csv")]
+    .filter((path) => existsSync(path))
+    .map((path) => ({ path, at: statSync(path).mtimeMs }));
+  candidates.sort((a, b) => b.at - a.at);
+  return candidates[0]?.path ?? null;
 }
 
 const scrape = readJson(scrapePath);
@@ -191,65 +215,256 @@ for (const entry of songs.values()) {
 const totalOf = (song) => song.values.reduce((sum, value) => sum + value, 0);
 packed.sort((a, b) => totalOf(b) - totalOf(a));
 
-// -- Earnings, kept as a compact companion -----------------------------------
-function buildEarnings() {
-  if (!earningsRaw && !revenueRaw) return previous?.earnings ?? null;
+// -- Earnings, rebuilt from the DistroKid transactions export ----------------
 
-  const byTitle = new Map();
-  for (const row of earningsRaw?.earnings ?? []) {
-    const title = row.title ?? "Unknown";
-    byTitle.set(title, round((byTitle.get(title) ?? 0) + (Number(row.amount_usd) || 0)));
+/** One CSV line, honouring quotes and doubled quotes inside them. */
+function splitCsvLine(line) {
+  const out = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quoted) {
+      if (char !== '"') field += char;
+      else if (line[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === ",") {
+      out.push(field);
+      field = "";
+    } else field += char;
   }
-  const byStore = new Map();
-  for (const row of earningsRaw?.services ?? []) {
-    const store = row.store ?? "Unknown";
-    byStore.set(store, round((byStore.get(store) ?? 0) + (Number(row.amount_usd) || 0)));
-  }
-  const stores = revenueRaw?.stores ?? {};
-  const storeRows = [...byStore]
-    .map(([store, earnUsd]) => ({
-      store,
-      earnUsd,
-      qty: stores[store]?.qty ?? null,
-      pps: stores[store]?.pps ?? null,
-    }))
-    .sort((a, b) => b.earnUsd - a.earnUsd);
+  out.push(field);
+  return out;
+}
 
-  const months = Object.entries(revenueRaw?.monthly_earnings ?? {})
-    .map(([month, row]) => ({
+function readTransactions(path) {
+  const text = readFileSync(path, "utf8");
+  const lines = text.split(/\r?\n/);
+  const header = splitCsvLine(lines[0]).map((name) => name.trim());
+  const at = (name) => {
+    const index = header.indexOf(name);
+    if (index < 0) throw new Error(`${basename(path)} has no "${name}" column`);
+    return index;
+  };
+  const columns = {
+    inserted: at("Date Inserted"),
+    month: at("Sale Month"),
+    store: at("Store"),
+    title: at("Title"),
+    quantity: at("Quantity"),
+    country: at("Country of Sale"),
+    earn: at("Earnings (USD)"),
+  };
+  const rows = [];
+  for (let index = 1; index < lines.length; index += 1) {
+    if (!lines[index]) continue;
+    const cells = splitCsvLine(lines[index]);
+    const month = cells[columns.month];
+    if (!month) continue;
+    rows.push({
+      inserted: cells[columns.inserted],
       month,
-      own: round(row.own ?? 0),
-      label: round(row.label ?? 0),
-      total: round(row.total ?? 0),
-    }))
-    .sort((a, b) => (a.month < b.month ? -1 : 1));
+      store: cells[columns.store] || "Unknown",
+      title: cells[columns.title] || "Unknown",
+      country: cells[columns.country] || "??",
+      quantity: Number(cells[columns.quantity]) || 0,
+      earn: Number(cells[columns.earn]) || 0,
+    });
+  }
+  return rows;
+}
 
-  const withdrawals = (earningsRaw?.withdrawals ?? [])
-    .map((row) => ({ date: toYmd(row.date), amountUsd: round(Number(row.amount_usd) || 0) }))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+function monthEnd(month) {
+  const [year, index] = month.split("-").map(Number);
+  return new Date(Date.UTC(index === 12 ? year + 1 : year, index % 12, 1));
+}
+
+const daysBetween = (from, to) => Math.round((to - from) / 86_400_000);
+
+/**
+ * DistroKid reports a sale month over the following two months or so: by day 58
+ * about three quarters of it has landed, and it is settled by day 75. A month
+ * younger than that is real but incomplete, and saying so is the difference
+ * between "sales fell" and "the post has not arrived".
+ */
+const SETTLED_AFTER_DAYS = 75;
+
+const NAME_KEY = (name) => String(name).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function buildTransactionEarnings(rows) {
+  const exported = rows.reduce((max, row) => (row.inserted > max ? row.inserted : max), "");
+  const exportedAt = new Date(`${exported}T00:00:00Z`);
+  const categoryOf = new Map(packed.map((song) => [NAME_KEY(song.name), song.category]));
+
+  const sum = (map, key, row) => {
+    const entry = map.get(key) ?? { earn: 0, qty: 0 };
+    entry.earn += row.earn;
+    entry.qty += row.quantity;
+    map.set(key, entry);
+  };
+
+  const byMonth = new Map();
+  const byStore = new Map();
+  const byCountry = new Map();
+  const byTitle = new Map();
+  const monthStore = new Map();
+  const lag = new Map();
+
+  for (const row of rows) {
+    sum(byMonth, row.month, row);
+    sum(byStore, row.store, row);
+    sum(byCountry, row.country, row);
+    sum(byTitle, row.title, row);
+    sum(monthStore, `${row.month}\u0000${row.store}`, row);
+    const seen = lag.get(row.month) ?? { weighted: 0, earn: 0 };
+    seen.weighted += daysBetween(monthEnd(row.month), new Date(`${row.inserted}T00:00:00Z`)) * row.earn;
+    seen.earn += row.earn;
+    lag.set(row.month, seen);
+  }
+
+  const monthKeys = [...byMonth.keys()].sort();
+  const settled = (month) => daysBetween(monthEnd(month), exportedAt) >= SETTLED_AFTER_DAYS;
+  const completeThrough = [...monthKeys].reverse().find(settled) ?? null;
+
+  const months = monthKeys.map((month) => ({
+    month,
+    earnUsd: round(byMonth.get(month).earn),
+    qty: byMonth.get(month).qty,
+    partial: !settled(month),
+    lagDays: lag.get(month).earn > 0 ? Math.round(lag.get(month).weighted / lag.get(month).earn) : null,
+  }));
+
+  const rank = (map) => [...map].sort((a, b) => b[1].earn - a[1].earn);
+  const complete = months.filter((row) => !row.partial);
+  const window = (count) => complete.slice(-count).map((row) => row.month);
+  const recent = new Set(window(3));
+  const previous3 = new Set(complete.slice(-6, -3).map((row) => row.month));
+
+  /** Earnings in the last three settled months against the three before them. */
+  const trendFor = (keyOf) => {
+    const now = new Map();
+    const then = new Map();
+    for (const row of rows) {
+      if (recent.has(row.month)) now.set(keyOf(row), (now.get(keyOf(row)) ?? 0) + row.earn);
+      else if (previous3.has(row.month)) then.set(keyOf(row), (then.get(keyOf(row)) ?? 0) + row.earn);
+    }
+    return (key) => {
+      const before = then.get(key) ?? 0;
+      const after = now.get(key) ?? 0;
+      return {
+        recentUsd: round(after),
+        growth: before > 0 ? round(((after - before) / before) * 100, 1) : null,
+      };
+    };
+  };
+  const storeTrend = trendFor((row) => row.store);
+  const countryTrend = trendFor((row) => row.country);
+  const titleTrend = trendFor((row) => row.title);
+
+  const leadStores = rank(byStore).slice(0, 6).map(([store]) => store);
+  const leadSet = new Set(leadStores);
+  const byMonthStore = leadStores.concat("Other").map((store) => ({
+    store,
+    values: monthKeys.map((month) => {
+      if (store !== "Other") return round(monthStore.get(`${month}\u0000${store}`)?.earn ?? 0);
+      let rest = 0;
+      for (const [key, entry] of monthStore) {
+        const [rowMonth, rowStore] = key.split("\u0000");
+        if (rowMonth === month && !leadSet.has(rowStore)) rest += entry.earn;
+      }
+      return round(rest);
+    }),
+  }));
+
+  const spotify = byStore.get("Spotify") ?? null;
+  // Rate is read off settled months only, so a half-reported month cannot drag it.
+  let settledEarn = 0;
+  let settledSpotifyQty = 0;
+  for (const row of rows) {
+    if (completeThrough && row.month > completeThrough) continue;
+    settledEarn += row.earn;
+    if (row.store === "Spotify") settledSpotifyQty += row.quantity;
+  }
 
   return {
-    scrapedAt: earningsRaw?.scraped_at ? toYmd(String(earningsRaw.scraped_at).slice(0, 10)) : null,
-    generated: revenueRaw?.generated ?? null,
-    totalEarnedUsd: earningsRaw?.total_earned_usd ?? null,
-    totalWithdrawnUsd: earningsRaw?.total_withdrawn_usd ?? null,
-    balanceUsd: earningsRaw?.balance_usd ?? null,
-    ratePerStreamUsd: revenueRaw?.effective_rate_per_spotify_stream ?? null,
-    avgDelayDays: revenueRaw?.weighted_avg_delay_days ?? null,
-    spotify: stores.Spotify
-      ? { qty: stores.Spotify.qty, earnUsd: round(stores.Spotify.earn), pps: stores.Spotify.pps }
-      : null,
-    stores: storeRows,
-    titles: [...byTitle]
-      .map(([title, earnUsd]) => ({ title, earnUsd }))
-      .sort((a, b) => b.earnUsd - a.earnUsd),
+    source: basename(txPath),
+    exportedOn: exported,
+    from: monthKeys[0],
+    to: monthKeys.at(-1),
+    completeThrough,
+    totalEarnedUsd: round(rows.reduce((total, row) => total + row.earn, 0)),
+    settledEarnedUsd: round(settledEarn),
+    avgDelayDays:
+      complete.length && complete.at(-1).lagDays != null
+        ? Math.round(
+            complete.slice(-6).reduce((total, row) => total + (row.lagDays ?? 0), 0) /
+              complete.slice(-6).length,
+          )
+        : null,
+    ratePerSpotifyStreamUsd: settledSpotifyQty ? round(settledEarn / settledSpotifyQty, 6) : null,
     months,
-    withdrawals,
+    byMonthStore,
+    stores: rank(byStore).map(([store, entry]) => ({
+      store,
+      earnUsd: round(entry.earn),
+      qty: entry.qty,
+      pps: entry.qty ? round(entry.earn / entry.qty, 6) : null,
+      ...storeTrend(store),
+    })),
+    countries: rank(byCountry)
+      .slice(0, 15)
+      .map(([code, entry]) => ({
+        code,
+        earnUsd: round(entry.earn),
+        qty: entry.qty,
+        ...countryTrend(code),
+      })),
+    titles: rank(byTitle).map(([title, entry]) => ({
+      title,
+      earnUsd: round(entry.earn),
+      qty: entry.qty,
+      category: categoryOf.get(NAME_KEY(title)) ?? null,
+      ...titleTrend(title),
+    })),
   };
 }
 
+function buildEarnings() {
+  const account = earningsRaw
+    ? {
+        scrapedAt: toYmd(String(earningsRaw.scraped_at).slice(0, 10)),
+        totalEarnedUsd: earningsRaw.total_earned_usd ?? null,
+        totalWithdrawnUsd: earningsRaw.total_withdrawn_usd ?? null,
+        balanceUsd: earningsRaw.balance_usd ?? null,
+        withdrawals: (earningsRaw.withdrawals ?? [])
+          .map((row) => ({ date: toYmd(row.date), amountUsd: round(Number(row.amount_usd) || 0) }))
+          .sort((a, b) => (a.date < b.date ? 1 : -1)),
+      }
+    : (previous?.earnings?.account ?? null);
+
+  let transactions = previous?.earnings?.transactions ?? null;
+  if (txPath) {
+    const next = buildTransactionEarnings(readTransactions(txPath));
+    // An older export must never walk the numbers backwards.
+    if (!transactions || next.exportedOn >= transactions.exportedOn) transactions = next;
+    else {
+      console.log(
+        `(kept the stored export from ${transactions.exportedOn}; ${basename(txPath)} only runs to ${next.exportedOn})`,
+      );
+    }
+  }
+
+  if (!account && !transactions) return null;
+  return { account, transactions };
+}
+
+const txPath = findTransactions();
+
 const payload = {
-  version: 1,
+  version: 2,
   source: basename(sourceDir),
   scrapedAt,
   from: days[0],
@@ -271,4 +486,13 @@ console.log(
 );
 if (globalLast > payload.to) {
   console.log(`(rows up to ${globalLast} held back - not every active song has reported that far)`);
+}
+const tx = payload.earnings?.transactions;
+if (tx) {
+  console.log(
+    `earnings from ${tx.source} exported ${tx.exportedOn} - sale months ${tx.from} to ${tx.to}, ` +
+      `settled through ${tx.completeThrough}, $${tx.totalEarnedUsd.toLocaleString("en-US")} all time`,
+  );
+} else {
+  console.log("(no DistroKid results.csv found - earnings left as they were)");
 }

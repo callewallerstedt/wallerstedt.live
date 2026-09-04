@@ -75,6 +75,7 @@ export function MusicChart({
   formatX,
   formatY = briefNumber,
   yMax,
+  dimFrom,
   className,
 }: {
   dates: string[];
@@ -88,6 +89,8 @@ export function MusicChart({
   /** Pin the top of the scale — a percentage chart always reads 0 to 100. */
   formatY?: (value: number) => string;
   yMax?: number;
+  /** Draw everything from this index on faded: real numbers, not final ones. */
+  dimFrom?: number;
   className?: string;
 }) {
   const gradientId = useId().replace(/:/g, "");
@@ -247,7 +250,10 @@ export function MusicChart({
                         height={barHeight}
                         rx={barWidth >= 6 ? 2 : 0}
                         fill={item.color}
-                        opacity={active == null || active === index ? 1 : 0.45}
+                        opacity={
+                          (dimFrom != null && index >= dimFrom ? 0.4 : 1) *
+                          (active == null || active === index ? 1 : 0.5)
+                        }
                       />
                     );
                   })}

@@ -29,13 +29,28 @@ scrape. After a new scrape:
 npm run music:sync
 ```
 
-It reads `scraped_data.json`, `categories.json`, `earnings_data.json` and
-`revenue_summary.json` from `C:/Claude Code/Spotify scraper Analytics`. Point it
-somewhere else with a path argument (a folder or the scrape file itself):
+It reads `scraped_data.json`, `categories.json` and `earnings_data.json` from
+`C:/Claude Code/Spotify scraper Analytics`. Point it somewhere else with a path
+argument (a folder or the scrape file itself):
 
 ```bash
 npm run music:sync -- "D:/exports/2026-09"
 ```
+
+Earnings come from the DistroKid **all-transactions export** (`results.csv`).
+The script takes the newer of the scraper folder's copy and `~/Downloads/results.csv`,
+so a freshly downloaded export is picked up without filing it first; pass one
+explicitly as a second argument if you want to be sure:
+
+```bash
+npm run music:sync -- . ~/Downloads/results.csv
+```
+
+An older export can never walk the numbers backwards — the script keeps the
+stored one and says so. DistroKid keeps filling a sale month in for about ten
+weeks after it ends, so the newest months are marked as still reporting, drawn
+faded, and left out of averages: sales falling and the post not having arrived
+look identical otherwise.
 
 The rebuild **adds on**: days already in `music-data.json` are kept, the new
 scrape only overwrites the days it covers, and a song that has dropped out of the

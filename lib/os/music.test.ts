@@ -16,7 +16,7 @@ import {
 } from "./music";
 
 test("the dataset is a scrape, laid out on one shared day axis", () => {
-  assert.equal(musicData.version, 1);
+  assert.equal(musicData.version, 2);
   assert.ok(musicData.days.length > 300, "expected at least a year of days");
   assert.equal(musicData.from, musicData.days[0]);
   assert.equal(musicData.to, musicData.days.at(-1));
@@ -124,4 +124,46 @@ test("a milestone is dated by the day the running total crossed it", () => {
   assert.equal(lifetime, 12000);
   assert.equal(hits[10_000], "2026-01-02");
   assert.equal(hits[50_000], undefined);
+});
+
+test("earnings come from the transactions export, with the tail flagged", () => {
+  const earnings = musicData.earnings;
+  assert.ok(earnings, "expected an earnings block");
+  const tx = earnings.transactions;
+  assert.ok(tx, "expected the DistroKid transactions export");
+
+  assert.match(tx.exportedOn, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(tx.from < tx.to);
+  assert.ok(tx.totalEarnedUsd > 0);
+  assert.ok(tx.settledEarnedUsd <= tx.totalEarnedUsd);
+
+  // Months run forward, and once a month is settled every later one stays settled
+  // or is flagged partial - "partial" is only ever a suffix of the series.
+  const months = tx.months.map((row) => row.month);
+  assert.deepEqual(months, [...months].sort());
+  const firstPartial = tx.months.findIndex((row) => row.partial);
+  if (firstPartial >= 0) {
+    assert.ok(tx.months.slice(firstPartial).every((row) => row.partial));
+    assert.equal(tx.completeThrough, tx.months[firstPartial - 1]?.month ?? null);
+  }
+
+  // Every dollar in the stacked store series is a dollar in the monthly totals.
+  const stacked = tx.byMonthStore.reduce(
+    (sum, row) => sum + row.values.reduce((a, b) => a + b, 0),
+    0,
+  );
+  assert.ok(Math.abs(stacked - tx.totalEarnedUsd) < 1);
+  for (const row of tx.byMonthStore) assert.equal(row.values.length, tx.months.length);
+
+  // Ranked lists are ranked, and a title tagged with a category matches a song.
+  const ranked = (rows: Array<{ earnUsd: number }>) =>
+    rows.every((row, index) => index === 0 || rows[index - 1].earnUsd >= row.earnUsd);
+  assert.ok(ranked(tx.stores));
+  assert.ok(ranked(tx.countries));
+  assert.ok(ranked(tx.titles));
+  const names = new Set(musicData.songs.map((song) => song.name.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  for (const row of tx.titles) {
+    if (!row.category) continue;
+    assert.ok(names.has(row.title.toLowerCase().replace(/[^a-z0-9]/g, "")), `${row.title} has no song`);
+  }
 });

@@ -14,19 +14,52 @@ export type MusicSong = {
   values: number[];
 };
 
+/**
+ * Two different things, kept apart because they are true at different times.
+ * `account` is the DistroKid balance page, scraped whenever the scraper last
+ * ran. `transactions` is the full sales export, which is authoritative for what
+ * was earned but always trails: a sale month keeps filling in for about ten
+ * weeks after it ends, so the newest months are flagged rather than trusted.
+ */
 export type MusicEarnings = {
-  scrapedAt: string | null;
-  generated: string | null;
-  totalEarnedUsd: number | null;
-  totalWithdrawnUsd: number | null;
-  balanceUsd: number | null;
-  ratePerStreamUsd: number | null;
-  avgDelayDays: number | null;
-  spotify: { qty: number; earnUsd: number; pps: number } | null;
-  stores: Array<{ store: string; earnUsd: number; qty: number | null; pps: number | null }>;
-  titles: Array<{ title: string; earnUsd: number }>;
-  months: Array<{ month: string; own: number; label: number; total: number }>;
-  withdrawals: Array<{ date: string; amountUsd: number }>;
+  account: {
+    scrapedAt: string;
+    totalEarnedUsd: number | null;
+    totalWithdrawnUsd: number | null;
+    balanceUsd: number | null;
+    withdrawals: Array<{ date: string; amountUsd: number }>;
+  } | null;
+  transactions: {
+    source: string;
+    exportedOn: string;
+    from: string;
+    to: string;
+    /** The last sale month old enough to be finished reporting. */
+    completeThrough: string | null;
+    totalEarnedUsd: number;
+    settledEarnedUsd: number;
+    avgDelayDays: number | null;
+    ratePerSpotifyStreamUsd: number | null;
+    months: Array<{
+      month: string;
+      earnUsd: number;
+      qty: number;
+      partial: boolean;
+      lagDays: number | null;
+    }>;
+    byMonthStore: Array<{ store: string; values: number[] }>;
+    stores: Array<EarningsRow & { store: string; pps: number | null }>;
+    countries: Array<EarningsRow & { code: string }>;
+    titles: Array<EarningsRow & { title: string; category: Category | null }>;
+  } | null;
+};
+
+type EarningsRow = {
+  earnUsd: number;
+  qty: number;
+  /** Earned in the last three settled months, and how that compares to the three before. */
+  recentUsd: number;
+  growth: number | null;
 };
 
 export type MusicData = {
