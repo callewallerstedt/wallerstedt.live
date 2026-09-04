@@ -13,6 +13,7 @@ import {
   formatBerlinClock,
   formatBerlinDateTime,
   formatPrice,
+  formatRMultiple,
   formatSek,
   formatSignedPct,
   getPositionMetrics,
@@ -36,6 +37,7 @@ import "./trading.css";
 
 import { EquityChart } from "./EquityChart";
 import { PositionChart } from "./PositionChart";
+import { PositionOverview } from "./PositionOverview";
 import { Sparkline } from "./Sparkline";
 
 const POLL_MS = 8000;
@@ -79,7 +81,8 @@ export function TradingApp({
   const [seedBook, setSeedBook] = useState(book);
   const [seedCharts, setSeedCharts] = useState(charts);
   const [clock, setClock] = useState("");
-  const [symbol, setSymbol] = useState<string | null>(book.positions[0]?.symbol ?? null);
+  // Nothing selected on arrival: the overview is the landing view, a name opens its chart.
+  const [symbol, setSymbol] = useState<string | null>(null);
   const [unit, setUnit] = useState<ChartUnit>("sek");
   const [range, setRange] = useState<EquityRange>("all");
   const [selectedIndexes, setSelectedIndexes] = useState<TradingIndexId[]>([]);
@@ -231,7 +234,7 @@ export function TradingApp({
   useEffect(() => {
     if (!symbol) return;
     if (liveBook.positions.some((position) => position.symbol === symbol)) return;
-    setSymbol(liveBook.positions[0]?.symbol ?? null);
+    setSymbol(null);
   }, [liveBook.positions, symbol]);
 
   const toggleIndex = (id: TradingIndexId) => {
@@ -461,7 +464,19 @@ export function TradingApp({
                 quote={quotes[selected.symbol]}
               />
             </section>
-          ) : null}
+          ) : (
+            <section className="ac-section-block" aria-labelledby="overview-heading">
+              <div className="ac-section-heading-row">
+                <h2 id="overview-heading">Mot mål och stop</h2>
+              </div>
+              <PositionOverview
+                book={liveBook}
+                marketUsd={stats.marketUsd}
+                onSelect={setSymbol}
+                quotes={quotes}
+              />
+            </section>
+          )}
         </div>
       </div>
     </main>
@@ -538,7 +553,7 @@ function PositionRow({
       <td>
         <ProgressMeter metrics={metrics} />
       </td>
-      <td className={pnlClass(metrics.rMultiple)}>{metrics.rMultiple.toFixed(2)}</td>
+      <td className={pnlClass(metrics.rMultiple)}>{formatRMultiple(metrics.rMultiple)}</td>
       <td>
         <Sparkline positive={metrics.pnlPct >= 0} values={spark} />
       </td>

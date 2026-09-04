@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import {
   formatPrice,
+  formatRMultiple,
   formatSek,
   formatSignedPct,
   type TradingCandle,
@@ -58,7 +59,7 @@ export function PositionChart({
             ) : null}
           </strong>
           <small>
-            fill {formatPrice(position.fill)} {fillClock} · R {metrics.rMultiple.toFixed(2)}
+            fill {formatPrice(position.fill)} {fillClock} · R {formatRMultiple(metrics.rMultiple)}
             {metrics.markSession !== "regular" ? ` · stängning ${formatPrice(quote?.last ?? position.last)}` : ""}
           </small>
         </div>

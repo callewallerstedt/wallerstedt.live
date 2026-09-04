@@ -2,11 +2,14 @@
 
 import {
   formatPrice,
+  formatRMultiple,
   formatSek,
   formatSignedPct,
   type TradingPosition,
   type TradingPositionMetrics,
 } from "@/lib/trading";
+
+import { PositionRail } from "./PositionRail";
 
 const RADIUS = 32;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -68,9 +71,6 @@ export function PositionProgress({
 
   const targetPct = metrics.targetProgressPct ?? 0;
   const stopPct = metrics.stopProgressPct ?? 0;
-  const railPct = metrics.railPct;
-  const entryPct = metrics.fillRailPct;
-  const travelled = railPct != null && entryPct != null;
   const ahead = metrics.pnlPct >= 0;
 
   return (
@@ -107,24 +107,7 @@ export function PositionProgress({
       </div>
 
       <div className="trading-rail">
-        <div className="trading-rail__track">
-          {travelled ? (
-            <span
-              className={`trading-rail__span ${ahead ? "is-positive" : "is-negative"}`}
-              style={{
-                left: `${Math.min(entryPct, railPct)}%`,
-                width: `${Math.abs(railPct - entryPct)}%`,
-              }}
-            />
-          ) : null}
-          {entryPct != null ? <span className="trading-rail__entry" style={{ left: `${entryPct}%` }} /> : null}
-          {railPct != null ? (
-            <span
-              className={`trading-rail__mark ${ahead ? "is-positive" : "is-negative"}`}
-              style={{ left: `${railPct}%` }}
-            />
-          ) : null}
-        </div>
+        <PositionRail metrics={metrics} position={position} />
         <div className="trading-rail__ends">
           <span className="trading-rail__end trading-rail__end--stop">
             <em>Stop</em>
@@ -146,7 +129,10 @@ export function PositionProgress({
 
       <div className="trading-progress__foot">
         <span>
-          R nu <strong className={metrics.rMultiple >= 0 ? "is-positive" : "is-negative"}>{metrics.rMultiple.toFixed(2)}R</strong>
+          R nu{" "}
+          <strong className={metrics.rMultiple >= 0 ? "is-positive" : "is-negative"}>
+            {formatRMultiple(metrics.rMultiple)}R
+          </strong>
         </span>
         {metrics.plannedR != null ? (
           <span>

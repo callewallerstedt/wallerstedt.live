@@ -37,6 +37,8 @@ function quote(partial: Partial<TradingQuote> & Pick<TradingQuote, "symbol" | "l
     marketDate: null,
     dayHigh: null,
     dayLow: null,
+    dayRangeHigh: null,
+    dayRangeLow: null,
     volume: null,
     week52High: null,
     week52Low: null,
@@ -356,4 +358,66 @@ test("live candles land on the session the quote belongs to", () => {
   });
   assert.deepEqual(open.GM.map((candle) => candle.time), ["2026-09-02", "2026-09-03", "2026-09-04"]);
   assert.deepEqual(open.GM.at(-1), { time: "2026-09-04", open: 87.22, high: 88.6, low: 86.5, close: 88.4 });
+});
+
+test("today's range maps onto the stop→target rail, whichever way the trade points", () => {
+  const book = parseTradingBook(
+    JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8")),
+  );
+  const long = positionFromDraft({
+    symbol: "GM",
+    shares: 1,
+    fill: 86.47,
+    stop: 83.42,
+    target: 92.12,
+    last: 89,
+    filledAt: "2026-09-01T15:30:00+02:00",
+  });
+  const quotes = {
+    GM: quote({ symbol: "GM", last: 89, mark: 89, dayRangeLow: 85.121, dayRangeHigh: 87.38 }),
+  };
+  const metrics = getPositionMetrics(long, book, quotes);
+  // 8.70 of rail between 83.42 and 92.12.
+  assert.ok(Math.abs(metrics.dayRailLowPct! - 19.55) < 0.05, `${metrics.dayRailLowPct}`);
+  assert.ok(Math.abs(metrics.dayRailHighPct! - 45.52) < 0.05, `${metrics.dayRailHighPct}`);
+
+  // A short runs the other way — the high price sits to the LEFT, nearer its stop — so the
+  // rail bounds come back ordered by position, not by price.
+  const short = positionFromDraft({
+    symbol: "XYZ",
+    side: "short",
+    shares: 1,
+    fill: 100,
+    stop: 110,
+    target: 90,
+    last: 95,
+    filledAt: "2026-09-01T15:30:00+02:00",
+  });
+  const shortMetrics = getPositionMetrics(short, book, {
+    XYZ: quote({ symbol: "XYZ", last: 95, mark: 95, dayRangeLow: 94, dayRangeHigh: 104 }),
+  });
+  assert.equal(shortMetrics.railPct, 75);
+  assert.equal(shortMetrics.dayRailLowPct, 30);
+  assert.equal(shortMetrics.dayRailHighPct, 80);
+});
+
+test("a position with no range, or none to map it onto, simply has none", () => {
+  const book = parseTradingBook(
+    JSON.parse(readFileSync(path.join(process.cwd(), "data/trading/book.json"), "utf8")),
+  );
+  const noQuote = getPositionMetrics(
+    positionFromDraft({ symbol: "GM", shares: 1, fill: 86.47, stop: 83.42, target: 92.12, last: 89 }),
+    book,
+  );
+  assert.equal(noQuote.dayRailLowPct, null);
+  assert.equal(noQuote.dayRailHighPct, null);
+
+  const noTarget = getPositionMetrics(
+    positionFromDraft({ symbol: "GM", shares: 1, fill: 86.47, last: 89 }),
+    book,
+    { GM: quote({ symbol: "GM", last: 89, dayRangeLow: 85, dayRangeHigh: 90 }) },
+  );
+  assert.equal(noTarget.railPct, null);
+  assert.equal(noTarget.dayRailLowPct, null);
+  assert.equal(noTarget.targetProgressPct, null);
 });

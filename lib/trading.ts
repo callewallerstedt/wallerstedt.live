@@ -116,6 +116,9 @@ export type TradingQuote = {
   marketDate: string | null;
   dayHigh: number | null;
   dayLow: number | null;
+  /** Range travelled across the same "today" dayClose measures from, extended hours included. */
+  dayRangeHigh: number | null;
+  dayRangeLow: number | null;
   volume: number | null;
   week52High: number | null;
   week52Low: number | null;
@@ -185,6 +188,9 @@ export type TradingPositionMetrics = {
   /** Where the mark and the fill sit on the stop→target rail, 0–100. */
   railPct: number | null;
   fillRailPct: number | null;
+  /** Today's travelled range on that same rail, ordered left to right. */
+  dayRailLowPct: number | null;
+  dayRailHighPct: number | null;
   rMultiple: number;
   plannedR: number | null;
   riskUsd: number;
@@ -419,6 +425,12 @@ export function getPositionMetrics(
 
   const dayUsd = positionDayPnlUsd(position, quote);
   const dayClose = quoteDayClose(quote);
+  // The rail runs stop → target, so left is always toward the stop and right toward the
+  // target — for a short that means price rises to the left, which is the point.
+  const railOf = (price: number | null | undefined) =>
+    price != null && Number.isFinite(price) && rail ? clamp(((price - position.stop) / rail) * 100, 0, 100) : null;
+  const rangeA = railOf(quote?.dayRangeLow);
+  const rangeB = railOf(quote?.dayRangeHigh);
   const extendedPrice =
     markSession === "pre" ? quote?.prePrice ?? null : markSession === "post" ? quote?.postPrice ?? null : null;
   const extendedPct =
@@ -448,8 +460,10 @@ export function getPositionMetrics(
     targetDistPct: position.target && mark ? ((position.target - mark) / mark) * 100 : null,
     targetProgressPct: targetSpan ? clamp((move / targetSpan) * 100, 0, 100) : null,
     stopProgressPct: stopSpan ? clamp((move / stopSpan) * 100, 0, 100) : null,
-    railPct: rail ? clamp(((mark - position.stop) / rail) * 100, 0, 100) : null,
-    fillRailPct: rail ? clamp(((position.fill - position.stop) / rail) * 100, 0, 100) : null,
+    railPct: railOf(mark),
+    fillRailPct: railOf(position.fill),
+    dayRailLowPct: rangeA != null && rangeB != null ? Math.min(rangeA, rangeB) : null,
+    dayRailHighPct: rangeA != null && rangeB != null ? Math.max(rangeA, rangeB) : null,
     rMultiple: riskPerShare ? (move * sign) / riskPerShare : 0,
     plannedR: stopSpan && targetSpan ? Math.abs(targetSpan) / Math.abs(stopSpan) : null,
     riskUsd,
@@ -757,6 +771,12 @@ export function formatSignedNumber(value: number, digits = 0, suffix = "") {
   if (value > 0) return `+${body}`;
   if (value < 0) return `−${body}`;
   return body;
+}
+
+/** R multiples, with the same typographic minus every other number on the desk uses. */
+export function formatRMultiple(value: number, digits = 2) {
+  const abs = Math.abs(value).toFixed(digits);
+  return value < 0 ? `−${abs}` : abs;
 }
 
 export function formatPrice(value: number) {

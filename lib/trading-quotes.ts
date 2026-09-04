@@ -94,15 +94,21 @@ function sessionFromWindows(pre: Window | null, regular: Window | null, post: Wi
   return "closed";
 }
 
-function lastCloseInWindow(timestamps: number[], closes: Array<number | null | undefined>, start: number, end: number) {
+function windowStats(timestamps: number[], closes: Array<number | null | undefined>, window: Window | null) {
+  if (!window) return null;
   let last: { value: number; time: number } | null = null;
+  let high = Number.NEGATIVE_INFINITY;
+  let low = Number.POSITIVE_INFINITY;
   for (let i = 0; i < timestamps.length; i += 1) {
     const time = timestamps[i];
     const close = closes[i];
     if (time == null || typeof close !== "number" || !Number.isFinite(close)) continue;
-    if (time >= start && time < end) last = { value: close, time };
+    if (time < window.start || time >= window.end) continue;
+    last = { value: close, time };
+    high = Math.max(high, close);
+    low = Math.min(low, close);
   }
-  return last;
+  return last ? { last, high, low } : null;
 }
 
 // Full precision on purpose: rounding here and again at the formatter turned one number
@@ -144,8 +150,10 @@ export function parseQuote(symbol: string, payload: YahooChart, atSec = Date.now
   const preBase = regularStarted ? previousClose : last;
   const postBase = regularStarted ? last : null;
 
-  const pre = preWindow ? lastCloseInWindow(timestamps, closes, preWindow.start, preWindow.end) : null;
-  const post = postWindow ? lastCloseInWindow(timestamps, closes, postWindow.start, postWindow.end) : null;
+  const preStats = windowStats(timestamps, closes, preWindow);
+  const postStats = windowStats(timestamps, closes, postWindow);
+  const pre = preStats?.last ?? null;
+  const post = postStats?.last ?? null;
   const inPre = !regularStarted && pre != null && inWindow(preWindow, atSec);
   const inPost = regularDone && post != null && inWindow(postWindow, atSec);
   const markSession = inPre ? "pre" : inPost ? "post" : "regular";
@@ -155,6 +163,21 @@ export function parseQuote(symbol: string, payload: YahooChart, atSec = Date.now
   // Nothing has happened "today" until the premarket ticks, so hold the day move at the close
   // it starts from rather than reporting yesterday's session as if it were live.
   const dayClose = preBase;
+
+  // The range covers whatever "today" already means here: only the premarket before the bell,
+  // and the regular session plus both extended windows once it has rung.
+  const travelled = [mark];
+  if (regularStarted) {
+    for (const edge of [asFinite(meta.regularMarketDayHigh), asFinite(meta.regularMarketDayLow)]) {
+      if (edge != null) travelled.push(edge);
+    }
+    for (const stats of [preStats, postStats]) {
+      if (stats) travelled.push(stats.high, stats.low);
+    }
+  } else if (preStats) {
+    travelled.push(preStats.high, preStats.low);
+  }
+  const ranged = travelled.length > 1;
 
   return {
     symbol,
@@ -171,6 +194,8 @@ export function parseQuote(symbol: string, payload: YahooChart, atSec = Date.now
     marketDate: regularTime != null ? unixToDate(regularTime, zone) : null,
     dayHigh: asFinite(meta.regularMarketDayHigh),
     dayLow: asFinite(meta.regularMarketDayLow),
+    dayRangeHigh: ranged ? Math.max(...travelled) : null,
+    dayRangeLow: ranged ? Math.min(...travelled) : null,
     volume: asFinite(meta.regularMarketVolume),
     week52High: asFinite(meta.fiftyTwoWeekHigh),
     week52Low: asFinite(meta.fiftyTwoWeekLow),

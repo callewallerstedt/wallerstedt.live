@@ -172,3 +172,36 @@ test("a quote without a price is dropped", () => {
   assert.equal(parseQuote("GM", { chart: { result: [{ meta: {} }] } }, OPEN), null);
   assert.equal(parseQuote("GM", {}, OPEN), null);
 });
+
+test("the day's range covers only what today has actually travelled", () => {
+  // Before the bell that is the premarket alone — never yesterday's session high and low,
+  // which is what regularMarketDayHigh/Low still hold at this hour.
+  const premarket = parseQuote(
+    "GM",
+    payload({
+      ...BEFORE_OPEN,
+      prints: [
+        [PRE_START + 1800, 86.2],
+        [PRE_START + 2400, 86.9],
+        [PRE_START + 3600, 86.59],
+      ],
+    }),
+    PRE_START + 3700,
+  );
+  assert.ok(premarket);
+  assert.equal(premarket.dayRangeLow, 86.2);
+  assert.equal(premarket.dayRangeHigh, 86.9);
+
+  // Once it has rung, the regular session and both extended windows all count.
+  const evening = parseQuote("GM", payload(AFTER_CLOSE), CLOSE + 1860);
+  assert.ok(evening);
+  assert.equal(evening.dayRangeLow, 85.121);
+  assert.equal(evening.dayRangeHigh, 89);
+});
+
+test("a session with nothing printed yet has no range", () => {
+  const quote = parseQuote("GM", payload({ ...BEFORE_OPEN, prints: [] }), PRE_START + 60);
+  assert.ok(quote);
+  assert.equal(quote.dayRangeHigh, null);
+  assert.equal(quote.dayRangeLow, null);
+});
