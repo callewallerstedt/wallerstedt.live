@@ -2,16 +2,17 @@
 
 import {
   useEffect,
-  useLayoutEffect,
   useMemo,
   useOptimistic,
   useRef,
   useState,
   useTransition,
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   ArchiveIcon,
   CheckIcon,
@@ -68,6 +69,17 @@ function dueLabel(task: TaskRow, todayYmd: string) {
 function notesPreview(notes: string) {
   const first = notes.trim().split("\n")[0]?.trim() ?? "";
   return first.length > 80 ? `${first.slice(0, 79)}…` : first;
+}
+
+function openIdsInOrder(rows: TaskRow[], list: TaskListName) {
+  return rows
+    .filter((task) => task.list === list && !task.archivedAt && !task.done)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((task) => task.id);
+}
+
+function samePrefixOrder(incoming: string[], pending: string[]) {
+  return pending.every((id, index) => incoming[index] === id);
 }
 
 /**
@@ -133,13 +145,19 @@ export function TaskList({
   // live under the finger; the server is told once, on drop.
   const [dragId, setDragId] = useState<string | null>(null);
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
-  // The drop handler needs the latest order without reading it inside a state
-  // updater, which React double-invokes in development and would fire the save
-  // twice — the second one landing late and undoing a concurrent change.
   const localOrderRef = useRef<string[] | null>(null);
   const dragStartOrderRef = useRef<string>("");
-  // First half of FLIP: rects captured right before a reorder paints.
-  const flipRectsRef = useRef(new Map<string, DOMRect>());
+  // While a write is in flight, ignore RSC snapshots that still have the old order.
+  const pendingOrderRef = useRef<string[] | null>(null);
+  const [lift, setLift] = useState<{
+    id: string;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const liftRef = useRef<HTMLDivElement>(null);
+  const pointerOriginRef = useRef({ x: 0, y: 0 });
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const [failure, setFailure] = useState("");
@@ -204,15 +222,24 @@ export function TaskList({
   }, [localOrder, optimistic, sweepingId]);
 
   // When the server sends a newer list (a refresh, another tab, the agent API)
-  // adopt it rather than keeping this component's older copy.
+  // adopt it rather than keeping this component's older copy — unless we have
+  // a reorder that hasn't landed yet. router.refresh() often returns the old
+  // snapshot for a beat, which was snapping the list back.
   const [seenTasks, setSeenTasks] = useState(tasks);
   if (tasks !== seenTasks) {
     setSeenTasks(tasks);
-    setServerTasks(tasks.filter((task) => task.list === list));
+    const pending = pendingOrderRef.current;
+    if (pending && !samePrefixOrder(openIdsInOrder(tasks, list), pending)) {
+      // Stale snapshot: keep the optimistic order.
+    } else {
+      pendingOrderRef.current = null;
+      setServerTasks(tasks.filter((task) => task.list === list));
+    }
   }
 
   const visible = limit ? open.slice(0, limit) : open;
   const hiddenCount = limit ? Math.max(0, open.length - limit) : 0;
+  const liftedTask = lift ? (open.find((task) => task.id === lift.id) ?? null) : null;
 
   async function send(path: string, init: RequestInit) {
     const response = await fetch(path, {
@@ -327,11 +354,13 @@ export function TaskList({
 
   function reorder(ids: string[]) {
     setFailure("");
+    pendingOrderRef.current = ids;
+    applyLocalReorder(ids);
     if (localOnly) {
-      applyLocalReorder(ids);
+      pendingOrderRef.current = null;
       return;
     }
-    startTransition(async () => {
+    void (async () => {
       try {
         const response = await fetch(endpoint(accessKey), {
           method: "PATCH",
@@ -344,114 +373,114 @@ export function TaskList({
         if (!response.ok || !body?.ok || !body.tasks) {
           throw new Error(body?.message || "Could not save the new order.");
         }
+        pendingOrderRef.current = null;
         setServerTasks(body.tasks.filter((task) => task.list === list));
         setSeenTasks(body.tasks);
-        setLocalOrder(null);
-        router.refresh();
       } catch (problem) {
-        setLocalOrder(null);
+        pendingOrderRef.current = null;
+        const start = dragStartOrderRef.current.split(",").filter(Boolean);
+        if (start.length) applyLocalReorder(start);
         setFailure(problem instanceof Error ? problem.message : "Could not reorder.");
       }
-    });
+    })();
   }
 
-  // Dragging is tracked on the window so the pointer can leave the row it
-  // started on, which it always does. Moves are rAF-batched so the list does
-  // not re-render on every pointer event.
+  // The lifted card tracks the pointer on the element itself (no React render
+  // per move). The ghost snaps to whichever slot is closest to the preview.
   useEffect(() => {
     if (!dragId) return;
     let frame = 0;
     let latestY = 0;
 
-    function captureFlip() {
-      flipRectsRef.current = new Map(
-        [...rowRefs.current].map(([id, element]) => [id, element.getBoundingClientRect()]),
-      );
-    }
-
     function applyMove() {
       frame = 0;
+      const previewBox = liftRef.current?.getBoundingClientRect();
+      const previewCenter = previewBox
+        ? previewBox.top + previewBox.height / 2
+        : latestY;
+
       setLocalOrder((current) => {
         if (!current) return current;
         const from = current.indexOf(dragId!);
         if (from < 0) return current;
-        let to = from;
+
+        let bestIndex = from;
+        let bestDist = Number.POSITIVE_INFINITY;
         for (let index = 0; index < current.length; index++) {
           const element = rowRefs.current.get(current[index]!);
           if (!element) continue;
           const box = element.getBoundingClientRect();
           const mid = box.top + box.height / 2;
-          if (latestY < mid) {
-            to = index;
-            break;
+          const dist = Math.abs(previewCenter - mid);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIndex = index;
           }
-          to = index;
         }
-        if (to === from) return current;
-        captureFlip();
+
+        // Stay put unless another slot is clearly closer — stops mid-gap flicker.
+        const currentElement = rowRefs.current.get(dragId!);
+        if (currentElement && bestIndex !== from) {
+          const box = currentElement.getBoundingClientRect();
+          const currentDist = Math.abs(previewCenter - (box.top + box.height / 2));
+          if (bestDist >= currentDist - 4) return current;
+        }
+
+        if (bestIndex === from) return current;
         const next = [...current];
-        next.splice(to, 0, ...next.splice(from, 1));
+        next.splice(bestIndex, 0, ...next.splice(from, 1));
         localOrderRef.current = next;
         return next;
       });
     }
 
     function move(event: PointerEvent) {
+      if (event.cancelable) event.preventDefault();
+      const origin = pointerOriginRef.current;
+      const node = liftRef.current;
+      if (node) {
+        node.style.transform = `translate3d(${event.clientX - origin.x}px, ${event.clientY - origin.y}px, 0)`;
+      }
       latestY = event.clientY;
       if (!frame) frame = window.requestAnimationFrame(applyMove);
     }
 
     function up() {
       if (frame) window.cancelAnimationFrame(frame);
-      setDragId(null);
+      // Final snap to the closest slot using the preview's last position.
+      applyMove();
       const order = localOrderRef.current;
+      setDragId(null);
+      setLift(null);
       localOrderRef.current = null;
-      // A grip tap that moved nothing should not write anything.
       if (order && order.join() !== dragStartOrderRef.current) reorder(order);
       else setLocalOrder(null);
     }
 
-    window.addEventListener("pointermove", move);
+    window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragId]);
 
-  // Invert the layout jump so neighbours glide into their new slots.
-  useLayoutEffect(() => {
-    if (!localOrder || flipRectsRef.current.size === 0) return;
-    const previous = flipRectsRef.current;
-    flipRectsRef.current = new Map();
-    for (const [id, element] of rowRefs.current) {
-      if (id === dragId) continue;
-      const first = previous.get(id);
-      if (!first) continue;
-      const last = element.getBoundingClientRect();
-      const dy = first.top - last.top;
-      if (Math.abs(dy) < 1) continue;
-      element.style.transition = "none";
-      element.style.transform = `translateY(${dy}px)`;
-      // Force layout so the invert sticks before we play the flip.
-      void element.offsetHeight;
-      element.style.transition = "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)";
-      element.style.transform = "";
-      const clear = () => {
-        element.style.transition = "";
-        element.removeEventListener("transitionend", clear);
-      };
-      element.addEventListener("transitionend", clear);
-    }
-  }, [dragId, localOrder]);
-
   function sweep(id: string) {
     setSweepingId(id);
-    window.setTimeout(() => setSweepingId((current) => (current === id ? null : current)), 700);
+    window.setTimeout(() => {
+      setSweepingId((current) => (current === id ? null : current));
+      setOpenId((current) => (current === id ? null : current));
+    }, 1300);
   }
 
   function itemProps(task: TaskRow) {
@@ -464,10 +493,21 @@ export function TaskList({
         if (element) rowRefs.current.set(task.id, element);
         else rowRefs.current.delete(task.id);
       },
-      onGrab: () => {
-        const order = open.map((row) => row.id);
+      onGrab: (event: ReactPointerEvent<HTMLElement>) => {
+        const row = rowRefs.current.get(task.id);
+        if (!row) return;
+        const box = row.getBoundingClientRect();
+        const order = open.map((rowItem) => rowItem.id);
         localOrderRef.current = order;
         dragStartOrderRef.current = order.join();
+        pointerOriginRef.current = { x: event.clientX, y: event.clientY };
+        setLift({
+          id: task.id,
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+        });
         setLocalOrder(order);
         setDragId(task.id);
       },
@@ -532,9 +572,22 @@ export function TaskList({
 
       {visible.length ? (
         <div className="flex flex-col gap-1 px-2 pb-2">
-          {visible.map((task, index) => (
-            <TaskItem key={task.id} rank={index + 1} {...itemProps(task)} />
-          ))}
+          {visible.map((task, index) =>
+            lift && task.id === lift.id ? (
+              <div
+                aria-hidden
+                className="os-task-ghost rounded-[1.25rem]"
+                key={task.id}
+                ref={(element) => {
+                  if (element) rowRefs.current.set(task.id, element);
+                  else rowRefs.current.delete(task.id);
+                }}
+                style={{ height: lift.height }}
+              />
+            ) : (
+              <TaskItem key={task.id} rank={index + 1} {...itemProps(task)} />
+            ),
+          )}
         </div>
       ) : null}
 
@@ -585,6 +638,29 @@ export function TaskList({
         </details>
       ) : null}
 
+      {lift && liftedTask
+        ? createPortal(
+            <div
+              className="os-task-lift"
+              ref={liftRef}
+              style={{
+                left: lift.left,
+                top: lift.top,
+                width: lift.width,
+              }}
+            >
+              <TaskItem
+                {...itemProps(liftedTask)}
+                dragging
+                floating
+                rank={Math.max(1, (localOrder ?? visible.map((row) => row.id)).indexOf(lift.id) + 1)}
+                registerRow={() => {}}
+              />
+            </div>,
+            document.querySelector(".os-root") ?? document.body,
+          )
+        : null}
+
     </Panel>
   );
 }
@@ -600,6 +676,7 @@ function TaskItem({
   expanded,
   celebrating,
   dragging,
+  floating = false,
   justAdded,
   rank,
   showSong,
@@ -616,13 +693,14 @@ function TaskItem({
   expanded: boolean;
   celebrating: boolean;
   dragging: boolean;
+  floating?: boolean;
   justAdded: boolean;
   rank?: number;
   showSong: boolean;
   registerRow: (element: HTMLElement | null) => void;
   onArchive: () => void;
   onCelebrate: () => void;
-  onGrab: () => void;
+  onGrab: (event: ReactPointerEvent<HTMLElement>) => void;
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
   onToggleExpanded: () => void;
@@ -653,9 +731,12 @@ function TaskItem({
   }
 
   const SWIPE_THRESHOLD = 88;
+  // Keep open-row size while the accent sweep plays — otherwise the done
+  // styles shrink the card mid-animation.
+  const appearOpen = !task.done || celebrating;
 
   function onPointerDown(event: React.PointerEvent) {
-    if (editing) return;
+    if (editing || floating) return;
     drag.current = { x: event.clientX, y: event.clientY, axis: "none" };
     swiped.current = false;
   }
@@ -690,9 +771,10 @@ function TaskItem({
   return (
     <div
       className={cn(
-        "os-task-row relative overflow-hidden rounded-lg bg-background/60 ring-1 ring-foreground/10 will-change-transform",
+        "os-task-row relative overflow-hidden rounded-[1.25rem] ring-1 ring-foreground/10",
+        floating ? "bg-card" : "bg-background/60",
         justAdded && "os-pop-in",
-        dragging && "z-10 bg-card shadow-lg ring-brand/40",
+        dragging && !floating && !celebrating && "bg-card shadow-lg ring-brand/40",
       )}
       data-celebrate={celebrating ? "true" : undefined}
       data-dragging={dragging ? "true" : undefined}
@@ -713,8 +795,9 @@ function TaskItem({
       ) : null}
       <div
         className={cn(
-          "relative flex items-center gap-2 bg-card/80 px-2 touch-pan-y",
-          task.done ? "py-1" : "py-1.5",
+          "relative flex items-center gap-2 px-2 touch-pan-y",
+          floating ? "bg-card" : "bg-card/80",
+          appearOpen ? "py-1.5" : "py-1",
           dragX === 0 && "motion-safe:transition-transform motion-safe:duration-200",
         )}
         onPointerCancel={endDrag}
@@ -723,7 +806,7 @@ function TaskItem({
         onPointerUp={endDrag}
         style={{ transform: dragX ? `translate3d(${dragX}px,0,0)` : undefined }}
       >
-        {rank != null && !task.done ? (
+        {rank != null && appearOpen ? (
           <button
             aria-label={`Reorder ${task.title}, currently number ${rank}`}
             className={cn(
@@ -732,9 +815,10 @@ function TaskItem({
             )}
             onPointerDown={(event) => {
               // Only a primary press starts a drag; a right-click must not.
-              if (event.button !== 0) return;
+              if (event.button !== 0 || floating) return;
               event.preventDefault();
-              onGrab();
+              event.stopPropagation();
+              onGrab(event);
             }}
             title="Drag to reprioritise"
             type="button"
@@ -773,7 +857,7 @@ function TaskItem({
           aria-expanded={expanded}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 text-left",
-            task.done ? "min-h-7" : "min-h-9",
+            appearOpen ? "min-h-9" : "min-h-7",
           )}
           onClick={toggle}
           type="button"
@@ -782,12 +866,12 @@ function TaskItem({
             <span
               className={cn(
                 "block truncate font-medium",
-                task.done ? "text-[13px] text-muted-foreground/70" : "text-sm",
+                appearOpen ? "text-sm" : "text-[13px] text-muted-foreground/70",
               )}
             >
               {task.title}
             </span>
-            {summary && !task.done ? (
+            {summary && appearOpen ? (
               <span
                 className={cn(
                   "mt-0.5 block truncate text-xs",
@@ -798,7 +882,7 @@ function TaskItem({
               </span>
             ) : null}
           </span>
-          {task.priority === "high" && !task.done ? <Pill tone="warn">High</Pill> : null}
+          {task.priority === "high" && appearOpen ? <Pill tone="warn">High</Pill> : null}
         </button>
 
         <button
@@ -813,7 +897,7 @@ function TaskItem({
         >
           <span
             className={cn(
-              "os-task-check flex size-5 items-center justify-center rounded-md ring-1 ring-foreground/25 transition-colors",
+              "os-task-check flex size-5 items-center justify-center rounded-full ring-1 ring-foreground/25 transition-colors",
               task.done && "bg-brand-gradient ring-0",
             )}
           >
@@ -826,10 +910,10 @@ function TaskItem({
 
       {expanded && !editing ? (
         <div className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-3 pt-2 pb-2.5">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2">
             <p
               className={cn(
-                "min-w-0 flex-1 text-sm leading-relaxed whitespace-pre-wrap",
+                "os-task-note min-w-0 flex-1 rounded-md px-2.5 py-2 text-sm leading-relaxed whitespace-pre-wrap ring-1 ring-foreground/10",
                 task.notes ? "text-foreground/90" : "text-muted-foreground italic",
               )}
             >

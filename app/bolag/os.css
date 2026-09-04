@@ -207,23 +207,26 @@ body:has(.os-root) > .footer {
   --m-other: oklch(0.6 0 0);
 }
 
-/* Ticking a task off should feel like something happened: the accent sweeps
-   across the whole row, the box pops and the tick draws itself. The row only
-   moves down into Done once the sweep has finished. */
-@keyframes os-task-sweep {
-  0% { transform: translateX(-100%); opacity: 0; }
-  12% { opacity: 1; }
-  100% { transform: translateX(100%); opacity: 0; }
-}
-
-@keyframes os-task-settle {
-  0% { background-color: color-mix(in oklch, var(--brand) 20%, transparent); }
-  100% { background-color: transparent; }
+/* Ticking a task off: a brand gradient circle expands from the check,
+   clipped to the pill. The row moves into Done when it finishes. */
+@keyframes os-task-burst {
+  0% {
+    clip-path: circle(0px at var(--os-burst-x) 50%);
+    opacity: 1;
+  }
+  70% {
+    clip-path: circle(130% at var(--os-burst-x) 50%);
+    opacity: 1;
+  }
+  100% {
+    clip-path: circle(145% at var(--os-burst-x) 50%);
+    opacity: 0;
+  }
 }
 
 @keyframes os-check-pop {
   0% { transform: scale(1); }
-  38% { transform: scale(1.28); }
+  35% { transform: scale(1.22); }
   100% { transform: scale(1); }
 }
 
@@ -236,34 +239,72 @@ body:has(.os-root) > .footer {
   position: relative;
 }
 
-.os-task-row[data-dragging="true"] {
-  transform: scale(1.015);
-  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 140ms ease;
+.os-task-ghost {
+  box-sizing: border-box;
+  background: color-mix(in oklch, var(--muted) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground) 12%, transparent);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .os-task-row[data-dragging="true"] {
-    transform: none;
-    transition: none;
-  }
+/* Note field: a touch lighter than the expanded muted strip — not a bright inset. */
+.os-task-note {
+  background: color-mix(in oklch, var(--muted) 82%, white 18%);
+}
+
+.os-root.dark .os-task-note {
+  background: color-mix(in oklch, var(--muted) 88%, white 12%);
+}
+
+.os-task-lift {
+  position: fixed;
+  z-index: 80;
+  margin: 0;
+  pointer-events: none;
+  will-change: transform;
+  border-radius: 1.25rem;
+  background: var(--card);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.42);
+}
+
+.os-task-lift .os-task-row {
+  background: var(--card);
+  box-shadow: none;
 }
 
 .os-task-row[data-celebrate="true"] {
-  animation: os-task-settle 700ms ease-out forwards;
+  --os-burst-x: calc(100% - 1.35rem);
+  isolation: isolate;
 }
 
-.os-task-row[data-celebrate="true"]::before {
+.os-task-row[data-celebrate="true"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+.os-task-row[data-celebrate="true"]::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 2.5px;
+  border-radius: inherit;
   background: linear-gradient(
-    100deg,
-    transparent 0%,
-    color-mix(in oklch, var(--brand-from) 55%, transparent) 45%,
-    color-mix(in oklch, var(--brand-to) 55%, transparent) 60%,
-    transparent 100%
+    125deg,
+    var(--brand-from),
+    var(--brand),
+    var(--brand-to)
   );
-  animation: os-task-sweep 620ms cubic-bezier(0.3, 0, 0.2, 1) forwards;
+  /* Punch out the center so only a pill outline remains. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  clip-path: circle(0px at var(--os-burst-x) 50%);
+  animation: os-task-burst 1.2s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
   pointer-events: none;
 }
 
@@ -272,11 +313,11 @@ body:has(.os-root) > .footer {
 }
 
 .os-task-row[data-celebrate="true"] .os-task-check {
-  animation: os-check-pop 340ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  animation: os-check-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 
 .os-task-row[data-celebrate="true"] .os-task-check svg path {
-  animation: os-check-draw 280ms 60ms ease-out backwards;
+  animation: os-check-draw 280ms 40ms ease-out backwards;
 }
 
 /* Opening the app: the brand gradient sweeps around the logo's edge while the
