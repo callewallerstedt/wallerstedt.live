@@ -32,6 +32,10 @@ export function PositionRail({
     >
       <span className="trading-rail__zone trading-rail__zone--stop" style={{ width: `${entry}%` }} />
       <span className="trading-rail__zone trading-rail__zone--target" style={{ left: `${entry}%` }} />
+      <span
+        className={`trading-rail__span ${ahead ? "is-positive" : "is-negative"}`}
+        style={{ left: `${Math.min(entry, mark)}%`, width: `${Math.abs(mark - entry)}%` }}
+      />
       {ranged ? (
         <>
           <span className="trading-rail__range" style={{ left: `${low}%`, width: `${high - low}%` }} />
@@ -39,10 +43,6 @@ export function PositionRail({
           <span className="trading-rail__edge" style={{ left: `${high}%` }} />
         </>
       ) : null}
-      <span
-        className={`trading-rail__span ${ahead ? "is-positive" : "is-negative"}`}
-        style={{ left: `${Math.min(entry, mark)}%`, width: `${Math.abs(mark - entry)}%` }}
-      />
       <span className="trading-rail__entry" style={{ left: `${entry}%` }} />
       <span className={`trading-rail__mark ${ahead ? "is-positive" : "is-negative"}`} style={{ left: `${mark}%` }} />
     </div>

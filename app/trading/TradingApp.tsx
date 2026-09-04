@@ -419,12 +419,12 @@ export function TradingApp({
                 <thead>
                   <tr>
                     <th>Namn</th>
+                    <th>Idag</th>
+                    <th>P&L</th>
+                    <th>Värde</th>
                     <th>Ant</th>
                     <th>Inköp</th>
                     <th>Senast</th>
-                    <th>Idag</th>
-                    <th>Värde</th>
-                    <th>P&L</th>
                     <th>Vikt</th>
                     <th>Stop</th>
                     <th>Mål</th>
@@ -461,6 +461,7 @@ export function TradingApp({
                 fillClock={formatBerlinClock(selected.filledAt, liveBook.timezone)}
                 candles={liveCharts[selected.symbol] ?? []}
                 metrics={selectedMetrics}
+                onClose={() => setSymbol(null)}
                 quote={quotes[selected.symbol]}
               />
             </section>
@@ -510,6 +511,18 @@ function PositionRow({
         <strong>{position.symbol}</strong>
         <small>{position.name}</small>
       </td>
+      <td className={pnlClass(metrics.dayPct)}>
+        {metrics.dayPct == null ? "—" : formatSignedPct(metrics.dayPct)}
+        <small className={`trading-blotter__sub ${pnlClass(metrics.daySek)}`}>{formatSek(metrics.daySek)}</small>
+      </td>
+      <td className={pnlClass(metrics.pnlPct)}>
+        {formatSignedPct(metrics.pnlPct)}
+        <small className={`trading-blotter__sub ${pnlClass(metrics.pnlSek)}`}>{formatSek(metrics.pnlSek)}</small>
+      </td>
+      <td>
+        {formatSek(metrics.marketSek)}
+        <small className="trading-blotter__sub">{formatCompact(metrics.marketUsd)} USD</small>
+      </td>
       <td>
         {position.shares}
         <small className="trading-blotter__sub">{position.side}</small>
@@ -524,18 +537,6 @@ function PositionRow({
             {regularClose != null ? ` · st. ${formatPrice(regularClose)}` : ""}
           </small>
         ) : null}
-      </td>
-      <td className={pnlClass(metrics.dayPct)}>
-        {metrics.dayPct == null ? "—" : formatSignedPct(metrics.dayPct)}
-        <small className={`trading-blotter__sub ${pnlClass(metrics.daySek)}`}>{formatSek(metrics.daySek)}</small>
-      </td>
-      <td>
-        {formatSek(metrics.marketSek)}
-        <small className="trading-blotter__sub">{formatCompact(metrics.marketUsd)} USD</small>
-      </td>
-      <td className={pnlClass(metrics.pnlPct)}>
-        {formatSignedPct(metrics.pnlPct)}
-        <small className={`trading-blotter__sub ${pnlClass(metrics.pnlSek)}`}>{formatSek(metrics.pnlSek)}</small>
       </td>
       <td>{metrics.weightPct.toFixed(0)}%</td>
       <td>

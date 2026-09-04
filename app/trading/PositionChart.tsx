@@ -29,12 +29,14 @@ export function PositionChart({
   fillClock,
   candles,
   metrics,
+  onClose,
   quote,
 }: {
   position: TradingPosition;
   fillClock: string;
   candles: TradingCandle[];
   metrics: TradingPositionMetrics;
+  onClose?: () => void;
   quote?: TradingQuote;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -82,6 +84,19 @@ export function PositionChart({
           <button type="button" data-line="sma" className={showSma ? "is-on" : ""} onClick={() => setShowSma((value) => !value)}>
             SMA50
           </button>
+          {onClose ? (
+            <button aria-label="Stäng" className="trading-chart__close" onClick={onClose} type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          ) : null}
         </div>
       </div>
       <div className="trading-chart__frame">
