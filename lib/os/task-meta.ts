@@ -34,3 +34,9 @@ export function youtubePianoTutorialUrl(query: string) {
   const song = query.trim();
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song} piano tutorial`)}`;
 }
+
+/** TikTok search for the song plus “piano” — useful for finding cover clips. */
+export function tiktokPianoSearchUrl(query: string) {
+  const song = query.trim();
+  return `https://www.tiktok.com/search?q=${encodeURIComponent(`${song} piano`)}`;
+}

@@ -129,7 +129,7 @@ export type TaskRow = {
   title: string;
   notes: string;
   list: TaskList;
-  /** Track a video idea is built around; drives the Spotify search button. */
+  /** Track a video idea is built around; drives the song search menu. */
   song: string;
   done: boolean;
   priority: "low" | "normal" | "high";

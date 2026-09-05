@@ -29,6 +29,7 @@ import {
   spotifySearchUrl,
   TASK_AREA_LABELS,
   TASK_AREAS,
+  tiktokPianoSearchUrl,
   youtubePianoTutorialUrl,
 } from "@/lib/os/task-meta";
 import type { ActionItem, TaskArea, TaskList as TaskListName, TaskRow } from "@/lib/os/types";
@@ -685,8 +686,8 @@ export function TaskList({
 }
 
 /**
- * Action menu on a video idea: Spotify for the track, or YouTube for a piano
- * tutorial of the same song.
+ * Action menu on a video idea: Spotify for the track, YouTube for a piano
+ * tutorial, or TikTok for the song plus “piano”.
  */
 function SongSearchMenu({ query }: { query: string }) {
   const [open, setOpen] = useState(false);
@@ -719,7 +720,7 @@ function SongSearchMenu({ query }: { query: string }) {
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label={`Find ${query} on Spotify or YouTube`}
+        aria-label={`Find ${query} on Spotify, YouTube, or TikTok`}
         className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground ring-1 ring-foreground/12 hover:text-brand"
         onClick={(event) => {
           event.stopPropagation();
@@ -766,11 +767,35 @@ function SongSearchMenu({ query }: { query: string }) {
                 <YoutubeIcon className="size-3.5 text-muted-foreground" />
                 YouTube tutorial
               </a>
+              <a
+                className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                href={tiktokPianoSearchUrl(query)}
+                onClick={(event) => event.stopPropagation()}
+                rel="noreferrer"
+                role="menuitem"
+                target="_blank"
+              >
+                <TikTokIcon className="size-3.5 text-muted-foreground" />
+                TikTok
+              </a>
             </div>,
             document.querySelector(".os-root") ?? document.body,
           )
         : null}
     </>
+  );
+}
+
+function TikTokIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      className={className}
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path d="M14.5 2h2.6a5.2 5.2 0 0 0 4.15 4.09v2.64a7.66 7.66 0 0 1-4.15-1.2v7.02a6.05 6.05 0 1 1-6.05-6.05c.27 0 .55.02.8.06v2.64a3.34 3.34 0 1 0 2.65 3.26Z" />
+    </svg>
   );
 }
 

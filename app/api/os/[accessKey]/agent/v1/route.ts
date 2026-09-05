@@ -38,7 +38,7 @@ export async function GET(request: Request, { params }: Params) {
           "task — the to-do list",
           "video — TikTok video ideas, shown under the to-dos",
         ],
-        song: "string — the track a video idea uses; the dashboard turns it into a Spotify search",
+        song: "string — the track a video idea uses; the dashboard turns it into Spotify / YouTube / TikTok searches",
         notes: "string, up to 4000 characters — the long description",
         area: TASK_AREAS,
         priority: ["low", "normal", "high"],
