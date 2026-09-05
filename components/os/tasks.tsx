@@ -770,7 +770,10 @@ function SongSearchMenu({ query }: { query: string }) {
               <a
                 className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                 href={tiktokPianoSearchUrl(query)}
-                onClick={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  event.currentTarget.href = tiktokPianoSearchUrl(query);
+                }}
                 rel="noreferrer"
                 role="menuitem"
                 target="_blank"

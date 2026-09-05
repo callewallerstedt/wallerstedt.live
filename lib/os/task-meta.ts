@@ -35,8 +35,11 @@ export function youtubePianoTutorialUrl(query: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song} piano tutorial`)}`;
 }
 
-/** TikTok search for the song plus “piano” — useful for finding cover clips. */
-export function tiktokPianoSearchUrl(query: string) {
-  const song = query.trim();
-  return `https://www.tiktok.com/search?q=${encodeURIComponent(`${song} piano`)}`;
+/**
+ * TikTok only runs a search when you hit the video-results path with a
+ * fresh `t` timestamp — `/search?q=` just opens a blank TikTok page.
+ */
+export function tiktokPianoSearchUrl(query: string, now = Date.now()) {
+  const q = encodeURIComponent(`${query.trim()} piano`);
+  return `https://www.tiktok.com/search/video?q=${q}&t=${now}`;
 }
