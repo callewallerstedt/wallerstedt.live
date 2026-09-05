@@ -1,9 +1,20 @@
 import { z } from "zod";
 
 import { requireOwnerSession } from "@/lib/accounting/auth";
+import { AccountingError } from "@/lib/accounting/errors";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
-import { parseWithSchema } from "@/lib/accounting/validation";
 import { createTask, listTasks, reorderTasks, TASK_AREAS, TASK_LISTS } from "@/lib/os/tasks";
+
+function parseTaskBody<TSchema extends z.ZodTypeAny>(schema: TSchema, value: unknown): z.output<TSchema> {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    throw new AccountingError("Could not save that task.", 400, "validation_error", {
+      fields: result.error.flatten().fieldErrors,
+      form: result.error.flatten().formErrors,
+    });
+  }
+  return result.data;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +54,7 @@ export async function POST(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey } = await params;
     await requireOwnerSession(request, accessKey, true);
-    const input = parseWithSchema(createSchema, await parseJson(request, 20_000));
+    const input = parseTaskBody(createSchema, await parseJson(request, 20_000));
     const task = await createTask({
       title: input.title,
       notes: input.notes,
@@ -61,7 +72,7 @@ export async function PATCH(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey } = await params;
     await requireOwnerSession(request, accessKey, true);
-    const input = parseWithSchema(reorderSchema, await parseJson(request, 20_000));
+    const input = parseTaskBody(reorderSchema, await parseJson(request, 20_000));
     const tasks = await reorderTasks(input.ids, (input.list ?? "task") as never);
     return privateJson({ ok: true, tasks, error: null });
   });

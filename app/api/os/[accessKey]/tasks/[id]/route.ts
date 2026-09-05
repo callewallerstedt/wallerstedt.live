@@ -3,8 +3,18 @@ import { z } from "zod";
 import { requireOwnerSession } from "@/lib/accounting/auth";
 import { AccountingError } from "@/lib/accounting/errors";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
-import { parseWithSchema } from "@/lib/accounting/validation";
 import { deleteTask, TASK_AREAS, updateTask } from "@/lib/os/tasks";
+
+function parseTaskBody<TSchema extends z.ZodTypeAny>(schema: TSchema, value: unknown): z.output<TSchema> {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    throw new AccountingError("Could not save that task.", 400, "validation_error", {
+      fields: result.error.flatten().fieldErrors,
+      form: result.error.flatten().formErrors,
+    });
+  }
+  return result.data;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +38,7 @@ export async function PATCH(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey, id } = await params;
     await requireOwnerSession(request, accessKey, true);
-    const input = parseWithSchema(patchSchema, await parseJson(request, 20_000));
+    const input = parseTaskBody(patchSchema, await parseJson(request, 20_000));
     const task = await updateTask(id, input as never);
     if (!task) throw new AccountingError("Task not found.", 404, "not_found");
     return privateJson({ ok: true, task });

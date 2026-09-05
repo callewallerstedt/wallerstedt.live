@@ -3,15 +3,12 @@
 import {
   useEffect,
   useMemo,
-  useOptimistic,
   useRef,
   useState,
-  useTransition,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   ArchiveIcon,
@@ -20,6 +17,7 @@ import {
   PencilIcon,
   PlusIcon,
   Trash2Icon,
+  YoutubeIcon,
 } from "lucide-react";
 
 import { Panel, Pill, Row } from "@/components/os/ui";
@@ -27,20 +25,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
-import { spotifySearchUrl, TASK_AREA_LABELS, TASK_AREAS } from "@/lib/os/task-meta";
+import {
+  spotifySearchUrl,
+  TASK_AREA_LABELS,
+  TASK_AREAS,
+  youtubePianoTutorialUrl,
+} from "@/lib/os/task-meta";
 import type { ActionItem, TaskArea, TaskList as TaskListName, TaskRow } from "@/lib/os/types";
 import { cn } from "@/lib/utils";
+import { zIndex } from "@/lib/z-index";
 
 type Patch = Partial<
   Pick<TaskRow, "title" | "notes" | "song" | "done" | "area" | "priority" | "dueDate">
 > & {
   archived?: boolean;
 };
-
-type Action =
-  | { type: "patch"; id: string; patch: Patch }
-  | { type: "remove"; id: string }
-  | { type: "add"; task: TaskRow };
 
 const PRIORITY_LABELS: Record<TaskRow["priority"], string> = {
   low: "Low",
@@ -82,6 +81,13 @@ function samePrefixOrder(incoming: string[], pending: string[]) {
   return pending.every((id, index) => incoming[index] === id);
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function persistableIds(ids: string[]) {
+  return ids.filter((id) => UUID_RE.test(id));
+}
+
 /**
  * The owner's own to-do list. Every change writes through to Postgres; the UI
  * updates optimistically first so ticking something off feels instant on a
@@ -114,27 +120,7 @@ export function TaskList({
   /** Local mock: keep edits in memory and skip the API. */
   localOnly?: boolean;
 }) {
-  const router = useRouter();
   const [serverTasks, setServerTasks] = useState(tasks.filter((task) => task.list === list));
-  const [, startTransition] = useTransition();
-  const [optimistic, applyOptimistic] = useOptimistic(
-    serverTasks,
-    (state: TaskRow[], action: Action) => {
-      if (action.type === "add") return [action.task, ...state];
-      if (action.type === "remove") return state.filter((task) => task.id !== action.id);
-      return state.map((task) => {
-        if (task.id !== action.id) return task;
-        const { archived, ...rest } = action.patch;
-        return {
-          ...task,
-          ...rest,
-          ...(archived == null
-            ? {}
-            : { archivedAt: archived ? new Date().toISOString() : null }),
-        };
-      });
-    },
-  );
   const [draft, setDraft] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   // A row that was just ticked keeps its place in the open list until the
@@ -149,6 +135,9 @@ export function TaskList({
   const dragStartOrderRef = useRef<string>("");
   // While a write is in flight, ignore RSC snapshots that still have the old order.
   const pendingOrderRef = useRef<string[] | null>(null);
+  const pendingWriteIdsRef = useRef(new Set<string>());
+  const addingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
   const [lift, setLift] = useState<{
     id: string;
     left: number;
@@ -196,7 +185,7 @@ export function TaskList({
   }
 
   const { open, done, doneCount, archived } = useMemo(() => {
-    const live = optimistic.filter((task) => !task.archivedAt);
+    const live = serverTasks.filter((task) => !task.archivedAt);
     const stillOpen = (task: TaskRow) => !task.done || task.id === sweepingId;
     // Open vs done first, then the user's order. Overdue stays a visual cue —
     // sorting by it after a drag would yank rows back to the top.
@@ -217,23 +206,30 @@ export function TaskList({
       open: openTasks,
       done: sorted.filter((task) => !stillOpen(task)),
       doneCount: live.filter((task) => task.done).length,
-      archived: optimistic.filter((task) => task.archivedAt),
+      archived: serverTasks.filter((task) => task.archivedAt),
     };
-  }, [localOrder, optimistic, sweepingId]);
+  }, [localOrder, serverTasks, sweepingId]);
 
-  // When the server sends a newer list (a refresh, another tab, the agent API)
-  // adopt it rather than keeping this component's older copy — unless we have
-  // a reorder that hasn't landed yet. router.refresh() often returns the old
-  // snapshot for a beat, which was snapping the list back.
+  // Adopt a newer list from the page only when it actually agrees with writes
+  // we already applied. Never treat our own API payload as the page snapshot —
+  // that made the old RSC list look "new" and snapped rows back after a drop.
   const [seenTasks, setSeenTasks] = useState(tasks);
   if (tasks !== seenTasks) {
     setSeenTasks(tasks);
+    const incoming = tasks.filter((task) => task.list === list);
     const pending = pendingOrderRef.current;
-    if (pending && !samePrefixOrder(openIdsInOrder(tasks, list), pending)) {
-      // Stale snapshot: keep the optimistic order.
+    const writes = pendingWriteIdsRef.current;
+    const snapshotMissingWrite = [...writes].some(
+      (id) => !incoming.some((task) => task.id === id),
+    );
+    if (pending && !samePrefixOrder(openIdsInOrder(incoming, list), pending)) {
+      // Stale snapshot: keep the order we dropped to.
+    } else if (snapshotMissingWrite) {
+      // Stale RSC payload from before our create/patch landed.
     } else {
       pendingOrderRef.current = null;
-      setServerTasks(tasks.filter((task) => task.list === list));
+      pendingWriteIdsRef.current = new Set();
+      setServerTasks(incoming);
     }
   }
 
@@ -258,11 +254,13 @@ export function TaskList({
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = draft.trim();
-    if (!title) return;
+    if (!title || addingRef.current) return;
+    addingRef.current = true;
+    setSaving(true);
     setDraft("");
     setFailure("");
     const temporary: TaskRow = {
-      id: `pending-${Date.now()}`,
+      id: `pending-${crypto.randomUUID()}`,
       title,
       notes: "",
       list,
@@ -271,101 +269,116 @@ export function TaskList({
       priority: "normal",
       area: "company",
       dueDate: null,
-      sortOrder: -Date.now(),
+      sortOrder: 0,
       completedAt: null,
       archivedAt: null,
       createdAt: new Date().toISOString(),
     };
+    setServerTasks((current) => {
+      const bottom = current
+        .filter((task) => !task.archivedAt && !task.done)
+        .reduce((max, task) => Math.max(max, task.sortOrder), -1);
+      return [...current, { ...temporary, sortOrder: bottom + 1 }];
+    });
+    setJustAddedId(temporary.id);
+    window.setTimeout(
+      () => setJustAddedId((current) => (current === temporary.id ? null : current)),
+      400,
+    );
+    inputRef.current?.focus();
     if (localOnly) {
-      setServerTasks((current) => [temporary, ...current]);
-      setJustAddedId(temporary.id);
-      window.setTimeout(
-        () => setJustAddedId((current) => (current === temporary.id ? null : current)),
-        400,
-      );
-      inputRef.current?.focus();
+      addingRef.current = false;
+      setSaving(false);
       return;
     }
-    startTransition(async () => {
-      applyOptimistic({ type: "add", task: temporary });
+    void (async () => {
       try {
         const body = await send(endpoint(accessKey), {
           method: "POST",
           body: JSON.stringify({ title, list }),
         });
         if (body.task) {
-          setServerTasks((current) => [body.task!, ...current]);
+          pendingWriteIdsRef.current.add(body.task.id);
+          setServerTasks((current) => {
+            const existing = current.find((task) => task.id === temporary.id);
+            const next = current.map((task) =>
+              task.id === temporary.id
+                ? { ...body.task!, sortOrder: existing?.sortOrder ?? body.task!.sortOrder }
+                : task,
+            );
+            if (next.some((task) => task.id === body.task!.id)) return next;
+            return [...current.filter((task) => task.id !== temporary.id), body.task!];
+          });
           setJustAddedId(body.task.id);
           window.setTimeout(
             () => setJustAddedId((current) => (current === body.task!.id ? null : current)),
             400,
           );
         }
-        router.refresh();
       } catch (problem) {
+        setServerTasks((current) => current.filter((task) => task.id !== temporary.id));
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
         setDraft(title);
+      } finally {
+        addingRef.current = false;
+        setSaving(false);
       }
-    });
-    inputRef.current?.focus();
+    })();
   }
 
   function patch(id: string, next: Patch) {
     setFailure("");
-    if (localOnly) {
-      applyLocalPatch(id, next);
-      return;
-    }
-    startTransition(async () => {
-      applyOptimistic({ type: "patch", id, patch: next });
+    applyLocalPatch(id, next);
+    if (localOnly) return;
+    if (id.startsWith("pending-")) return;
+    pendingWriteIdsRef.current.add(id);
+    void (async () => {
       try {
         const body = await send(endpoint(accessKey, id), {
           method: "PATCH",
           body: JSON.stringify(next),
         });
         if (body.task) {
+          pendingWriteIdsRef.current.add(body.task.id);
           setServerTasks((current) => current.map((task) => (task.id === id ? body.task! : task)));
         }
-        router.refresh();
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
       }
-    });
+    })();
   }
 
   function remove(id: string) {
     setFailure("");
     setOpenId(null);
-    if (localOnly) {
-      setServerTasks((current) => current.filter((task) => task.id !== id));
-      return;
-    }
-    startTransition(async () => {
-      applyOptimistic({ type: "remove", id });
+    setServerTasks((current) => current.filter((task) => task.id !== id));
+    if (localOnly) return;
+    if (id.startsWith("pending-")) return;
+    void (async () => {
       try {
         await send(endpoint(accessKey, id), { method: "DELETE" });
-        setServerTasks((current) => current.filter((task) => task.id !== id));
-        router.refresh();
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not delete.");
       }
-    });
+    })();
   }
 
   function reorder(ids: string[]) {
     setFailure("");
-    pendingOrderRef.current = ids;
+    const saved = persistableIds(ids);
+    pendingOrderRef.current = saved.length ? saved : ids;
     applyLocalReorder(ids);
     if (localOnly) {
       pendingOrderRef.current = null;
       return;
     }
+    if (!saved.length) return;
     void (async () => {
       try {
         const response = await fetch(endpoint(accessKey), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids, list }),
+          body: JSON.stringify({ ids: saved, list }),
         });
         const body = (await response.json().catch(() => null)) as
           | { ok?: boolean; tasks?: TaskRow[]; message?: string }
@@ -373,12 +386,18 @@ export function TaskList({
         if (!response.ok || !body?.ok || !body.tasks) {
           throw new Error(body?.message || "Could not save the new order.");
         }
-        pendingOrderRef.current = null;
-        setServerTasks(body.tasks.filter((task) => task.list === list));
-        setSeenTasks(body.tasks);
+        const next = body.tasks.filter((task) => task.list === list);
+        setServerTasks((current) => {
+          const byId = new Map(next.map((task) => [task.id, task]));
+          return current.map((task) => {
+            const savedRow = byId.get(task.id);
+            if (!savedRow) return task;
+            return { ...savedRow, sortOrder: task.sortOrder };
+          });
+        });
       } catch (problem) {
-        pendingOrderRef.current = null;
-        const start = dragStartOrderRef.current.split(",").filter(Boolean);
+        pendingOrderRef.current = persistableIds(dragStartOrderRef.current.split(","));
+        const start = persistableIds(dragStartOrderRef.current.split(","));
         if (start.length) applyLocalReorder(start);
         setFailure(problem instanceof Error ? problem.message : "Could not reorder.");
       }
@@ -528,7 +547,7 @@ export function TaskList({
       title={title}
       action={
         <span className="text-xs text-muted-foreground">
-          {optimistic.filter((task) => !task.archivedAt).length - doneCount} open
+          {serverTasks.filter((task) => !task.archivedAt).length - doneCount} open
           {doneCount ? ` · ${doneCount} done` : ""}
         </span>
       }
@@ -537,7 +556,7 @@ export function TaskList({
         <Input
           aria-label="New task"
           className="min-h-11 flex-1 md:min-h-9"
-          disabled={Boolean(error)}
+          disabled={saving || Boolean(error)}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={addPlaceholder}
           ref={inputRef}
@@ -546,7 +565,7 @@ export function TaskList({
         <Button
           aria-label="Add task"
           className="size-11 shrink-0 md:size-9"
-          disabled={!draft.trim() || Boolean(error)}
+          disabled={saving || !draft.trim() || Boolean(error)}
           size="icon"
           type="submit"
           variant="brand"
@@ -662,6 +681,96 @@ export function TaskList({
         : null}
 
     </Panel>
+  );
+}
+
+/**
+ * Action menu on a video idea: Spotify for the track, or YouTube for a piano
+ * tutorial of the same song.
+ */
+function SongSearchMenu({ query }: { query: string }) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const box = buttonRef.current?.getBoundingClientRect();
+    if (box) setPos({ top: box.bottom + 4, left: box.left });
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    function onPointer(event: PointerEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Find ${query} on Spotify or YouTube`}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground ring-1 ring-foreground/12 hover:text-brand"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((current) => !current);
+        }}
+        ref={buttonRef}
+        title="Find song"
+        type="button"
+      >
+        <MusicIcon className="size-3.5" />
+      </button>
+      {open
+        ? createPortal(
+            <div
+              className="min-w-[11.5rem] overflow-hidden rounded-lg bg-card py-1 shadow-lg ring-1 ring-foreground/15"
+              ref={menuRef}
+              role="menu"
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                zIndex: zIndex.overlay,
+              }}
+            >
+              <a
+                className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                href={spotifySearchUrl(query)}
+                onClick={(event) => event.stopPropagation()}
+                rel="noreferrer"
+                role="menuitem"
+                target="_blank"
+              >
+                <MusicIcon className="size-3.5 text-muted-foreground" />
+                Spotify
+              </a>
+              <a
+                className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                href={youtubePianoTutorialUrl(query)}
+                onClick={(event) => event.stopPropagation()}
+                rel="noreferrer"
+                role="menuitem"
+                target="_blank"
+              >
+                <YoutubeIcon className="size-3.5 text-muted-foreground" />
+                YouTube tutorial
+              </a>
+            </div>,
+            document.querySelector(".os-root") ?? document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -839,19 +948,7 @@ function TaskItem({
           <span className="w-3.5 shrink-0" aria-hidden />
         )}
 
-        {showSong ? (
-          <a
-            aria-label={`Search Spotify for ${task.song || task.title}`}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground ring-1 ring-foreground/12 hover:text-brand"
-            href={spotifySearchUrl(task.song || task.title)}
-            onClick={(event) => event.stopPropagation()}
-            rel="noreferrer"
-            target="_blank"
-            title="Find on Spotify"
-          >
-            <MusicIcon className="size-3.5" />
-          </a>
-        ) : null}
+        {showSong ? <SongSearchMenu query={task.song || task.title} /> : null}
 
         <button
           aria-expanded={expanded}

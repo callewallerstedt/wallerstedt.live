@@ -118,9 +118,9 @@ export async function createTask(input: {
 }): Promise<TaskRow> {
   const db = getAccountingDb();
   const list = input.list ?? "task";
-  const first = await db.companyTask.findFirst({
+  const last = await db.companyTask.findFirst({
     where: { status: "open", list },
-    orderBy: { sortOrder: "asc" },
+    orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
   return toRow(
@@ -133,8 +133,8 @@ export async function createTask(input: {
         area: input.area ?? "company",
         priority: priorityValue(input.priority),
         dueDate: input.dueDate ? new Date(`${input.dueDate}T00:00:00Z`) : null,
-        // New tasks land on top, where the owner is already looking.
-        sortOrder: (first?.sortOrder ?? 0) - 1,
+        // New tasks land at the bottom of the open list.
+        sortOrder: (last?.sortOrder ?? -1) + 1,
       },
     }),
   );
@@ -190,15 +190,14 @@ export async function deleteTask(id: string): Promise<boolean> {
 }
 
 /**
- * Puts the given tasks in that order at the top of the list. Passing a partial
- * list is deliberate and useful: "these three first" is one call, and everything
- * unnamed keeps its relative order underneath.
+ * Puts the given open tasks in that order. Anything not named keeps its
+ * relative order underneath. Done rows are left alone.
  */
 export async function reorderTasks(ids: string[], list: TaskList = "task"): Promise<TaskRow[]> {
   const db = getAccountingDb();
   const wanted = [...new Set(ids)].slice(0, 200);
   const live = await db.companyTask.findMany({
-    where: { archivedAt: null, list },
+    where: { archivedAt: null, list, status: "open" },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     select: { id: true },
   });

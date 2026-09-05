@@ -28,3 +28,9 @@ export function isTaskList(value: unknown): value is TaskList {
 export function spotifySearchUrl(query: string) {
   return `https://open.spotify.com/search/${encodeURIComponent(query.trim())}`;
 }
+
+/** YouTube search for a piano tutorial of the clip's song. */
+export function youtubePianoTutorialUrl(query: string) {
+  const song = query.trim();
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song} piano tutorial`)}`;
+}
