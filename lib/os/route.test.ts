@@ -42,6 +42,10 @@ test("/bolag/<key>/<page> keeps the key in the route", () => {
     accessKey: key,
     page: "vault",
   });
+  assert.deepEqual(resolveOsRoute(key, ["tiktok"]), {
+    accessKey: key,
+    page: "tiktok",
+  });
 });
 
 test("page slugs without a key are not valid dashboard routes", () => {
@@ -60,6 +64,7 @@ test("osPath keeps the access key in the path like /vault/<key>", () => {
   assert.equal(osPath(key, "money"), `/bolag/${key}/money`);
   assert.equal(osPath(key, "tasks"), `/bolag/${key}/tasks`);
   assert.equal(osPath(key, "vault"), `/bolag/${key}/vault`);
+  assert.equal(osPath(key, "tiktok"), `/bolag/${key}/tiktok`);
 });
 
 test("retired tabs redirect into the tab that absorbed them", () => {
@@ -96,6 +101,7 @@ test("sidebar titles read the page after the access key", () => {
   assert.equal(osPageFromPathname(`/bolag/${key}`), "");
   assert.equal(osPageFromPathname(`/bolag/${key}/tasks`), "tasks");
   assert.equal(osPageFromPathname(`/bolag/${key}/vault`), "vault");
+  assert.equal(osPageFromPathname(`/bolag/${key}/tiktok`), "tiktok");
   assert.equal(osPageFromPathname(`/os/${key}/music`), "music");
   assert.equal(isOsPageSlug("money"), true);
   assert.equal(isOsPageSlug(key), false);

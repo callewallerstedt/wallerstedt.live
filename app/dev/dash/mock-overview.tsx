@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
+
 import { TaskList } from "@/components/os/tasks";
 import { PageFrame, PageTitle } from "@/components/os/ui";
+import { routeHref } from "@/lib/os/href";
 import type { TaskRow } from "@/lib/os/types";
 
 function todayYmd() {
@@ -153,7 +156,16 @@ export function MockOverview() {
 
   return (
     <PageFrame>
-      <PageTitle aside="Local mock · edits stay in this tab">Overview</PageTitle>
+      <PageTitle
+        action={
+          <span className="rounded-md px-2 py-1 text-xs font-semibold text-muted-foreground ring-1 ring-foreground/15">
+            Tasks
+          </span>
+        }
+        aside="Local mock · edits stay in this tab"
+      >
+        Overview
+      </PageTitle>
 
       <TaskList
         accessKey="mock"
@@ -165,18 +177,13 @@ export function MockOverview() {
         todayYmd={today}
       />
 
-      <TaskList
-        accessKey="mock"
-        addPlaceholder="Add a video idea…"
-        emptyLabel="No video ideas yet. Add one when it comes to you."
-        error={null}
-        limit={5}
-        list="video"
-        localOnly
-        tasks={tasks}
-        title="Video ideas"
-        todayYmd={today}
-      />
+      <p className="text-xs text-muted-foreground">
+        Piano-cover ideas and scans are on{" "}
+        <Link className="font-semibold text-brand" href={routeHref("/dev/dash/tiktok")}>
+          TikTok
+        </Link>
+        .
+      </p>
     </PageFrame>
   );
 }

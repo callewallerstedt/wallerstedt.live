@@ -26,8 +26,10 @@ export function detectSources(): SourceState[] {
     {
       id: "tiktok",
       label: "TikTok",
-      wired: present("TIKTOK_ACCESS_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"),
-      detail: "No TikTok token in env",
+      wired: present("TREG_TOKEN", "TIKTOK_ACCESS_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"),
+      detail: present("TREG_TOKEN")
+        ? "Treg piano-cover search and profile scans"
+        : "No Treg token in env",
     },
     {
       id: "distrokid",

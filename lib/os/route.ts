@@ -3,6 +3,7 @@ export function configuredOsAccessKey() {
 }
 
 export const OS_PAGE_SLUGS = [
+  "tiktok",
   "tasks",
   "vault",
   "money",

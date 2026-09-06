@@ -15,6 +15,7 @@ import {
 
 import { OsBrandLockup, OsBrandMark } from "@/components/os/brand";
 import { CompanyMenu, type CompanyField } from "@/components/os/company-menu";
+import { TikTokIcon } from "@/components/os/tiktok-icon";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { routeHref } from "@/lib/os/href";
@@ -24,17 +25,21 @@ import { zIndex } from "@/lib/z-index";
 import { cn } from "@/lib/utils";
 
 /**
- * Six tabs, in the order the owner actually works: look at the numbers, deal
- * with the list, then go into a specific area.
+ * Desktop sidebar: TikTok is the video-work home. Tasks stays here so the
+ * to-do list is still one click away on a wide screen.
  */
 export const OS_PAGES = [
   { slug: "" as const, label: "Overview", short: "Home", icon: LayoutDashboardIcon },
+  { slug: "tiktok" as const, label: "TikTok", short: "TikTok", icon: TikTokIcon },
   { slug: "tasks" as const, label: "Tasks", short: "Tasks", icon: ListChecksIcon },
   { slug: "vault" as const, label: "Bokföring", short: "Books", icon: LandmarkIcon },
   { slug: "money" as const, label: "Money", short: "Money", icon: WalletIcon },
   { slug: "music" as const, label: "Music", short: "Music", icon: MusicIcon },
   { slug: "settings" as const, label: "Settings", short: "Settings", icon: Settings2Icon },
 ];
+
+/** Phone tab bar — Tasks is reached from Overview, not as the video tab. */
+export const OS_TAB_PAGES = OS_PAGES.filter((page) => page.slug !== "tasks");
 
 export const OS_PAGE_TITLES: Record<string, string> = Object.fromEntries(
   OS_PAGES.map((page) => [page.slug, page.label]),
@@ -145,7 +150,7 @@ export function OsTabBar({ accessKey, taskCount }: { accessKey: string; taskCoun
       }}
     >
       <div className="flex items-stretch">
-        {OS_PAGES.map((item) => {
+        {OS_TAB_PAGES.map((item) => {
           const href = osPath(accessKey, item.slug as OsPageSlug);
           const Icon = item.icon;
           const active = navActive(pathname, href, item.slug);
@@ -161,7 +166,7 @@ export function OsTabBar({ accessKey, taskCount }: { accessKey: string; taskCoun
             >
               <span className="relative">
                 <Icon className="size-[1.3rem]" />
-                {item.slug === "tasks" && taskCount > 0 ? (
+                {item.slug === "" && taskCount > 0 ? (
                   <span className="absolute -right-1.5 -top-1 size-2 rounded-full bg-brand-gradient" />
                 ) : null}
               </span>

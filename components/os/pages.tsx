@@ -19,6 +19,7 @@ import { CumulativeCurve, DualTrendChart, MonthlyBars } from "@/components/os/ch
 import { MusicDashboard } from "@/components/os/music";
 import { ActionQueue, TaskList } from "@/components/os/tasks";
 import { AppearanceSettings, SignOutRow } from "@/components/os/settings";
+import { TikTokScanTools } from "@/components/os/tiktok-watch";
 import {
   ConnectFootnote,
   EmptyState,
@@ -239,14 +240,27 @@ export function OverviewPage({
   const ledger = snapshot.ledger;
   const vault = osPath(accessKey, "vault");
   const tasksHref = osPath(accessKey, "tasks");
+  const tiktokHref = osPath(accessKey, "tiktok");
 
   return (
     <PageFrame>
-      <PageTitle aside={`${snapshot.company.name} · ${snapshot.company.vat}`}>Overview</PageTitle>
+      <PageTitle
+        action={
+          <Link
+            className="rounded-md px-2 py-1 text-xs font-semibold text-brand ring-1 ring-foreground/15 hover:bg-muted"
+            href={routeHref(tasksHref)}
+          >
+            Tasks
+          </Link>
+        }
+        aside={`${snapshot.company.name} · ${snapshot.company.vat}`}
+      >
+        Overview
+      </PageTitle>
       <LedgerProblem snapshot={snapshot} />
 
       {/* The list comes first: the point of opening the app is to see what to
-          do next, not to admire the balance. */}
+          do next, not to admire the balance. Video ideas live on the TikTok tab. */}
       <TaskList
         accessKey={accessKey}
         error={snapshot.tasksError}
@@ -257,18 +271,13 @@ export function OverviewPage({
         todayYmd={todayYmd}
       />
 
-      <TaskList
-        accessKey={accessKey}
-        addPlaceholder="Add a video idea…"
-        emptyLabel="No video ideas yet. Add one when it comes to you."
-        error={snapshot.tasksError}
-        limit={5}
-        list="video"
-        moreHref={tasksHref}
-        tasks={snapshot.tasks}
-        title="Video ideas"
-        todayYmd={todayYmd}
-      />
+      <p className="text-xs text-muted-foreground">
+        Piano-cover ideas and scans are on{" "}
+        <Link className="font-semibold text-brand" href={routeHref(tiktokHref)}>
+          TikTok
+        </Link>
+        .
+      </p>
 
       {ledger ? (
         <HeroStats
@@ -368,16 +377,6 @@ export function TasksPage({
           todayYmd={todayYmd}
         />
         <div className="flex flex-col gap-2">
-          <TaskList
-            accessKey={accessKey}
-            addPlaceholder="Add a video idea…"
-            emptyLabel="No video ideas yet. Add one when it comes to you."
-            error={snapshot.tasksError}
-            list="video"
-            tasks={snapshot.tasks}
-            title="Video ideas"
-            todayYmd={todayYmd}
-          />
           <ActionQueue actions={snapshot.actions} />
           <Panel title="Dates ahead">
             {snapshot.upcoming.length ? (
@@ -595,6 +594,36 @@ export function MusicPage({ snapshot, todayYmd }: { snapshot: OsSnapshot; todayY
       sources={snapshot.sources}
       todayYmd={todayYmd}
     />
+  );
+}
+
+export function TikTokPage({
+  snapshot,
+  accessKey,
+  todayYmd,
+  localOnly = false,
+}: {
+  snapshot: OsSnapshot;
+  accessKey: string;
+  todayYmd: string;
+  localOnly?: boolean;
+}) {
+  return (
+    <PageFrame>
+      <PageTitle aside="Piano-cover ideas, then the accounts you watch.">TikTok</PageTitle>
+      <TaskList
+        accessKey={accessKey}
+        addPlaceholder="Add a video idea…"
+        emptyLabel="No video ideas yet. Add one when it comes to you."
+        error={snapshot.tasksError}
+        list="video"
+        localOnly={localOnly}
+        tasks={snapshot.tasks}
+        title="Video ideas"
+        todayYmd={todayYmd}
+      />
+      <TikTokScanTools accessKey={accessKey} localOnly={localOnly} />
+    </PageFrame>
   );
 }
 
