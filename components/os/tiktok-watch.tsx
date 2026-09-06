@@ -37,8 +37,12 @@ export function TikTokScanTools({
   accessKey: string;
   localOnly?: boolean;
 }) {
-  const [accounts, setAccounts] = useState<TikTokWatchAccount[]>([]);
-  const [lastScan, setLastScan] = useState<TikTokScanPayload | null>(null);
+  const [accounts, setAccounts] = useState<TikTokWatchAccount[]>(() =>
+    localOnly ? MOCK_WATCH_ACCOUNTS : [],
+  );
+  const [lastScan, setLastScan] = useState<TikTokScanPayload | null>(() =>
+    localOnly ? sampleScan() : null,
+  );
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(!localOnly);
   const [scanning, setScanning] = useState(false);
@@ -46,11 +50,6 @@ export function TikTokScanTools({
 
   useEffect(() => {
     if (localOnly) {
-      setAccounts([
-        { id: "seed-1", handle: "friqtao", uniqueId: "friqtao", nickname: "", sortOrder: 0 },
-        { id: "seed-2", handle: "alejs_tunes", uniqueId: "alejs_tunes", nickname: "", sortOrder: 1 },
-      ]);
-      setLastScan(sampleScan());
       setLoading(false);
       return;
     }
@@ -378,13 +377,18 @@ function ScanRankList({
   );
 }
 
+const MOCK_WATCH_ACCOUNTS: TikTokWatchAccount[] = [
+  { id: "seed-1", handle: "friqtao", uniqueId: "friqtao", nickname: "", sortOrder: 0 },
+  { id: "seed-2", handle: "alejs_tunes", uniqueId: "alejs_tunes", nickname: "", sortOrder: 1 },
+];
+
 function sampleScan(): TikTokScanPayload {
   const scannedAt = "2026-09-06T07:00:00.000Z";
   const clip = (
     partial: Pick<TikTokScanVideo, "awemeId" | "handle" | "playCount" | "diggCount" | "song" | "desc">,
   ): TikTokScanVideo => ({
     uniqueId: partial.handle,
-    coverUrl: null,
+    coverUrl: `https://picsum.photos/seed/${partial.awemeId}/240/320`,
     url: `https://www.tiktok.com/@${partial.handle}/video/${partial.awemeId}`,
     createTimeMs: Date.parse(scannedAt) - 2 * 86_400_000,
     ...partial,
