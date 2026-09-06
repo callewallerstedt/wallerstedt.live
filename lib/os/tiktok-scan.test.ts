@@ -4,9 +4,20 @@ import test from "node:test";
 import {
   berlinWeekKey,
   buildTikTokScanPayload,
+  isJobLocked,
+  isJobStale,
+  isOpenScanPayload,
   isTikTokHandle,
   normalizeTikTokHandle,
+  pickPendingAccount,
+  publicCompletedScanJob,
+  publicScanJobFromPayload,
+  toPublicLastScan,
+  TIKTOK_SCAN_LOCK_MS,
+  TIKTOK_SCAN_STALE_MS,
   TIKTOK_SEED_HANDLES,
+  WEEKLY_PIANO_TIKTOK_WATCH,
+  type TikTokScanJobPayload,
 } from "./tiktok-scan";
 import { extractSongFromCaption, tiktokVideoUrl, type TikTokSearchResult } from "./tiktok-search";
 
@@ -100,6 +111,77 @@ test("scan windows rank by views and keep 7/30 day buckets", () => {
   assert.match(payload.allTime[0]!.url, /^https:\/\/www\.tiktok\.com\/@friqtao\/video\/old$/);
   assert.equal(berlinWeekKey(now), "2026-W36");
   assert.equal(payload.trending, undefined);
+});
+
+test("open scan payloads stay out of lastScan and expose a job cursor", () => {
+  const now = "2026-09-06T08:00:00.000Z";
+  const job = {
+    scannedAt: now,
+    weekKey: "2026-W36",
+    routine: WEEKLY_PIANO_TIKTOK_WATCH,
+    accounts: [],
+    allTime: [],
+    last7: [],
+    last30: [],
+    status: "running",
+    scanId: "11111111-1111-4111-8111-111111111111",
+    processed: 2,
+    total: 8,
+    nextHandle: "tonyannn",
+    error: null,
+    continueToken: "secret-token",
+    pending: [
+      { id: "a3", handle: "tonyannn" },
+      { id: "a4", handle: "andy_morris" },
+    ],
+    accountResults: [],
+    videos: [],
+    trendingPending: true,
+    lockedAt: null,
+    startedAt: now,
+  } satisfies TikTokScanJobPayload;
+
+  assert.equal(isOpenScanPayload(job), true);
+  assert.equal(toPublicLastScan(job), null);
+
+  const publicJob = publicScanJobFromPayload(job);
+  assert.equal(publicJob.status, "running");
+  assert.equal(publicJob.processed, 2);
+  assert.deepEqual(publicJob.next, { handle: "tonyannn", accountId: "a3" });
+  assert.equal("continueToken" in publicJob, false);
+
+  const completed = buildTikTokScanPayload(
+    [{ handle: "friqtao", nickname: "Friq", followers: 1, videoCount: 1, error: null }],
+    [{ ...video({ awemeId: "old", playCount: 9 }), handle: "friqtao" }],
+    new Date(now),
+  );
+  const leaked = { ...completed, continueToken: "nope", status: "done", pending: [] };
+  const cleaned = toPublicLastScan(leaked);
+  assert.ok(cleaned);
+  assert.equal("continueToken" in cleaned!, false);
+  assert.equal("status" in cleaned!, false);
+  assert.deepEqual(publicCompletedScanJob("scan-1", completed).status, "done");
+});
+
+test("pending picker matches handle, account id, or the next cursor", () => {
+  const pending = [
+    { id: "a1", handle: "friqtao" },
+    { id: "a2", handle: "tonyannn" },
+  ];
+  assert.deepEqual(pickPendingAccount(pending), { account: pending[0], index: 0 });
+  assert.deepEqual(pickPendingAccount(pending, "tonyannn"), { account: pending[1], index: 1 });
+  assert.deepEqual(pickPendingAccount(pending, undefined, "a2"), { account: pending[1], index: 1 });
+  assert.equal(pickPendingAccount(pending, "missing"), null);
+  assert.equal(pickPendingAccount([], "friqtao"), null);
+});
+
+test("scan job lock and stale windows", () => {
+  const now = Date.parse("2026-09-06T10:00:00.000Z");
+  assert.equal(isJobLocked(new Date(now - 1_000).toISOString(), now), true);
+  assert.equal(isJobLocked(new Date(now - TIKTOK_SCAN_LOCK_MS - 1).toISOString(), now), false);
+  assert.equal(isJobLocked(null, now), false);
+  assert.equal(isJobStale(new Date(now - TIKTOK_SCAN_STALE_MS - 1).toISOString(), now), true);
+  assert.equal(isJobStale(new Date(now - 1_000).toISOString(), now), false);
 });
 
 test("scan payload can carry a piano-trending strip", () => {

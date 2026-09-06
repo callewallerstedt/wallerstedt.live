@@ -61,6 +61,25 @@ export function assertSameOrigin(request: Request) {
   }
 }
 
+export async function parseOptionalJson(request: Request, maxBytes = 256_000) {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new AccountingError("Request body is too large.", 413, "body_too_large");
+  }
+
+  const text = await request.text();
+  if (!text.trim()) return {};
+  if (text.length > maxBytes) {
+    throw new AccountingError("Request body is too large.", 413, "body_too_large");
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new AccountingError("Request body must be valid JSON.", 400, "invalid_json");
+  }
+}
+
 export async function parseJson(request: Request, maxBytes = 256_000) {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {

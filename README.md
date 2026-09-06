@@ -145,20 +145,64 @@ curl -X POST "$BASE/tiktok/watch" \
 curl -X DELETE "$BASE/tiktok/watch/<id-or-handle>" \
   -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN"
 
-# Scan now — Treg profile + videos for every watched account (can take ~60s)
+# Scan now — returns immediately; poll GET until scan.status is done
 curl -X POST "$BASE/tiktok/watch/scan" \
   -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN"
 
-# Recent stored scans (up to 8). lastScan is scans[0].
+# Optional: one account (or resume) under the function time limit
+curl -X POST "$BASE/tiktok/watch/scan" \
+  -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"friqtao"}'
+curl -X POST "$BASE/tiktok/watch/scan" \
+  -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scanId":"<uuid>"}'
+
+# Recent stored scans (up to 8). lastScan is the latest completed payload.
 curl -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" "$BASE/tiktok/watch/scans"
 ```
 
-`GET /tiktok/watch` returns `{ ok, count, accounts, lastScan }`. Each account is
+`GET /tiktok/watch` returns `{ ok, count, accounts, lastScan, scan }`. Each account is
 `{ id, handle, uniqueId, nickname, sortOrder }`. `lastScan` (and each item in
 `scans`) is `{ scannedAt, weekKey, routine, accounts, allTime, last7, last30, trending? }`.
 Video rows use `url` `https://www.tiktok.com/@{unique_id}/video/{aweme_id}` plus
 `coverUrl`, `playCount`, `diggCount`, and `song` when the caption names one.
-`POST /tiktok/watch/scan` returns `{ ok, lastScan }`.
+
+`scan` is `{ scanId, status, processed, total, nextHandle, next, error }`.
+`status` is `started`, `running`, `done`, or `failed`. `next` is
+`{ handle, accountId }` for the next pending account, or `null`.
+
+`POST /tiktok/watch/scan` no longer waits for every Treg call. It returns
+immediately:
+
+```json
+{
+  "ok": true,
+  "status": "started",
+  "scanId": "<uuid>",
+  "processed": 0,
+  "total": 8,
+  "next": { "handle": "friqtao", "accountId": "<uuid>" },
+  "scan": {
+    "scanId": "<uuid>",
+    "status": "started",
+    "processed": 0,
+    "total": 8,
+    "nextHandle": "friqtao",
+    "next": { "handle": "friqtao", "accountId": "<uuid>" },
+    "error": null
+  },
+  "lastScan": null
+}
+```
+
+Poll `GET /tiktok/watch` or `GET /tiktok/watch/scans` until `scan.status` is
+`done` (then `lastScan` is the ranked payload) or `failed`. Body options:
+
+- `{}` — start (or join) a full watch-list job
+- `{ "handle" }` / `{ "accountId" }` — process that one watched account
+- `{ "scanId" }` — process the next burst if the background chain stalled
 
 
 ## Bookkeeping web push (iPhone Home Screen)

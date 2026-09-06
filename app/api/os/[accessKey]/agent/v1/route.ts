@@ -36,7 +36,7 @@ export async function GET(request: Request, { params }: Params) {
           list: `GET ${base}/tiktok/watch`,
           add: `POST ${base}/tiktok/watch  { "handle": "tonyannn" }`,
           remove: `DELETE ${base}/tiktok/watch/{id|handle}`,
-          scan: `POST ${base}/tiktok/watch/scan`,
+          scan: `POST ${base}/tiktok/watch/scan  {} | { "handle" } | { "accountId" } | { "scanId" }`,
           scans: `GET ${base}/tiktok/watch/scans`,
         },
       },
@@ -85,6 +85,15 @@ export async function GET(request: Request, { params }: Params) {
             createTimeMs: "number or null",
           },
         },
+        scan: {
+          scanId: "uuid of the CompanyTikTokScan job / result row",
+          status: "started | running | done | failed",
+          processed: "accounts finished so far",
+          total: "watched accounts in this job",
+          nextHandle: "next pending handle, or null",
+          next: '{ "handle", "accountId" } or null — cursor for the next burst',
+          error: "string or null",
+        },
       },
       guarantees: {
         idempotency:
@@ -94,7 +103,7 @@ export async function GET(request: Request, { params }: Params) {
           "Each list is ordered independently, open rows first, then the owner's sort. GET /tasks?list=video returns only active video ideas in that order — not Past/archived ones. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
         tiktokSeeds: `First load (and later list calls) ensure these watched handles exist: ${TIKTOK_SEED_HANDLES.join(", ")}.`,
         tiktokScan:
-          "POST /tiktok/watch/scan pulls each watched profile through Treg, stores the ranked payload, and returns it as lastScan. GET /tiktok/watch includes the latest lastScan. GET /tiktok/watch/scans returns up to the last 8.",
+          "POST /tiktok/watch/scan starts an async job and returns immediately with { ok, status: started|running|done|failed, scanId, processed, total, next, scan, lastScan }. Background bursts scan one account per invocation (under Vercel's time limit), persist progress on CompanyTikTokScan, and finish by writing the ranked lastScan. Poll GET /tiktok/watch or GET /tiktok/watch/scans for scan.status and lastScan. POST { handle } or { accountId } processes that one watched account as a burst. POST { scanId } resumes the next burst if the chain stalled. GET also nudges an open job.",
       },
     });
   });
