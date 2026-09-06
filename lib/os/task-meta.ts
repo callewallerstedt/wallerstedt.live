@@ -1,4 +1,4 @@
-import type { TaskArea, TaskList } from "./types";
+import type { TaskArea, TaskList, TaskRow } from "./types";
 
 /**
  * Client-safe task constants. Kept out of `tasks.ts` so importing a label into
@@ -42,4 +42,40 @@ export function youtubePianoTutorialUrl(query: string) {
 export function tiktokPianoSearchUrl(query: string, now = Date.now()) {
   const q = encodeURIComponent(`${query.trim()} piano`);
   return `https://www.tiktok.com/search/video?q=${q}&t=${now}`;
+}
+
+export type TaskListStatus = "open" | "done" | "all";
+
+export type TaskListQuery = {
+  list?: TaskList;
+  area?: TaskArea;
+  status?: TaskListStatus;
+  /**
+   * Dashboard needs archived rows for the Past section. The agent working
+   * list does not — pass false so Past ideas never crowd out active ones.
+   */
+  includeArchived?: boolean;
+};
+
+export function taskListWhere(query: TaskListQuery = {}) {
+  const includeArchived = query.includeArchived ?? true;
+  const status = query.status ?? "all";
+  const where: {
+    list?: TaskList;
+    area?: TaskArea;
+    status?: "open" | "done";
+    archivedAt?: null;
+  } = {};
+  if (query.list) where.list = query.list;
+  if (query.area) where.area = query.area;
+  if (status === "open" || status === "done") where.status = status;
+  if (!includeArchived) where.archivedAt = null;
+  return where;
+}
+
+/** Same order the dashboard uses: open first, then the owner's sort. */
+export function compareTaskRows(a: TaskRow, b: TaskRow) {
+  if (a.done !== b.done) return a.done ? 1 : -1;
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+  return b.createdAt.localeCompare(a.createdAt);
 }

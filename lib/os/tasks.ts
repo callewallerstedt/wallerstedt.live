@@ -3,17 +3,26 @@ import { cache } from "react";
 import { getAccountingDb } from "@/lib/accounting/db";
 
 import { berlinYmd } from "./format";
-import { isTaskArea, isTaskList } from "./task-meta";
+import {
+  compareTaskRows,
+  isTaskArea,
+  isTaskList,
+  taskListWhere,
+  type TaskListQuery,
+} from "./task-meta";
 import type { TaskArea, TaskList, TaskRow } from "./types";
 
 export {
+  compareTaskRows,
   isTaskArea,
   isTaskList,
   spotifySearchUrl,
   TASK_AREAS,
   TASK_AREA_LABELS,
   TASK_LISTS,
+  taskListWhere,
 } from "./task-meta";
+export type { TaskListQuery, TaskListStatus } from "./task-meta";
 
 /** The migration may not have run yet on a given database. Never 500 for that. */
 function isMissingTable(error: unknown) {
@@ -66,13 +75,25 @@ function priorityValue(priority: TaskRow["priority"] | undefined) {
  * Open tasks first, ordered by the owner's manual sort, then finished ones so a
  * just-ticked row stays visible instead of vanishing off the list.
  */
-export async function listTasks(): Promise<{ tasks: TaskRow[]; error: string | null }> {
+export async function listTasks(
+  query: TaskListQuery = {},
+): Promise<{ tasks: TaskRow[]; error: string | null }> {
   try {
+    const includeArchived = query.includeArchived ?? true;
+    const status = query.status ?? "all";
+    const where = taskListWhere({ ...query, includeArchived, status });
+    const filtered = Boolean(
+      where.list || where.area || where.status || where.archivedAt === null,
+    );
     const rows = await getAccountingDb().companyTask.findMany({
-      orderBy: [{ status: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+      where: filtered ? where : undefined,
+      orderBy:
+        status === "all"
+          ? [{ status: "desc" }, { sortOrder: "asc" }, { createdAt: "desc" }]
+          : [{ sortOrder: "asc" }, { createdAt: "desc" }],
       take: 200,
     });
-    return { tasks: rows.map(toRow), error: null };
+    return { tasks: rows.map(toRow).sort(compareTaskRows), error: null };
   } catch (error) {
     if (isMissingTable(error)) {
       return {

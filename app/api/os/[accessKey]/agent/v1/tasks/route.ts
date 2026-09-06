@@ -4,7 +4,13 @@ import { requireAgentOrOwnerSession } from "@/lib/accounting/auth";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
 import { parseWithSchema } from "@/lib/accounting/validation";
 import { createTask, findOpenTaskByTitle, listTasks, reorderTasks } from "@/lib/os/tasks";
-import { TASK_AREAS, TASK_LISTS } from "@/lib/os/task-meta";
+import {
+  isTaskArea,
+  isTaskList,
+  TASK_AREAS,
+  TASK_LISTS,
+  type TaskListStatus,
+} from "@/lib/os/task-meta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,15 +34,27 @@ export async function GET(request: Request, { params }: Params) {
     const { accessKey } = await params;
     await requireAgentOrOwnerSession(request, accessKey);
     const url = new URL(request.url);
-    const status = url.searchParams.get("status") ?? "open";
-    const area = url.searchParams.get("area");
-    const list = url.searchParams.get("list");
-    const { tasks, error } = await listTasks();
-    const filtered = tasks
-      .filter((task) => (status === "all" ? true : status === "done" ? task.done : !task.done))
-      .filter((task) => (area ? task.area === area : true))
-      .filter((task) => (list ? task.list === list : true));
-    return privateJson({ ok: true, count: filtered.length, tasks: filtered, error });
+    const statusParam = url.searchParams.get("status") ?? "open";
+    const status: TaskListStatus =
+      statusParam === "done" || statusParam === "all" ? statusParam : "open";
+    const areaParam = url.searchParams.get("area");
+    const listParam = url.searchParams.get("list");
+    if (areaParam && !isTaskArea(areaParam)) {
+      return privateJson({ ok: true, count: 0, tasks: [], error: null });
+    }
+    if (listParam && !isTaskList(listParam)) {
+      return privateJson({ ok: true, count: 0, tasks: [], error: null });
+    }
+    const archivedParam = url.searchParams.get("archived");
+    const includeArchived =
+      archivedParam === "1" || archivedParam === "all" || archivedParam === "true";
+    const { tasks, error } = await listTasks({
+      status,
+      includeArchived,
+      area: areaParam && isTaskArea(areaParam) ? areaParam : undefined,
+      list: listParam && isTaskList(listParam) ? listParam : undefined,
+    });
+    return privateJson({ ok: true, count: tasks.length, tasks, error });
   });
 }
 

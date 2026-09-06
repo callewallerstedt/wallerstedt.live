@@ -106,11 +106,14 @@ from the working list without deleting it.
 `list` picks which list a row belongs to: `task` for the to-dos, `video` for
 TikTok video ideas. A video idea may carry a `song`, which the dashboard turns
 into a one-tap Spotify search beside the row. The two lists are ordered
-independently, so reordering one never disturbs the other.
+independently, so reordering one never disturbs the other. `GET /tasks` returns
+the active working list in that order — archived Past rows are omitted unless
+you pass `archived=1`.
 
 ```bash
 curl -X POST "$BASE/tasks" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"title": "Soluppgång över Vallda, slowed", "list": "video", "song": "Memories"}'
 
+# Active video ideas only, in the same order as the dashboard list
 curl -H "Authorization: Bearer $TOKEN" "$BASE/tasks?list=video"
 ``` A `POST` whose title matches an existing open task
 returns that task with `"created": false` instead of duplicating it, so a retry

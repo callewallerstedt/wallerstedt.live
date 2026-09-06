@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: Params) {
       },
       endpoints: {
         tasks: {
-          list: `GET ${base}/tasks?status=open|done|all&area=<area>&list=task|video`,
+          list: `GET ${base}/tasks?status=open|done|all&area=<area>&list=task|video&archived=1`,
           create: `POST ${base}/tasks`,
           reorder: `PATCH ${base}/tasks  { "ids": [...] }`,
         },
@@ -44,14 +44,15 @@ export async function GET(request: Request, { params }: Params) {
         priority: ["low", "normal", "high"],
         dueDate: "YYYY-MM-DD or null",
         done: "boolean, PATCH only",
-        archived: "boolean, PATCH only — hides the task from the active list",
+        archived:
+          "boolean, PATCH only — hides the task from the active list (dashboard Past). GET /tasks omits these unless archived=1",
       },
       guarantees: {
         idempotency:
           "POST returns the existing open task when its title already matches, so a retry never duplicates a row.",
         scope: "Tasks are separate from bokföring. Writing one never touches the ledger.",
         ordering:
-          "Each list is ordered independently. The list order is the priority order; the first three are what the dashboard shows as Focus. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
+          "Each list is ordered independently, open rows first, then the owner's sort. GET /tasks?list=video returns only active video ideas in that order — not Past/archived ones. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
       },
     });
   });
