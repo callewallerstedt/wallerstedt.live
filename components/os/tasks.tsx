@@ -751,6 +751,7 @@ function SongSearchMenu({
             ? "text-emerald-600 ring-emerald-500/40 hover:text-emerald-500 dark:text-emerald-400"
             : "text-muted-foreground ring-foreground/12 hover:text-brand",
         )}
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
           setOpen((current) => !current);
@@ -1035,6 +1036,7 @@ function TaskItem({
             appearOpen ? "min-h-9" : "min-h-7",
           )}
           onClick={toggle}
+          onPointerDown={(event) => event.stopPropagation()}
           type="button"
         >
           <span className="min-w-0 flex-1">
