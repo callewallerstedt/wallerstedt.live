@@ -8,6 +8,7 @@ import {
   OverviewPage,
   SettingsPage,
   TasksPage,
+  TikTokPage,
 } from "@/components/os/pages";
 import { OsLoader } from "@/components/os/loader";
 import { berlinYmd } from "@/lib/os/format";
@@ -24,6 +25,8 @@ async function OsPageBody({ accessKey, page }: { accessKey: string; page: OsPage
   const todayYmd = berlinYmd() ?? new Date().toISOString().slice(0, 10);
 
   switch (page) {
+    case "tiktok":
+      return <TikTokPage accessKey={accessKey} snapshot={snapshot} todayYmd={todayYmd} />;
     case "tasks":
       return <TasksPage accessKey={accessKey} snapshot={snapshot} todayYmd={todayYmd} />;
     case "money":

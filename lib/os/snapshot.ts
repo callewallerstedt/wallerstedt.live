@@ -185,8 +185,9 @@ export async function loadPageSnapshot(accessKey: string, page: OsPageSlug): Pro
     // alongside the ledger.
     case "money":
       return loadWealthSnapshot();
-    // Tasks shows the same derived work queue the Overview summarises.
+    // Tasks and TikTok both need the owner's lists (to-dos vs video ideas).
     case "tasks":
+    case "tiktok":
       return loadOverviewSnapshot(accessKey);
     default:
       return loadOverviewSnapshot(accessKey);

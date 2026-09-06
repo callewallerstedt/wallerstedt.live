@@ -22,6 +22,8 @@ function result(partial: Partial<TikTokSearchResult> & Pick<TikTokSearchResult, 
     diggCount: null,
     coverUrl: null,
     url: tiktokVideoUrl("pianist", partial.awemeId),
+    createTimeMs: null,
+    song: null,
     ...partial,
   };
 }

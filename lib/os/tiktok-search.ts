@@ -6,6 +6,8 @@ export type TikTokSearchResult = {
   diggCount: number | null;
   coverUrl: string | null;
   url: string;
+  createTimeMs: number | null;
+  song: string | null;
 };
 
 export const TIKTOK_SEARCH_DEFAULT_LIMIT = 15;
@@ -24,6 +26,41 @@ function asText(value: unknown): string | null {
   }
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return null;
+}
+
+function asTimeMs(value: unknown): number | null {
+  const count = asCount(value);
+  if (count == null || count <= 0) return null;
+  return count < 1_000_000_000_000 ? Math.round(count * 1000) : Math.round(count);
+}
+
+/** Pull a likely track title out of a TikTok caption when the sound is named. */
+export function extractSongFromCaption(desc: string) {
+  const text = desc.replace(/\s+/g, " ").trim();
+  if (!text) return null;
+
+  const labeled = text.match(
+    /(?:song|track|music|(?<!original )sound)\s*[:\-–—]\s*([^|#\n]{2,80})/i,
+  );
+  if (labeled?.[1]) return cleanSongTitle(labeled[1]);
+
+  const note = text.match(/[♪♫]\s*([^|#\n]{2,80})/);
+  if (note?.[1]) return cleanSongTitle(note[1]);
+
+  const quoted = text.match(/[“"«]([^”"»]{2,80})[”"»]/);
+  if (quoted?.[1] && !/^https?:/i.test(quoted[1])) return cleanSongTitle(quoted[1]);
+
+  const dash = text.match(/^([^#\n]{2,40}?)\s[-–—]\s([^#\n]{2,40}?)(?:\s[#@]|$)/);
+  if (dash?.[1] && dash[2] && !/https?:|original sound/i.test(dash[0])) {
+    return cleanSongTitle(`${dash[1]} - ${dash[2]}`);
+  }
+  return null;
+}
+
+function cleanSongTitle(value: string) {
+  const cleaned = value.replace(/\s+/g, " ").replace(/^[-–—\s]+|[-–—\s]+$/g, "").trim();
+  if (cleaned.length < 2 || /^original sound\b/i.test(cleaned)) return null;
+  return cleaned.slice(0, 80);
 }
 
 function asCount(value: unknown): number | null {
@@ -92,22 +129,40 @@ export function rankTikTokResults(results: TikTokSearchResult[]) {
   });
 }
 
-function parseAwemeInfo(info: Record<string, unknown>): TikTokSearchResult | null {
-  const awemeId = asText(info.aweme_id) ?? asText(info.awemeId);
+function parseAwemeInfo(
+  info: Record<string, unknown>,
+  fallbackHandle = "",
+): TikTokSearchResult | null {
+  const awemeId = asText(info.aweme_id) ?? asText(info.awemeId) ?? asText(info.id);
   const author = asRecord(info.author);
   const uniqueId = tiktokHandle(
-    asText(author?.unique_id) ?? asText(author?.uniqueId) ?? "",
+    asText(author?.unique_id) ??
+      asText(author?.uniqueId) ??
+      asText(info.unique_id) ??
+      fallbackHandle,
   );
   if (!awemeId || !uniqueId) return null;
-  const stats = asRecord(info.statistics);
+  const stats = asRecord(info.statistics) ?? asRecord(info.stats);
+  const desc = asText(info.desc) ?? asText(info.title) ?? "";
   return {
     awemeId,
     uniqueId,
-    desc: asText(info.desc) ?? "",
-    playCount: asCount(stats?.play_count) ?? asCount(stats?.playCount),
-    diggCount: asCount(stats?.digg_count) ?? asCount(stats?.diggCount),
-    coverUrl: pickCoverUrl(info.video),
+    desc,
+    playCount:
+      asCount(stats?.play_count) ??
+      asCount(stats?.playCount) ??
+      asCount(stats?.play_cnt) ??
+      asCount(info.play_count),
+    diggCount:
+      asCount(stats?.digg_count) ??
+      asCount(stats?.diggCount) ??
+      asCount(stats?.like_count) ??
+      asCount(info.digg_count),
+    coverUrl: pickCoverUrl(info.video) ?? pickCoverUrl(info),
     url: tiktokVideoUrl(uniqueId, awemeId),
+    createTimeMs:
+      asTimeMs(info.create_time) ?? asTimeMs(info.createTime) ?? asTimeMs(info.create_time_ms),
+    song: extractSongFromCaption(desc),
   };
 }
 
@@ -115,10 +170,13 @@ function parseAwemeInfo(info: Record<string, unknown>): TikTokSearchResult | nul
  * Treg wraps the provider payload in `output`. Videos live at
  * `output.videos[].aweme_info`.
  */
-export function parseTregTikTokSearch(payload: unknown): TikTokSearchResult[] {
+export function parseTregTikTokVideos(
+  payload: unknown,
+  fallbackHandle = "",
+): TikTokSearchResult[] {
   const root = asRecord(payload);
   const output = asRecord(root?.output) ?? root;
-  const videos = output?.videos;
+  const videos = output?.videos ?? output?.aweme_list;
   if (!Array.isArray(videos)) return [];
 
   const results: TikTokSearchResult[] = [];
@@ -127,11 +185,55 @@ export function parseTregTikTokSearch(payload: unknown): TikTokSearchResult[] {
     const rec = asRecord(item);
     if (!rec) continue;
     const info = asRecord(rec.aweme_info) ?? rec;
-    const parsed = parseAwemeInfo(info);
+    const parsed = parseAwemeInfo(info, fallbackHandle);
     if (!parsed) continue;
     if (seen.has(parsed.awemeId)) continue;
     seen.add(parsed.awemeId);
     results.push(parsed);
   }
   return rankTikTokResults(results);
+}
+
+export function parseTregTikTokSearch(payload: unknown): TikTokSearchResult[] {
+  return parseTregTikTokVideos(payload);
+}
+
+export type TikTokProfile = {
+  username: string;
+  secUid: string;
+  nickname: string;
+  followers: number | null;
+};
+
+export function parseTregTikTokProfile(payload: unknown): TikTokProfile | null {
+  const root = asRecord(payload);
+  const output = asRecord(root?.output) ?? root;
+  if (!output) return null;
+  const user = asRecord(output.user) ?? asRecord(output.userInfo) ?? output;
+  const username = tiktokHandle(
+    asText(output.username) ??
+      asText(user.username) ??
+      asText(user.unique_id) ??
+      asText(user.uniqueId) ??
+      "",
+  );
+  const secUid =
+    asText(output.sec_uid) ??
+    asText(output.secUid) ??
+    asText(user.sec_uid) ??
+    asText(user.secUid) ??
+    asText(user.sec_user_id) ??
+    "";
+  if (!username && !secUid) return null;
+  return {
+    username,
+    secUid,
+    nickname: asText(output.nickname) ?? asText(user.nickname) ?? asText(user.nick_name) ?? username,
+    followers:
+      asCount(output.followers) ??
+      asCount(output.follower_count) ??
+      asCount(asRecord(user.follower_count)?.follower_count) ??
+      asCount(asRecord(user.stats)?.follower_count) ??
+      asCount(user.follower_count),
+  };
 }

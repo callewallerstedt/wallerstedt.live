@@ -4,7 +4,7 @@ import {
   TIKTOK_SEARCH_MAX_LIMIT,
 } from "./tiktok-search";
 
-const TREG_TIKTOK_SEARCH_URL = "https://treg.to/call/treg.tiktok.search.videos";
+const TREG_CALL = "https://treg.to/call";
 const TREG_TIMEOUT_MS = 25_000;
 
 function tregToken() {
@@ -47,20 +47,18 @@ function tregFailure(status: number) {
   return new AccountingError("TikTok search failed. Try again.", 502, "treg_failed");
 }
 
-export async function fetchTregTikTokSearch(q: string, limit = TIKTOK_SEARCH_DEFAULT_LIMIT) {
+export async function callTreg(endpoint: string, body: Record<string, unknown>) {
   const token = tregToken();
-  const capped = Math.min(Math.max(1, Math.round(limit)), TIKTOK_SEARCH_MAX_LIMIT);
-
   let response: Response;
   try {
-    response = await fetch(TREG_TIKTOK_SEARCH_URL, {
+    response = await fetch(`${TREG_CALL}/${endpoint}`, {
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
         "X-Treg-Token": token,
       },
-      body: JSON.stringify({ q, limit: capped }),
+      body: JSON.stringify(body),
       cache: "no-store",
       signal: AbortSignal.timeout(TREG_TIMEOUT_MS),
     });
@@ -68,13 +66,27 @@ export async function fetchTregTikTokSearch(q: string, limit = TIKTOK_SEARCH_DEF
     throw new AccountingError("TikTok search timed out. Try again.", 504, "treg_unreachable");
   }
 
-  let body: unknown = null;
+  let payload: unknown = null;
   try {
-    body = await response.json();
+    payload = await response.json();
   } catch {
-    body = null;
+    payload = null;
   }
 
   if (!response.ok) throw tregFailure(response.status);
-  return body;
+  return payload;
+}
+
+export async function fetchTregTikTokSearch(q: string, limit = TIKTOK_SEARCH_DEFAULT_LIMIT) {
+  const capped = Math.min(Math.max(1, Math.round(limit)), TIKTOK_SEARCH_MAX_LIMIT);
+  return callTreg("treg.tiktok.search.videos", { q, limit: capped });
+}
+
+export async function fetchTregTikTokProfile(username: string) {
+  return callTreg("treg.tiktok.user.profile", { username });
+}
+
+export async function fetchTregTikTokUserVideos(secUid: string, limit = 20) {
+  const capped = Math.min(Math.max(1, Math.round(limit)), TIKTOK_SEARCH_MAX_LIMIT);
+  return callTreg("treg.tiktok.user.videos", { sec_uid: secUid, limit: capped });
 }
