@@ -9,7 +9,7 @@ A collapsible sidebar on desktop and a fixed tab bar on phones. Video work lives
 | Tab | What it holds |
 | --- | --- |
 | **Overview** | Focus first — the ranked to-do list, drag a number to reprioritise — then cash, this month's revenue and result, estimated bolagsskatt, the running-result curve, upcoming tax and the latest entries. A small **Tasks** button opens the full to-do page. |
-| **TikTok** | Video ideas (song + piano-cover search) and scan tools: watched accounts, on-demand Treg profile scans, ranked clips, and the Monday Berlin digest hook |
+| **TikTok** | Video ideas (song + saved Treg piano-cover search), clickable links in notes, and scan tools: watched accounts, on-demand Treg profile scans, thumbs, piano-trending strip, ranked clips, and the Monday Berlin digest hook |
 | **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead (sidebar + Overview button; not a phone tab) |
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
@@ -62,7 +62,7 @@ reported, so a half-counted final day never reads as a cliff.
 
 ### Tasks need a migration
 
-The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). The daily record reminder lock is `CompanyRecordNudge`. Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
+The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). Saved piano-cover searches per video idea need `CompanyTikTokSearch` (`taskId` unique; Refresh overwrites `query` + `payload`). The daily record reminder lock is `CompanyRecordNudge`. Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
 
 ```bash
 npm run prisma:deploy

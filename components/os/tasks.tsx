@@ -22,6 +22,7 @@ import {
 
 import { TikTokIcon } from "@/components/os/tiktok-icon";
 import { TikTokSearchDialog } from "@/components/os/tiktok-search";
+import { LinkedNotes } from "@/components/os/linked-notes";
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -539,6 +540,11 @@ export function TaskList({
       expanded: openId === task.id,
       onDelete: () => remove(task.id),
       onPatch: (next: Patch) => patch(task.id, next),
+      onTikTokSearched: (searchedAt: string) => {
+        setServerTasks((current) =>
+          current.map((row) => (row.id === task.id ? { ...row, tiktokSearchedAt: searchedAt } : row)),
+        );
+      },
       onToggleExpanded: () =>
         setOpenId((current) => (current === task.id ? null : task.id)),
       task,
@@ -695,11 +701,17 @@ export function TaskList({
 function SongSearchMenu({
   accessKey,
   localOnly,
+  onSearched,
   query,
+  searched,
+  taskId,
 }: {
   accessKey: string;
   localOnly: boolean;
+  onSearched?: (searchedAt: string) => void;
   query: string;
+  searched: boolean;
+  taskId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [tiktokOpen, setTiktokOpen] = useState(false);
@@ -733,7 +745,12 @@ function SongSearchMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={`Find ${query} on Spotify, YouTube, or TikTok`}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground ring-1 ring-foreground/12 hover:text-brand"
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md ring-1",
+          searched
+            ? "text-emerald-600 ring-emerald-500/40 hover:text-emerald-500 dark:text-emerald-400"
+            : "text-muted-foreground ring-foreground/12 hover:text-brand",
+        )}
         onClick={(event) => {
           event.stopPropagation();
           setOpen((current) => !current);
@@ -780,7 +797,12 @@ function SongSearchMenu({
                 YouTube tutorial
               </a>
               <button
-                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs font-medium text-foreground hover:bg-muted"
+                className={cn(
+                  "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs font-medium hover:bg-muted",
+                  searched
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-foreground",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   setOpen(false);
@@ -789,8 +811,13 @@ function SongSearchMenu({
                 role="menuitem"
                 type="button"
               >
-                <TikTokIcon className="size-3.5 text-muted-foreground" />
-                TikTok
+                <TikTokIcon
+                  className={cn(
+                    "size-3.5",
+                    searched ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                  )}
+                />
+                {searched ? "TikTok · searched" : "TikTok"}
               </button>
             </div>,
             document.querySelector(".os-root") ?? document.body,
@@ -801,7 +828,9 @@ function SongSearchMenu({
           accessKey={accessKey}
           localOnly={localOnly}
           onClose={() => setTiktokOpen(false)}
+          onSaved={onSearched}
           songQuery={query}
+          taskId={taskId}
         />
       ) : null}
     </>
@@ -831,6 +860,7 @@ function TaskItem({
   onGrab,
   onPatch,
   onDelete,
+  onTikTokSearched,
   onToggleExpanded,
 }: {
   accessKey: string;
@@ -850,6 +880,7 @@ function TaskItem({
   onGrab: (event: ReactPointerEvent<HTMLElement>) => void;
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
+  onTikTokSearched?: (searchedAt: string) => void;
   onToggleExpanded: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -987,7 +1018,14 @@ function TaskItem({
         )}
 
         {showSong ? (
-          <SongSearchMenu accessKey={accessKey} localOnly={localOnly} query={task.song || task.title} />
+          <SongSearchMenu
+            accessKey={accessKey}
+            localOnly={localOnly}
+            onSearched={onTikTokSearched}
+            query={task.song || task.title}
+            searched={Boolean(task.tiktokSearchedAt)}
+            taskId={UUID_RE.test(task.id) ? task.id : undefined}
+          />
         ) : null}
 
         <button
@@ -1054,7 +1092,7 @@ function TaskItem({
                 task.notes ? "text-foreground/90" : "text-muted-foreground italic",
               )}
             >
-              {task.notes || "No description yet."}
+              {task.notes ? <LinkedNotes text={task.notes} /> : "No description yet."}
             </p>
             <button
               aria-label={`Edit ${task.title}`}

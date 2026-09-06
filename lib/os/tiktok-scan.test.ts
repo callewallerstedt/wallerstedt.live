@@ -78,4 +78,16 @@ test("scan windows rank by views and keep 7/30 day buckets", () => {
   assert.equal(payload.routine, "weekly-piano-tiktok-watch");
   assert.match(payload.allTime[0]!.url, /^https:\/\/www\.tiktok\.com\/@friqtao\/video\/old$/);
   assert.equal(berlinWeekKey(now), "2026-W36");
+  assert.equal(payload.trending, undefined);
+});
+
+test("scan payload can carry a piano-trending strip", () => {
+  const now = new Date("2026-09-06T09:00:00+02:00");
+  const payload = buildTikTokScanPayload(
+    [],
+    [ { ...video({ awemeId: "watched", playCount: 10 }), handle: "friqtao" } ],
+    now,
+    [ { ...video({ awemeId: "trend", playCount: 99, uniqueId: "keys" }), handle: "keys" } ],
+  );
+  assert.deepEqual(payload.trending?.map((item) => item.awemeId), ["trend"]);
 });

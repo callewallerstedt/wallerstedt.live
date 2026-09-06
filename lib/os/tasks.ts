@@ -10,6 +10,7 @@ import {
   taskListWhere,
   type TaskListQuery,
 } from "./task-meta";
+import { listTikTokSearchTimes } from "./tiktok-search-store";
 import type { TaskArea, TaskList, TaskRow } from "./types";
 
 export {
@@ -47,7 +48,7 @@ type TaskRecord = {
   updatedAt: Date;
 };
 
-function toRow(record: TaskRecord): TaskRow {
+function toRow(record: TaskRecord, searchedAt?: string | null): TaskRow {
   return {
     id: record.id,
     title: record.title,
@@ -62,6 +63,7 @@ function toRow(record: TaskRecord): TaskRow {
     completedAt: record.completedAt ? record.completedAt.toISOString() : null,
     archivedAt: record.archivedAt ? record.archivedAt.toISOString() : null,
     createdAt: record.createdAt.toISOString(),
+    tiktokSearchedAt: searchedAt ?? null,
   };
 }
 
@@ -93,7 +95,15 @@ export async function listTasks(
           : [{ sortOrder: "asc" }, { createdAt: "desc" }],
       take: 200,
     });
-    return { tasks: rows.map(toRow).sort(compareTaskRows), error: null };
+    const searched = await listTikTokSearchTimes(
+      rows.filter((row) => row.list === "video").map((row) => row.id),
+    );
+    return {
+      tasks: rows
+        .map((row) => toRow(row, searched.get(row.id) ?? null))
+        .sort(compareTaskRows),
+      error: null,
+    };
   } catch (error) {
     if (isMissingTable(error)) {
       return {

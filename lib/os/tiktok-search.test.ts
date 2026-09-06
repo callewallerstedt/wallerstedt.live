@@ -6,9 +6,11 @@ import { AccountingError } from "../accounting/errors";
 import { tiktokPianoSearchQuery, tiktokPianoSearchUrl } from "./task-meta";
 import {
   formatTikTokCount,
+  parseSavedTikTokSearch,
   parseTregTikTokSearch,
   pickCoverUrl,
   rankTikTokResults,
+  savedTikTokSearchPayload,
   tiktokVideoUrl,
   type TikTokSearchResult,
 } from "./tiktok-search";
@@ -142,6 +144,22 @@ test("compact counts look like 7.8M", () => {
   assert.equal(formatTikTokCount(1_200), "1.2K");
   assert.equal(formatTikTokCount(999), "999");
   assert.equal(formatTikTokCount(null), "—");
+});
+
+test("saved search payload rehydrates ranked Treg results without Treg", () => {
+  const stored = savedTikTokSearchPayload([
+    result({
+      awemeId: "high",
+      uniqueId: "indila.covers",
+      playCount: 7_800_000,
+      coverUrl: "https://cdn.example/high.jpg",
+      url: "https://www.tiktok.com/@indila.covers/video/high",
+    }),
+  ]);
+  const restored = parseSavedTikTokSearch(stored);
+  assert.equal(restored[0]?.awemeId, "high");
+  assert.equal(restored[0]?.coverUrl, "https://cdn.example/high.jpg");
+  assert.deepEqual(parseSavedTikTokSearch({ results: [{ awemeId: "x" }] }), []);
 });
 
 test("Treg search stays server-side and never puts the token in the body", async () => {

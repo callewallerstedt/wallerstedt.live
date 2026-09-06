@@ -6,6 +6,8 @@ import {
   buildTikTokScanPayload,
   isTikTokHandle,
   normalizeTikTokHandle,
+  PIANO_TRENDING_QUERY,
+  TIKTOK_SCAN_TOP,
   TIKTOK_SEED_HANDLES,
   type TikTokScanAccountResult,
   type TikTokScanPayload,
@@ -14,8 +16,12 @@ import {
 } from "./tiktok-scan";
 
 export type { TikTokWatchAccount };
-import { parseTregTikTokProfile, parseTregTikTokVideos } from "./tiktok-search";
-import { fetchTregTikTokProfile, fetchTregTikTokUserVideos } from "./tiktok-treg";
+import { parseTregTikTokProfile, parseTregTikTokSearch, parseTregTikTokVideos } from "./tiktok-search";
+import {
+  fetchTregTikTokProfile,
+  fetchTregTikTokSearch,
+  fetchTregTikTokUserVideos,
+} from "./tiktok-treg";
 
 function isMissingTable(error: unknown) {
   const code = (error as { code?: string } | null)?.code;
@@ -200,7 +206,15 @@ export async function runWatchScan(): Promise<TikTokScanPayload> {
     }
   }
 
-  const payload = buildTikTokScanPayload(accountResults, videos);
+  let trending: TikTokScanVideo[] = [];
+  try {
+    const raw = await fetchTregTikTokSearch(PIANO_TRENDING_QUERY, TIKTOK_SCAN_TOP);
+    trending = attachHandle(parseTregTikTokSearch(raw), "piano");
+  } catch {
+    trending = [];
+  }
+
+  const payload = buildTikTokScanPayload(accountResults, videos, new Date(), trending);
   try {
     await persistScan(payload);
   } catch (error) {

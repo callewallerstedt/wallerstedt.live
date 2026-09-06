@@ -198,6 +198,48 @@ export function parseTregTikTokSearch(payload: unknown): TikTokSearchResult[] {
   return parseTregTikTokVideos(payload);
 }
 
+function isStoredResult(value: unknown): value is TikTokSearchResult {
+  const rec = asRecord(value);
+  if (!rec) return false;
+  if (typeof rec.awemeId !== "string" || !rec.awemeId.trim()) return false;
+  if (typeof rec.uniqueId !== "string" || !rec.uniqueId.trim()) return false;
+  if (typeof rec.url !== "string" || !/^https?:\/\//i.test(rec.url)) return false;
+  return true;
+}
+
+/** Rehydrate a saved CompanyTikTokSearch.payload without calling Treg. */
+export function parseSavedTikTokSearch(payload: unknown): TikTokSearchResult[] {
+  const rec = asRecord(payload);
+  const list = Array.isArray(payload) ? payload : rec?.results;
+  if (!Array.isArray(list)) return [];
+  const results: TikTokSearchResult[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    if (!isStoredResult(item)) continue;
+    if (seen.has(item.awemeId)) continue;
+    seen.add(item.awemeId);
+    results.push({
+      awemeId: item.awemeId,
+      uniqueId: tiktokHandle(item.uniqueId),
+      desc: typeof item.desc === "string" ? item.desc : "",
+      playCount: asCount(item.playCount),
+      diggCount: asCount(item.diggCount),
+      coverUrl:
+        typeof item.coverUrl === "string" && /^https?:\/\//i.test(item.coverUrl)
+          ? item.coverUrl
+          : null,
+      url: item.url,
+      createTimeMs: asCount(item.createTimeMs),
+      song: typeof item.song === "string" && item.song.trim() ? item.song : null,
+    });
+  }
+  return results;
+}
+
+export function savedTikTokSearchPayload(results: TikTokSearchResult[]) {
+  return { results };
+}
+
 export type TikTokProfile = {
   username: string;
   secUid: string;

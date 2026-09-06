@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { XIcon } from "lucide-react";
+import { RefreshCwIcon, XIcon } from "lucide-react";
 
 import { OsSpinner } from "@/components/os/loader";
+import { TikTokCover } from "@/components/os/tiktok-cover";
 import { tiktokPianoSearchQuery, tiktokPianoSearchUrl } from "@/lib/os/task-meta";
 import { formatTikTokCount, type TikTokSearchResult } from "@/lib/os/tiktok-search";
 import { zIndex } from "@/lib/z-index";
@@ -12,28 +13,36 @@ import { zIndex } from "@/lib/z-index";
 type SearchState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; results: TikTokSearchResult[] };
+  | { status: "ready"; results: TikTokSearchResult[]; cached: boolean; searchedAt: string | null };
 
-function searchEndpoint(accessKey: string) {
-  return `/api/os/${encodeURIComponent(accessKey)}/tiktok/search`;
+function searchEndpoint(accessKey: string, taskId?: string) {
+  const path = `/api/os/${encodeURIComponent(accessKey)}/tiktok/search`;
+  return taskId ? `${path}?taskId=${encodeURIComponent(taskId)}` : path;
 }
 
 export function TikTokSearchDialog({
   accessKey,
   localOnly = false,
   onClose,
+  onSaved,
   songQuery,
+  taskId,
 }: {
   accessKey: string;
   localOnly?: boolean;
   onClose: () => void;
+  onSaved?: (searchedAt: string) => void;
   /** Raw `task.song || task.title` — piano is appended here. */
   songQuery: string;
+  /** Persist results against this CompanyTask when it is a real UUID. */
+  taskId?: string;
 }) {
   const query = tiktokPianoSearchQuery(songQuery);
-  const [attempt, setAttempt] = useState(0);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [state, setState] = useState<SearchState>({ status: "loading" });
   const [mounted, setMounted] = useState(false);
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
 
   useEffect(() => {
     setMounted(true);
@@ -62,23 +71,74 @@ export function TikTokSearchDialog({
     }
 
     const controller = new AbortController();
+    const refresh = refreshNonce > 0;
     setState({ status: "loading" });
 
     void (async () => {
       try {
+        if (taskId && !refresh) {
+          const cachedResponse = await fetch(searchEndpoint(accessKey, taskId), {
+            signal: controller.signal,
+          });
+          const cachedBody = (await cachedResponse.json().catch(() => null)) as
+            | {
+                ok?: boolean;
+                cached?: boolean;
+                results?: TikTokSearchResult[];
+                searchedAt?: string;
+                message?: string;
+              }
+            | null;
+          if (
+            cachedResponse.ok &&
+            cachedBody?.ok &&
+            cachedBody.cached &&
+            Array.isArray(cachedBody.results)
+          ) {
+            if (!controller.signal.aborted) {
+              setState({
+                status: "ready",
+                results: cachedBody.results,
+                cached: true,
+                searchedAt: cachedBody.searchedAt ?? null,
+              });
+            }
+            return;
+          }
+        }
+
         const response = await fetch(searchEndpoint(accessKey), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ q: query, limit: 15 }),
+          body: JSON.stringify({
+            q: query,
+            limit: 15,
+            ...(taskId ? { taskId, refresh } : {}),
+          }),
           signal: controller.signal,
         });
         const body = (await response.json().catch(() => null)) as
-          | { ok?: boolean; results?: TikTokSearchResult[]; message?: string }
+          | {
+              ok?: boolean;
+              cached?: boolean;
+              results?: TikTokSearchResult[];
+              searchedAt?: string | null;
+              message?: string;
+            }
           | null;
         if (!response.ok || !body?.ok || !Array.isArray(body.results)) {
           throw new Error(body?.message || "Could not search TikTok. Try again.");
         }
-        if (!controller.signal.aborted) setState({ status: "ready", results: body.results });
+        if (!controller.signal.aborted) {
+          const searchedAt = body.searchedAt ?? null;
+          setState({
+            status: "ready",
+            results: body.results,
+            cached: body.cached === true,
+            searchedAt,
+          });
+          if (searchedAt) onSavedRef.current?.(searchedAt);
+        }
       } catch (problem) {
         if (controller.signal.aborted) return;
         setState({
@@ -89,7 +149,7 @@ export function TikTokSearchDialog({
     })();
 
     return () => controller.abort();
-  }, [accessKey, attempt, localOnly, query]);
+  }, [accessKey, localOnly, query, refreshNonce, taskId]);
 
   if (!mounted) return null;
 
@@ -114,7 +174,24 @@ export function TikTokSearchDialog({
               TikTok piano covers
             </p>
             <p className="truncate text-xs text-muted-foreground">{query}</p>
+            {state.status === "ready" && state.cached ? (
+              <p className="mt-0.5 text-[0.7rem] font-medium text-emerald-600 dark:text-emerald-400">
+                Saved search — opened without calling Treg
+              </p>
+            ) : null}
           </div>
+          {taskId && !localOnly ? (
+            <button
+              aria-label="Refresh TikTok search"
+              className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-foreground ring-1 ring-foreground/15 hover:bg-muted disabled:opacity-50"
+              disabled={state.status === "loading"}
+              onClick={() => setRefreshNonce((current) => current + 1)}
+              type="button"
+            >
+              <RefreshCwIcon className="size-3.5" />
+              Refresh
+            </button>
+          ) : null}
           <button
             aria-label="Close"
             className="shrink-0 p-1 text-muted-foreground"
@@ -129,7 +206,9 @@ export function TikTokSearchDialog({
           {state.status === "loading" ? (
             <div className="flex flex-col items-center justify-center gap-2 py-12" role="status">
               <OsSpinner size={28} />
-              <p className="text-xs text-muted-foreground">Searching TikTok…</p>
+              <p className="text-xs text-muted-foreground">
+                {refreshNonce > 0 ? "Refreshing TikTok…" : "Searching TikTok…"}
+              </p>
             </div>
           ) : null}
 
@@ -140,7 +219,7 @@ export function TikTokSearchDialog({
                 {localOnly ? null : (
                   <button
                     className="text-xs font-semibold text-brand"
-                    onClick={() => setAttempt((current) => current + 1)}
+                    onClick={() => setRefreshNonce((current) => current + 1)}
                     type="button"
                   >
                     Try again
@@ -149,7 +228,7 @@ export function TikTokSearchDialog({
                 <a
                   className="text-xs font-semibold text-brand"
                   href={tiktokPianoSearchUrl(songQuery)}
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   target="_blank"
                 >
                   Search on TikTok instead
@@ -178,16 +257,16 @@ export function TikTokSearchDialog({
   );
 }
 
-function TikTokResultRow({ item, rank }: { item: TikTokSearchResult; rank: number }) {
+export function TikTokResultRow({ item, rank }: { item: TikTokSearchResult; rank: number }) {
   return (
     <li className="flex items-center gap-2.5 border-t border-border px-3 py-2 first:border-t-0">
       <span className="w-4 shrink-0 text-center text-[0.7rem] font-semibold tabular-nums text-muted-foreground">
         {rank}
       </span>
-      <Cover src={item.coverUrl} />
+      <TikTokCover src={item.coverUrl} />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-[13px] leading-snug font-medium">
-          {item.desc || `Piano cover by @${item.uniqueId}`}
+          {item.song || item.desc || `Piano cover by @${item.uniqueId}`}
         </p>
         <p className="mt-0.5 truncate text-[0.7rem] text-muted-foreground">
           @{item.uniqueId}
@@ -200,29 +279,11 @@ function TikTokResultRow({ item, rank }: { item: TikTokSearchResult; rank: numbe
       <a
         className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-brand ring-1 ring-foreground/15 hover:bg-muted"
         href={item.url}
-        rel="noreferrer"
+        rel="noopener noreferrer"
         target="_blank"
       >
         Open
       </a>
     </li>
-  );
-}
-
-function Cover({ src }: { src: string | null }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return <span aria-hidden className="size-12 shrink-0 rounded-md bg-muted ring-1 ring-foreground/8" />;
-  }
-  return (
-    // TikTok CDN often blocks hotlinking; hide the thumb if the request fails.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      alt=""
-      className="size-12 shrink-0 rounded-md bg-muted object-cover ring-1 ring-foreground/8"
-      onError={() => setFailed(true)}
-      referrerPolicy="no-referrer"
-      src={src}
-    />
   );
 }

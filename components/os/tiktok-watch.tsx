@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 
 import { OsSpinner } from "@/components/os/loader";
+import { TikTokCover } from "@/components/os/tiktok-cover";
 import { EmptyState, Panel, SectionLabel } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,10 @@ function watchEndpoint(accessKey: string, suffix = "") {
 function scanDate(iso: string) {
   const ymd = iso.slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? formatDate(ymd) : iso;
+}
+
+function trendingVideos(scan: TikTokScanPayload) {
+  return scan.trending?.length ? scan.trending : scan.allTime;
 }
 
 export function TikTokScanTools({
@@ -45,6 +50,7 @@ export function TikTokScanTools({
         { id: "seed-1", handle: "friqtao", uniqueId: "friqtao", nickname: "", sortOrder: 0 },
         { id: "seed-2", handle: "alejs_tunes", uniqueId: "alejs_tunes", nickname: "", sortOrder: 1 },
       ]);
+      setLastScan(sampleScan());
       setLoading(false);
       return;
     }
@@ -165,6 +171,8 @@ export function TikTokScanTools({
     })();
   }
 
+  const featured = lastScan ? trendingVideos(lastScan) : [];
+
   return (
     <div className="flex flex-col gap-2">
       <SectionLabel>Scan tools</SectionLabel>
@@ -264,6 +272,23 @@ export function TikTokScanTools({
         </div>
       ) : null}
 
+      {lastScan && featured.length ? (
+        <Panel
+          title="Piano trending"
+          footer={
+            lastScan.trending?.length
+              ? "Treg piano-cover search from the last scan"
+              : "Latest + greatest from watched accounts"
+          }
+        >
+          <div className="-mx-px flex gap-2.5 overflow-x-auto px-3 py-3">
+            {featured.map((video, index) => (
+              <TrendingCard key={`${video.awemeId}-${video.handle}`} rank={index + 1} video={video} />
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
       {lastScan ? (
         <div className="grid gap-2 lg:grid-cols-3">
           <ScanRankList title="Top all-time" videos={lastScan.allTime} hint="From the latest posts Treg returned" />
@@ -272,6 +297,32 @@ export function TikTokScanTools({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function TrendingCard({ video, rank }: { video: TikTokScanVideo; rank: number }) {
+  return (
+    <a
+      className="w-[8.25rem] shrink-0 overflow-hidden rounded-xl bg-muted/40 ring-1 ring-foreground/10 hover:ring-foreground/20"
+      href={video.url}
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      <div className="relative">
+        <TikTokCover className="h-36 w-full rounded-none" src={video.coverUrl} wide />
+        <span className="absolute left-1.5 top-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[0.65rem] font-semibold text-white tabular-nums">
+          #{rank}
+        </span>
+      </div>
+      <div className="px-2 py-1.5">
+        <p className="line-clamp-2 text-[12px] leading-snug font-medium">
+          {video.song || video.desc || `@${video.handle}`}
+        </p>
+        <p className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">
+          @{video.handle} · {formatTikTokCount(video.playCount)} · {formatTikTokCount(video.diggCount)}
+        </p>
+      </div>
+    </a>
   );
 }
 
@@ -290,12 +341,13 @@ function ScanRankList({
         <ol>
           {videos.map((video, index) => (
             <li
-              className="flex items-start gap-2 border-t border-border px-3 py-2 first:border-t-0"
+              className="flex items-center gap-2.5 border-t border-border px-3 py-2 first:border-t-0"
               key={`${video.awemeId}-${video.handle}`}
             >
-              <span className="w-4 shrink-0 pt-0.5 text-center text-[0.7rem] font-semibold tabular-nums text-muted-foreground">
+              <span className="w-4 shrink-0 text-center text-[0.7rem] font-semibold tabular-nums text-muted-foreground">
                 {index + 1}
               </span>
+              <TikTokCover src={video.coverUrl} />
               <div className="min-w-0 flex-1">
                 <p className="line-clamp-2 text-[13px] leading-snug font-medium">
                   {video.song || video.desc || `Clip by @${video.handle}`}
@@ -311,7 +363,7 @@ function ScanRankList({
               <a
                 className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-brand ring-1 ring-foreground/15 hover:bg-muted"
                 href={video.url}
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 target="_blank"
               >
                 Open
@@ -324,4 +376,48 @@ function ScanRankList({
       )}
     </Panel>
   );
+}
+
+function sampleScan(): TikTokScanPayload {
+  const scannedAt = "2026-09-06T07:00:00.000Z";
+  const clip = (
+    partial: Pick<TikTokScanVideo, "awemeId" | "handle" | "playCount" | "diggCount" | "song" | "desc">,
+  ): TikTokScanVideo => ({
+    uniqueId: partial.handle,
+    coverUrl: null,
+    url: `https://www.tiktok.com/@${partial.handle}/video/${partial.awemeId}`,
+    createTimeMs: Date.parse(scannedAt) - 2 * 86_400_000,
+    ...partial,
+  });
+  const allTime = [
+    clip({
+      awemeId: "trend-1",
+      handle: "friqtao",
+      playCount: 2_400_000,
+      diggCount: 180_000,
+      song: "Love Story",
+      desc: "song: Love Story — late night take",
+    }),
+    clip({
+      awemeId: "trend-2",
+      handle: "alejs_tunes",
+      playCount: 910_000,
+      diggCount: 64_000,
+      song: "Midnight Hours",
+      desc: "Midnight Hours piano",
+    }),
+  ];
+  return {
+    scannedAt,
+    weekKey: "2026-W36",
+    routine: WEEKLY_PIANO_TIKTOK_WATCH,
+    accounts: [
+      { handle: "friqtao", nickname: "friqtao", followers: 120_000, videoCount: 2, error: null },
+      { handle: "alejs_tunes", nickname: "alejs_tunes", followers: 80_000, videoCount: 1, error: null },
+    ],
+    allTime,
+    last7: allTime,
+    last30: allTime,
+    trending: allTime,
+  };
 }

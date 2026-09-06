@@ -364,26 +364,40 @@ model WebPushSubscription {
  * a task never touches bokföring, it only links to it.
  */
 model CompanyTask {
-  id          String    @id @default(uuid()) @db.Uuid
-  title       String
-  notes       String    @default("")
+  id           String               @id @default(uuid()) @db.Uuid
+  title        String
+  notes        String               @default("")
   /** "task" for the to-do list, "video" for TikTok video ideas. */
-  list        String    @default("task")
+  list         String               @default("task")
   /** Optional track a video idea is built around, used for the Spotify search. */
-  song        String    @default("")
-  status      String    @default("open")
-  priority    Int       @default(1)
-  area        String    @default("company")
-  dueDate     DateTime? @db.Date
-  sortOrder   Int       @default(0)
-  completedAt DateTime?
-  archivedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  song         String               @default("")
+  status       String               @default("open")
+  priority     Int                  @default(1)
+  area         String               @default("company")
+  dueDate      DateTime?            @db.Date
+  sortOrder    Int                  @default(0)
+  completedAt  DateTime?
+  archivedAt   DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  tiktokSearch CompanyTikTokSearch?
 
   @@index([list, status, sortOrder])
   @@index([status, dueDate])
   @@index([archivedAt])
+  @@index([updatedAt])
+}
+
+/** Latest Treg piano-cover search for a video idea. One row per CompanyTask. */
+model CompanyTikTokSearch {
+  id        String      @id @default(uuid()) @db.Uuid
+  taskId    String      @unique @db.Uuid
+  task      CompanyTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  query     String
+  payload   Json
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
   @@index([updatedAt])
 }
 

@@ -139,6 +139,8 @@ export type TaskRow = {
   completedAt: string | null;
   archivedAt: string | null;
   createdAt: string;
+  /** Last persisted Treg piano-cover search for this video idea, if any. */
+  tiktokSearchedAt?: string | null;
 };
 
 /**

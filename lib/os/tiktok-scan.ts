@@ -15,6 +15,8 @@ export type TikTokWatchAccount = {
 export const TIKTOK_SEED_HANDLES = ["friqtao", "alejs_tunes"] as const;
 export const TIKTOK_SCAN_TOP = 8;
 export const WEEKLY_PIANO_TIKTOK_WATCH = "weekly-piano-tiktok-watch";
+/** Treg search used for the piano-trending strip on Scan now. */
+export const PIANO_TRENDING_QUERY = "piano cover";
 
 export type TikTokScanVideo = TikTokSearchResult & {
   handle: string;
@@ -36,6 +38,8 @@ export type TikTokScanPayload = {
   allTime: TikTokScanVideo[];
   last7: TikTokScanVideo[];
   last30: TikTokScanVideo[];
+  /** Optional Treg "piano cover" strip; UI falls back to allTime. */
+  trending?: TikTokScanVideo[];
 };
 
 export function normalizeTikTokHandle(value: string) {
@@ -84,9 +88,14 @@ export function buildTikTokScanPayload(
   accounts: TikTokScanAccountResult[],
   videos: TikTokScanVideo[],
   now = new Date(),
+  trending?: TikTokScanVideo[],
 ): TikTokScanPayload {
   const nowMs = now.getTime();
   const ranked = rankTikTokResults(videos) as TikTokScanVideo[];
+  const trend =
+    trending && trending.length
+      ? (rankTikTokResults(trending).slice(0, TIKTOK_SCAN_TOP) as TikTokScanVideo[])
+      : undefined;
   return {
     scannedAt: now.toISOString(),
     weekKey: berlinWeekKey(now),
@@ -101,5 +110,6 @@ export function buildTikTokScanPayload(
       0,
       TIKTOK_SCAN_TOP,
     ) as TikTokScanVideo[],
+    ...(trend ? { trending: trend } : {}),
   };
 }
