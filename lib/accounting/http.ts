@@ -77,7 +77,11 @@ export async function parseJson(request: Request, maxBytes = 256_000) {
 }
 
 function publicMessage(error: AccountingError) {
-  if (error.status >= 500) return "The accounting service is temporarily unavailable.";
+  // Treg failures are already written as public copy; do not replace them
+  // with the generic accounting outage line.
+  if (error.status >= 500 && !error.code.startsWith("treg_")) {
+    return "The accounting service is temporarily unavailable.";
+  }
   return error.message;
 }
 
