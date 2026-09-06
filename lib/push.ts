@@ -330,7 +330,15 @@ function configureWebPush(environment: NodeJS.ProcessEnv = process.env) {
   return true;
 }
 
-async function sendPayload(payload: PostNotificationPayload): Promise<PushSendResult> {
+export type WebPushPayload = {
+  kind?: string;
+  title: string;
+  body: string;
+  url: string;
+  tag?: string;
+};
+
+async function sendPayload(payload: PostNotificationPayload | WebPushPayload): Promise<PushSendResult> {
   if (!isWebPushConfigured() || !configureWebPush()) {
     return emptyResult;
   }
@@ -370,6 +378,19 @@ async function sendPayload(payload: PostNotificationPayload): Promise<PushSendRe
   );
 
   return result;
+}
+
+export async function sendWebPush(payload: WebPushPayload): Promise<PushSendResult> {
+  if (!payload.title.trim() || !payload.body.trim() || !payload.url.trim()) {
+    return emptyResult;
+  }
+  return sendPayload({
+    kind: payload.kind,
+    title: payload.title.trim(),
+    body: shortenNotificationBody(payload.body),
+    url: payload.url.trim(),
+    tag: payload.tag?.trim() || undefined,
+  });
 }
 
 export async function notifyAccountingPosts(

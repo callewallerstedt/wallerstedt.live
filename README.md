@@ -62,7 +62,7 @@ reported, so a half-counted final day never reads as a cliff.
 
 ### Tasks need a migration
 
-The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
+The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). The daily record reminder lock is `CompanyRecordNudge`. Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
 
 ```bash
 npm run prisma:deploy
@@ -158,3 +158,16 @@ npm.cmd run prisma:deploy:local
 4. Open **Bokföring** from the Home Screen (not from Safari) and sign in.
 5. Go to **Mer** and tap **Slå på aviseringar**. Allow the prompt.
 6. Create, edit, or delete a post (or approve an AI draft). The phone should show **Ny post**, **Ändrad**, or **Raderad**, and open that post when tapped. A deleted post shows “Posten är raderad”.
+
+## Daily record reminder (Bolag Home Screen)
+
+Företags-OS can nag the owner every day at **20:00 Europe/Berlin** to go record. Same VAPID keys and `WebPushSubscription` table as bokföring. The copy rotates (“You want that car or no?”, “Your piano won't play itself.”). Tap opens `/bolag/<key>/tiktok`.
+
+iOS 16.4+ only delivers Web Push to the Home Screen PWA. Opt-in lives under **Settings → Record reminders**. A Vercel cron hits `GET /api/os/record-nudge` at 18:00 and 19:00 UTC and sends only when Berlin is 20:00. `CompanyRecordNudge` stores the last Berlin date so a retry does not double-ping.
+
+After deploy, apply the migration (`npm run prisma:deploy`) if it has not already been applied. Then:
+
+1. Open Bolag in Safari → Share → **Add to Home Screen**.
+2. Open **Bolag** from the Home Screen and sign in.
+3. Go to **Settings** and tap **Enable notifications**.
+4. Optionally tap **Send a test**.

@@ -3,6 +3,10 @@
     {
       "path": "/api/accounting/backup",
       "schedule": "17 2 * * *"
+    },
+    {
+      "path": "/api/os/record-nudge",
+      "schedule": "0 18,19 * * *"
     }
   ]
 }

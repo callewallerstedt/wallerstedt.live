@@ -100,15 +100,23 @@ function takeCachedJson(path) {
 function normalizeTarget(input, fallback) {
   const record = input && typeof input === "object" ? input : {};
   const fallbackRecord = fallback && typeof fallback === "object" ? fallback : {};
+  const kind = String(record.kind || fallbackRecord.kind || "").trim();
   const url = String(record.url || fallbackRecord.url || "").trim();
   const postId = String(record.postId || fallbackRecord.postId || postIdFromUrl(url) || "").trim();
   const action = String(record.action || fallbackRecord.action || "create").trim() || "create";
+  const tag = String(record.tag || fallbackRecord.tag || "").trim();
+  const isRecord = kind === "record" || tag === "record-nudge";
   return {
+    kind: isRecord ? "record" : kind,
     title: String(record.title || fallbackRecord.title || ""),
     body: String(record.body || fallbackRecord.body || ""),
-    url: url || (postId ? `${self.location.origin}/vault/?post=${encodeURIComponent(postId)}` : `${self.location.origin}/vault/`),
+    url: url
+      || (isRecord
+        ? `${self.location.origin}/bolag/`
+        : (postId ? `${self.location.origin}/vault/?post=${encodeURIComponent(postId)}` : `${self.location.origin}/vault/`)),
     postId,
     action,
+    tag,
   };
 }
 
@@ -146,7 +154,8 @@ async function openTarget(target) {
     } catch {
       continue;
     }
-    if (!clientUrl.pathname.startsWith("/vault/")) continue;
+    const prefix = target.kind === "record" ? "/bolag/" : "/vault/";
+    if (!clientUrl.pathname.startsWith(prefix)) continue;
 
     const focused = await client.focus();
     const active = focused || client;
@@ -182,18 +191,23 @@ self.addEventListener("push", (event) => {
   }
 
   const target = normalizeTarget(payload);
-  const title = target.title || "Ny post";
+  const isRecord = target.kind === "record";
+  const title = target.title || (isRecord ? "Go record" : "Ny post");
   event.waitUntil(
     cacheJson(LAST_PUSH_PATH, target).then(() => self.registration.showNotification(title, {
-      body: target.body || "En ny post har bokförts.",
+      body: target.body || (isRecord ? "Your piano won't play itself." : "En ny post har bokförts."),
       icon: "/accounting-icon-192.png",
       badge: "/accounting-icon-192.png",
-      tag: target.postId ? `accounting-post:${target.postId}:${target.action}` : "accounting-post",
+      tag: isRecord
+        ? (target.tag || "record-nudge")
+        : (target.postId ? `accounting-post:${target.postId}:${target.action}` : "accounting-post"),
       renotify: true,
       data: {
+        kind: target.kind,
         url: target.url,
         postId: target.postId,
         action: target.action,
+        tag: target.tag,
       },
     })),
   );

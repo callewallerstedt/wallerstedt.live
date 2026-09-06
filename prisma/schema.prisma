@@ -410,3 +410,11 @@ model CompanyTikTokScan {
   @@index([scannedAt])
   @@index([weekKey])
 }
+
+/** Single-row lock so the 20:00 Berlin record nudge fires once per day. */
+model CompanyRecordNudge {
+  id          String   @id
+  lastSentYmd String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

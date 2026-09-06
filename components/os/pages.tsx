@@ -18,6 +18,7 @@ import type { LedgerSnapshot, OsSnapshot } from "@/lib/os/types";
 import { CumulativeCurve, DualTrendChart, MonthlyBars } from "@/components/os/charts";
 import { MusicDashboard } from "@/components/os/music";
 import { ActionQueue, TaskList } from "@/components/os/tasks";
+import { RecordReminders } from "@/components/os/record-reminders";
 import { AppearanceSettings, SignOutRow } from "@/components/os/settings";
 import { TikTokScanTools } from "@/components/os/tiktok-watch";
 import {
@@ -636,8 +637,9 @@ export function SettingsPage({
 }) {
   return (
     <PageFrame>
-      <PageTitle aside="Appearance, company details and data sources.">Settings</PageTitle>
+      <PageTitle aside="Appearance, reminders, company details and data sources.">Settings</PageTitle>
       <AppearanceSettings />
+      <RecordReminders accessKey={accessKey} />
 
       <Panel title="Company">
         <Row primary="Name" value={snapshot.company.name} valueTone="muted" />

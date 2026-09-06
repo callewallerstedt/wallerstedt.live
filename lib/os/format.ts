@@ -11,6 +11,18 @@ export function berlinYmd(value: Date | string = new Date(), timeZone = COMPANY.
   }).format(date);
 }
 
+export function berlinHour(value: Date | string = new Date(), timeZone = COMPANY.timeZone) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(date),
+  );
+}
+
 export function monthKey(ymd: string | null | undefined) {
   return ymd && /^\d{4}-\d{2}/.test(ymd) ? ymd.slice(0, 7) : null;
 }

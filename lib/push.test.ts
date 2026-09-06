@@ -12,6 +12,7 @@ import {
   parseAccountingPushOpen,
   parsePushSubscription,
   postIdFromNotificationUrl,
+  sendWebPush,
   shortenNotificationBody,
   vaultPostPath,
 } from "./push";
@@ -145,6 +146,11 @@ test("treats expired push endpoints as gone", () => {
   assert.equal(isGonePushStatus(410), true);
   assert.equal(isGonePushStatus(404), true);
   assert.equal(isGonePushStatus(500), false);
+});
+
+test("sendWebPush ignores empty payloads without hitting the database", async () => {
+  const result = await sendWebPush({ title: "", body: "Go record", url: "https://wallerstedt.live/bolag/x/tiktok" });
+  assert.deepEqual(result, { sent: 0, failed: 0, removed: 0 });
 });
 
 test("requires VAPID keys and the vault access key before treating push as configured", () => {
