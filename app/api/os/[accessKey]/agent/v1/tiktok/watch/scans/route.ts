@@ -1,5 +1,6 @@
 import { requireAgentOrOwnerSession } from "@/lib/accounting/auth";
 import { privateJson, route } from "@/lib/accounting/http";
+import { watchScanListFields } from "@/lib/os/tiktok-scan-route";
 import { listWatchScans } from "@/lib/os/tiktok-watch";
 
 export const runtime = "nodejs";
@@ -11,11 +12,15 @@ export async function GET(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey } = await params;
     await requireAgentOrOwnerSession(request, accessKey);
-    const scans = await listWatchScans();
+    const [scans, scanFields] = await Promise.all([
+      listWatchScans(),
+      watchScanListFields(request),
+    ]);
     return privateJson({
       ok: true,
       count: scans.length,
-      lastScan: scans[0] ?? null,
+      lastScan: scanFields.lastScan,
+      scan: scanFields.scan,
       scans,
     });
   });

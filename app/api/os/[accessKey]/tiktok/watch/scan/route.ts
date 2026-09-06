@@ -1,6 +1,6 @@
 import { requireOwnerSession } from "@/lib/accounting/auth";
-import { privateJson, route } from "@/lib/accounting/http";
-import { runWatchScan } from "@/lib/os/tiktok-watch";
+import { route } from "@/lib/accounting/http";
+import { handleWatchScanPost } from "@/lib/os/tiktok-scan-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +12,6 @@ export async function POST(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey } = await params;
     await requireOwnerSession(request, accessKey, true);
-    const lastScan = await runWatchScan();
-    return privateJson({ ok: true, lastScan });
+    return handleWatchScanPost(request);
   });
 }

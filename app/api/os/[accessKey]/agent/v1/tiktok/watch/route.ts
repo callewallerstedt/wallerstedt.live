@@ -3,7 +3,8 @@ import { z } from "zod";
 import { requireAgentOrOwnerSession } from "@/lib/accounting/auth";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
 import { parseWithSchema } from "@/lib/accounting/validation";
-import { addWatchAccount, latestWatchScan, listWatchAccounts } from "@/lib/os/tiktok-watch";
+import { watchScanListFields } from "@/lib/os/tiktok-scan-route";
+import { addWatchAccount, listWatchAccounts } from "@/lib/os/tiktok-watch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +19,11 @@ export async function GET(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey } = await params;
     await requireAgentOrOwnerSession(request, accessKey);
-    const [accounts, lastScan] = await Promise.all([listWatchAccounts(), latestWatchScan()]);
-    return privateJson({ ok: true, count: accounts.length, accounts, lastScan });
+    const [accounts, scanFields] = await Promise.all([
+      listWatchAccounts(),
+      watchScanListFields(request),
+    ]);
+    return privateJson({ ok: true, count: accounts.length, accounts, ...scanFields });
   });
 }
 

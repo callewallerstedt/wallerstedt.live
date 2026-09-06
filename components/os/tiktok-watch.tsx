@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 
 import { OsSpinner } from "@/components/os/loader";
@@ -12,6 +12,8 @@ import { formatDate } from "@/lib/os/format";
 import {
   TIKTOK_SEED_HANDLES,
   WEEKLY_PIANO_TIKTOK_WATCH,
+  isOpenScanStatus,
+  type TikTokScanJobPublic,
   type TikTokScanPayload,
   type TikTokScanVideo,
   type TikTokWatchAccount,
@@ -31,6 +33,37 @@ function trendingVideos(scan: TikTokScanPayload) {
   return scan.trending?.length ? scan.trending : scan.allTime;
 }
 
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
+function scanButtonLabel(scanning: boolean, job: TikTokScanJobPublic | null) {
+  if (!scanning) return "Scan now";
+  if (job && job.total > 0) {
+    const handle = job.nextHandle ? ` · @${job.nextHandle}` : "";
+    return `Scanning ${job.processed}/${job.total}${handle}`;
+  }
+  return "Scanning…";
+}
+
+function isAbortError(problem: unknown) {
+  return problem instanceof DOMException && problem.name === "AbortError";
+}
+
 export function TikTokScanTools({
   accessKey,
   localOnly = false,
@@ -47,7 +80,9 @@ export function TikTokScanTools({
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(!localOnly);
   const [scanning, setScanning] = useState(false);
+  const [scanJob, setScanJob] = useState<TikTokScanJobPublic | null>(null);
   const [failure, setFailure] = useState("");
+  const pollRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (localOnly) {
@@ -60,7 +95,13 @@ export function TikTokScanTools({
       try {
         const response = await fetch(watchEndpoint(accessKey), { signal: controller.signal });
         const body = (await response.json().catch(() => null)) as
-          | { ok?: boolean; accounts?: TikTokWatchAccount[]; lastScan?: TikTokScanPayload | null; message?: string }
+          | {
+              ok?: boolean;
+              accounts?: TikTokWatchAccount[];
+              lastScan?: TikTokScanPayload | null;
+              scan?: TikTokScanJobPublic | null;
+              message?: string;
+            }
           | null;
         if (!response.ok || !body?.ok || !Array.isArray(body.accounts)) {
           throw new Error(body?.message || "Could not load watched accounts.");
@@ -68,6 +109,23 @@ export function TikTokScanTools({
         if (!controller.signal.aborted) {
           setAccounts(body.accounts);
           setLastScan(body.lastScan ?? null);
+          if (body.scan && isOpenScanStatus(body.scan.status)) {
+            setScanJob(body.scan);
+            setScanning(true);
+            void (async () => {
+              try {
+                await pollScan(body.scan!.scanId);
+              } catch (problem) {
+                if (isAbortError(problem) || controller.signal.aborted) return;
+                setFailure(problem instanceof Error ? problem.message : "Scan failed.");
+              } finally {
+                if (!controller.signal.aborted) {
+                  setScanning(false);
+                  setScanJob(null);
+                }
+              }
+            })();
+          }
         }
       } catch (problem) {
         if (controller.signal.aborted) return;
@@ -76,7 +134,10 @@ export function TikTokScanTools({
         if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      pollRef.current?.abort();
+    };
   }, [accessKey, localOnly]);
 
   async function send(path: string, init: RequestInit) {
@@ -88,7 +149,10 @@ export function TikTokScanTools({
       | {
           ok?: boolean;
           accounts?: TikTokWatchAccount[];
-          lastScan?: TikTokScanPayload;
+          lastScan?: TikTokScanPayload | null;
+          scan?: TikTokScanJobPublic | null;
+          scanId?: string;
+          status?: TikTokScanJobPublic["status"];
           message?: string;
         }
       | null;
@@ -96,6 +160,64 @@ export function TikTokScanTools({
       throw new Error(body?.message || "Could not save. Try again.");
     }
     return body;
+  }
+
+  async function pollScan(scanId: string) {
+    pollRef.current?.abort();
+    const controller = new AbortController();
+    pollRef.current = controller;
+    let lastProcessed = -1;
+    let stalledSince = Date.now();
+    const deadline = Date.now() + 8 * 60_000;
+    try {
+      while (Date.now() < deadline) {
+        await sleep(2000, controller.signal);
+        const response = await fetch(watchEndpoint(accessKey), { signal: controller.signal });
+        const body = (await response.json().catch(() => null)) as
+          | {
+              ok?: boolean;
+              accounts?: TikTokWatchAccount[];
+              lastScan?: TikTokScanPayload | null;
+              scan?: TikTokScanJobPublic | null;
+              message?: string;
+            }
+          | null;
+        if (!response.ok || !body?.ok) {
+          throw new Error(body?.message || "Could not read scan progress.");
+        }
+        if (body.accounts) setAccounts(body.accounts);
+        if (body.lastScan) setLastScan(body.lastScan);
+        if (body.scan) setScanJob(body.scan);
+        const job = body.scan;
+        if (!job || job.status === "done") {
+          if (body.lastScan) setLastScan(body.lastScan);
+          return;
+        }
+        if (job.status === "failed") {
+          throw new Error(job.error || "Scan failed.");
+        }
+        if (job.processed !== lastProcessed) {
+          lastProcessed = job.processed;
+          stalledSince = Date.now();
+        } else if (Date.now() - stalledSince > 12_000) {
+          const nudged = await send(watchEndpoint(accessKey, "/scan"), {
+            method: "POST",
+            body: JSON.stringify({ scanId }),
+            signal: controller.signal,
+          });
+          if (nudged.scan) setScanJob(nudged.scan);
+          if (nudged.lastScan) setLastScan(nudged.lastScan);
+          if (nudged.status === "done" || nudged.scan?.status === "done") return;
+          if (nudged.status === "failed" || nudged.scan?.status === "failed") {
+            throw new Error(nudged.scan?.error || "Scan failed.");
+          }
+          stalledSince = Date.now();
+        }
+      }
+      throw new Error("Scan is taking too long. Try Scan now again.");
+    } finally {
+      if (pollRef.current === controller) pollRef.current = null;
+    }
   }
 
   function addAccount(event: FormEvent<HTMLFormElement>) {
@@ -161,12 +283,23 @@ export function TikTokScanTools({
     setScanning(true);
     void (async () => {
       try {
-        const body = await send(watchEndpoint(accessKey, "/scan"), { method: "POST" });
+        const body = await send(watchEndpoint(accessKey, "/scan"), {
+          method: "POST",
+          body: "{}",
+        });
+        if (body.scan) setScanJob(body.scan);
         if (body.lastScan) setLastScan(body.lastScan);
+        if (body.status === "done" || body.scan?.status === "done") return;
+        if (body.status === "failed" || body.scan?.status === "failed") {
+          throw new Error(body.scan?.error || "Scan failed.");
+        }
+        await pollScan(body.scanId || body.scan?.scanId || "");
       } catch (problem) {
+        if (isAbortError(problem)) return;
         setFailure(problem instanceof Error ? problem.message : "Scan failed.");
       } finally {
         setScanning(false);
+        setScanJob(null);
       }
     })();
   }
@@ -181,7 +314,7 @@ export function TikTokScanTools({
         footer="Seeded with @friqtao, @alejs_tunes, @tonyannn, @andy_morris, @willkim_3, @jon.piano, @danny.vega18 and @alkis_ant. Scan pulls each profile and their latest videos through Treg."
         action={
           <Button disabled={scanning || loading || !accounts.length} onClick={scanNow} size="sm" variant="brand">
-            {scanning ? "Scanning…" : "Scan now"}
+            {scanButtonLabel(scanning, scanJob)}
           </Button>
         }
       >
@@ -266,9 +399,15 @@ export function TikTokScanTools({
       </Panel>
 
       {scanning ? (
-        <div className="flex items-center justify-center gap-2 py-8" role="status">
+        <div className="flex items-center justify-center gap-2 py-8" role="status" aria-live="polite">
           <OsSpinner size={26} />
-          <p className="text-xs text-muted-foreground">Scanning watched accounts…</p>
+          <p className="text-xs text-muted-foreground">
+            {scanJob && scanJob.total > 0
+              ? `Scanning ${scanJob.processed} of ${scanJob.total} accounts${
+                  scanJob.nextHandle ? ` · next @${scanJob.nextHandle}` : ""
+                }`
+              : "Starting watch scan…"}
+          </p>
         </div>
       ) : null}
 

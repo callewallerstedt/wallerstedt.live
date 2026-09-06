@@ -51,6 +51,201 @@ export type TikTokScanPayload = {
   trending?: TikTokScanVideo[];
 };
 
+export const TIKTOK_SCAN_JOB_STATUSES = ["started", "running", "done", "failed"] as const;
+export type TikTokScanJobStatus = (typeof TIKTOK_SCAN_JOB_STATUSES)[number];
+
+export const TIKTOK_SCAN_OPEN_STATUSES = ["started", "running"] as const;
+export type TikTokScanOpenStatus = (typeof TIKTOK_SCAN_OPEN_STATUSES)[number];
+
+/** One Treg profile + videos burst must finish under Vercel's ~60s cap. */
+export const TIKTOK_SCAN_LOCK_MS = 90_000;
+/** A stuck job can be replaced after this. */
+export const TIKTOK_SCAN_STALE_MS = 25 * 60_000;
+
+export type TikTokScanPendingAccount = {
+  id: string;
+  handle: string;
+};
+
+export type TikTokScanCursor = {
+  handle: string;
+  accountId: string;
+};
+
+export type TikTokScanJobPublic = {
+  scanId: string;
+  status: TikTokScanJobStatus;
+  processed: number;
+  total: number;
+  nextHandle: string | null;
+  next: TikTokScanCursor | null;
+  error: string | null;
+};
+
+export type TikTokScanJobPayload = TikTokScanPayload & {
+  status: TikTokScanOpenStatus;
+  scanId: string;
+  processed: number;
+  total: number;
+  nextHandle: string | null;
+  error: string | null;
+  continueToken: string;
+  pending: TikTokScanPendingAccount[];
+  accountResults: TikTokScanAccountResult[];
+  videos: TikTokScanVideo[];
+  trendingPending: boolean;
+  lockedAt: string | null;
+  startedAt: string;
+};
+
+export function isOpenScanStatus(status: unknown): status is TikTokScanOpenStatus {
+  return status === "started" || status === "running";
+}
+
+export function isScanJobStatus(status: unknown): status is TikTokScanJobStatus {
+  return (
+    status === "started" ||
+    status === "running" ||
+    status === "done" ||
+    status === "failed"
+  );
+}
+
+export function isOpenScanPayload(payload: unknown): payload is TikTokScanJobPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const value = payload as { status?: unknown };
+  return isOpenScanStatus(value.status);
+}
+
+export function scanCursor(account: TikTokScanPendingAccount | null | undefined): TikTokScanCursor | null {
+  if (!account) return null;
+  return { handle: account.handle, accountId: account.id };
+}
+
+export function publicScanJob(input: {
+  scanId: string;
+  status: TikTokScanJobStatus;
+  processed: number;
+  total: number;
+  nextHandle?: string | null;
+  next?: TikTokScanCursor | null;
+  error?: string | null;
+}): TikTokScanJobPublic {
+  const next = input.next ?? null;
+  return {
+    scanId: input.scanId,
+    status: input.status,
+    processed: input.processed,
+    total: input.total,
+    nextHandle: input.nextHandle ?? next?.handle ?? null,
+    next,
+    error: input.error ?? null,
+  };
+}
+
+export function publicScanJobFromPayload(
+  payload: TikTokScanJobPayload,
+  scanId = payload.scanId,
+): TikTokScanJobPublic {
+  const next = scanCursor(payload.pending[0] ?? null);
+  return {
+    scanId,
+    status: payload.status,
+    processed: payload.processed,
+    total: payload.total,
+    nextHandle: next?.handle ?? payload.nextHandle,
+    next,
+    error: payload.error,
+  };
+}
+
+export function publicCompletedScanJob(
+  scanId: string,
+  payload: TikTokScanPayload,
+): TikTokScanJobPublic {
+  const total = payload.accounts.length;
+  return {
+    scanId,
+    status: "done",
+    processed: total,
+    total,
+    nextHandle: null,
+    next: null,
+    error: null,
+  };
+}
+
+const JOB_ONLY_KEYS = [
+  "status",
+  "scanId",
+  "processed",
+  "total",
+  "nextHandle",
+  "error",
+  "continueToken",
+  "pending",
+  "accountResults",
+  "videos",
+  "trendingPending",
+  "lockedAt",
+  "startedAt",
+] as const;
+
+export function toPublicLastScan(payload: unknown): TikTokScanPayload | null {
+  if (!payload || typeof payload !== "object") return null;
+  if (isOpenScanPayload(payload)) return null;
+  const value = payload as TikTokScanPayload & Record<string, unknown>;
+  if (value.status === "failed") return null;
+  if (!Array.isArray(value.accounts) || !Array.isArray(value.allTime)) return null;
+  const publicPayload: TikTokScanPayload = {
+    scannedAt: typeof value.scannedAt === "string" ? value.scannedAt : new Date().toISOString(),
+    weekKey: typeof value.weekKey === "string" ? value.weekKey : "",
+    routine: WEEKLY_PIANO_TIKTOK_WATCH,
+    accounts: value.accounts,
+    allTime: value.allTime,
+    last7: Array.isArray(value.last7) ? value.last7 : [],
+    last30: Array.isArray(value.last30) ? value.last30 : [],
+    ...(Array.isArray(value.trending) ? { trending: value.trending } : {}),
+  };
+  for (const key of JOB_ONLY_KEYS) delete (publicPayload as Record<string, unknown>)[key];
+  return publicPayload;
+}
+
+export function pickPendingAccount(
+  pending: TikTokScanPendingAccount[],
+  handle?: string,
+  accountId?: string,
+) {
+  if (accountId) {
+    const index = pending.findIndex((account) => account.id === accountId);
+    return index >= 0 ? { account: pending[index]!, index } : null;
+  }
+  if (handle) {
+    const index = pending.findIndex((account) => account.handle === handle);
+    return index >= 0 ? { account: pending[index]!, index } : null;
+  }
+  if (!pending.length) return null;
+  return { account: pending[0]!, index: 0 };
+}
+
+export function jobLockAgeMs(lockedAt: string | null | undefined, now = Date.now()) {
+  if (!lockedAt) return Number.POSITIVE_INFINITY;
+  const parsed = Date.parse(lockedAt);
+  if (Number.isNaN(parsed)) return Number.POSITIVE_INFINITY;
+  return now - parsed;
+}
+
+export function isJobLocked(lockedAt: string | null | undefined, now = Date.now()) {
+  return jobLockAgeMs(lockedAt, now) < TIKTOK_SCAN_LOCK_MS;
+}
+
+export function isJobStale(startedAt: string | undefined, now = Date.now()) {
+  if (!startedAt) return false;
+  const parsed = Date.parse(startedAt);
+  if (Number.isNaN(parsed)) return false;
+  return now - parsed > TIKTOK_SCAN_STALE_MS;
+}
+
 export function normalizeTikTokHandle(value: string) {
   return value
     .trim()
