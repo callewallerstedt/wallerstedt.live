@@ -8,11 +8,13 @@ import {
   isJobStale,
   isOpenScanPayload,
   isTikTokHandle,
+  normalizeScanJobPayload,
   normalizeTikTokHandle,
   pickPendingAccount,
   publicCompletedScanJob,
   publicScanJobFromPayload,
   toPublicLastScan,
+  PIANO_CATEGORY_QUERIES,
   TIKTOK_SCAN_LOCK_MS,
   TIKTOK_SCAN_STALE_MS,
   TIKTOK_SEED_HANDLES,
@@ -96,21 +98,27 @@ test("scan windows rank by views and keep 7/30 day buckets", () => {
     now,
   );
   assert.deepEqual(
-    payload.allTime.map((item) => item.awemeId),
+    payload.watchAllTime.map((item) => item.awemeId),
     ["old", "month", "week"],
   );
+  assert.deepEqual(payload.allTime, payload.watchAllTime);
   assert.deepEqual(
-    payload.last7.map((item) => item.awemeId),
+    payload.watchLast7.map((item) => item.awemeId),
     ["week"],
   );
+  assert.deepEqual(payload.last7, payload.watchLast7);
   assert.deepEqual(
-    payload.last30.map((item) => item.awemeId),
+    payload.watchLast30.map((item) => item.awemeId),
     ["month", "week"],
   );
+  assert.deepEqual(payload.last30, payload.watchLast30);
+  assert.deepEqual(payload.pianoLast7, []);
+  assert.deepEqual(payload.pianoLast30, []);
   assert.equal(payload.routine, "weekly-piano-tiktok-watch");
-  assert.match(payload.allTime[0]!.url, /^https:\/\/www\.tiktok\.com\/@friqtao\/video\/old$/);
+  assert.match(payload.watchAllTime[0]!.url, /^https:\/\/www\.tiktok\.com\/@friqtao\/video\/old$/);
   assert.equal(berlinWeekKey(now), "2026-W36");
   assert.equal(payload.trending, undefined);
+  assert.equal(payload.pianoTrending, undefined);
 });
 
 test("open scan payloads stay out of lastScan and expose a job cursor", () => {
@@ -120,9 +128,16 @@ test("open scan payloads stay out of lastScan and expose a job cursor", () => {
     weekKey: "2026-W36",
     routine: WEEKLY_PIANO_TIKTOK_WATCH,
     accounts: [],
+    watchAllTime: [],
+    watchLast7: [],
+    watchLast30: [],
     allTime: [],
     last7: [],
     last30: [],
+    pianoLast7: [],
+    pianoLast30: [],
+    pianoVideos: [],
+    pianoQueriesPending: [...PIANO_CATEGORY_QUERIES],
     status: "running",
     scanId: "11111111-1111-4111-8111-111111111111",
     processed: 2,
@@ -192,5 +207,112 @@ test("scan payload can carry a piano-trending strip", () => {
     now,
     [ { ...video({ awemeId: "trend", playCount: 99, uniqueId: "keys" }), handle: "keys" } ],
   );
+  assert.deepEqual(payload.pianoTrending?.map((item) => item.awemeId), ["trend"]);
   assert.deepEqual(payload.trending?.map((item) => item.awemeId), ["trend"]);
+});
+
+test("piano category windows split search results by createTime", () => {
+  const now = new Date("2026-09-06T09:00:00+02:00");
+  const nowMs = now.getTime();
+  const payload = buildTikTokScanPayload(
+    [],
+    [
+      {
+        ...video({ awemeId: "watched-week", playCount: 40_000 }),
+        handle: "friqtao",
+        createTimeMs: nowMs - 2 * 86_400_000,
+      },
+    ],
+    now,
+    [
+      {
+        ...video({ awemeId: "piano-old", playCount: 9_000_000, uniqueId: "keys" }),
+        handle: "keys",
+        createTimeMs: nowMs - 60 * 86_400_000,
+      },
+      {
+        ...video({ awemeId: "piano-week", playCount: 120_000, uniqueId: "softkeys" }),
+        handle: "softkeys",
+        createTimeMs: nowMs - 3 * 86_400_000,
+      },
+      {
+        ...video({ awemeId: "piano-month", playCount: 400_000, uniqueId: "publicpiano" }),
+        handle: "publicpiano",
+        createTimeMs: nowMs - 18 * 86_400_000,
+      },
+    ],
+  );
+  assert.deepEqual(payload.watchLast7.map((item) => item.awemeId), ["watched-week"]);
+  assert.deepEqual(payload.pianoLast7.map((item) => item.awemeId), ["piano-week"]);
+  assert.deepEqual(payload.pianoLast30.map((item) => item.awemeId), ["piano-month", "piano-week"]);
+  assert.deepEqual(payload.pianoTrending?.map((item) => item.awemeId), [
+    "piano-old",
+    "piano-month",
+    "piano-week",
+  ]);
+  assert.equal(payload.watchLast7[0]?.awemeId === payload.pianoLast7[0]?.awemeId, false);
+});
+
+test("lastScan maps old watch keys and keeps piano fields public", () => {
+  const completed = buildTikTokScanPayload(
+    [{ handle: "friqtao", nickname: "Friq", followers: 1, videoCount: 1, error: null }],
+    [{ ...video({ awemeId: "old", playCount: 9 }), handle: "friqtao" }],
+    new Date("2026-09-06T08:00:00.000Z"),
+    [{ ...video({ awemeId: "piano", playCount: 3, uniqueId: "keys", createTimeMs: Date.parse("2026-09-05T08:00:00.000Z") }), handle: "keys" }],
+  );
+  const { watchAllTime, watchLast7, watchLast30, pianoLast7, pianoLast30, ...legacy } = completed;
+  const cleaned = toPublicLastScan({
+    ...legacy,
+    allTime: watchAllTime,
+    last7: watchLast7,
+    last30: watchLast30,
+    pianoLast7,
+    pianoLast30,
+    continueToken: "nope",
+    pianoVideos: [{ awemeId: "secret" }],
+    pianoQueriesPending: ["piano cover"],
+  });
+  assert.ok(cleaned);
+  assert.deepEqual(cleaned!.watchAllTime.map((item) => item.awemeId), ["old"]);
+  assert.deepEqual(cleaned!.allTime, cleaned!.watchAllTime);
+  assert.deepEqual(cleaned!.pianoLast7.map((item) => item.awemeId), ["piano"]);
+  assert.deepEqual(cleaned!.pianoLast30.map((item) => item.awemeId), ["piano"]);
+  assert.equal("continueToken" in cleaned!, false);
+  assert.equal("pianoVideos" in cleaned!, false);
+  assert.equal("pianoQueriesPending" in cleaned!, false);
+});
+
+test("open jobs without piano query lists still queue the category searches", () => {
+  const now = "2026-09-06T08:00:00.000Z";
+  const normalized = normalizeScanJobPayload({
+    scannedAt: now,
+    weekKey: "2026-W36",
+    routine: WEEKLY_PIANO_TIKTOK_WATCH,
+    accounts: [],
+    watchAllTime: [],
+    watchLast7: [],
+    watchLast30: [],
+    allTime: [],
+    last7: [],
+    last30: [],
+    pianoLast7: [],
+    pianoLast30: [],
+    status: "running",
+    scanId: "",
+    processed: 8,
+    total: 8,
+    nextHandle: null,
+    error: null,
+    continueToken: "secret-token",
+    pending: [],
+    accountResults: [],
+    videos: [],
+    trendingPending: true,
+    lockedAt: null,
+    startedAt: now,
+  }, "scan-legacy");
+  assert.equal(normalized.scanId, "scan-legacy");
+  assert.deepEqual(normalized.pianoQueriesPending, [...PIANO_CATEGORY_QUERIES]);
+  assert.equal(normalized.trendingPending, true);
+  assert.deepEqual(normalized.pianoVideos, []);
 });

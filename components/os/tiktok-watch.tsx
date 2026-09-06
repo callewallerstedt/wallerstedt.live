@@ -29,8 +29,25 @@ function scanDate(iso: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? formatDate(ymd) : iso;
 }
 
-function trendingVideos(scan: TikTokScanPayload) {
-  return scan.trending?.length ? scan.trending : scan.allTime;
+function watchVideos(
+  scan: TikTokScanPayload,
+  key: "watchAllTime" | "watchLast7" | "watchLast30",
+) {
+  if (key === "watchAllTime") return scan.watchAllTime ?? scan.allTime ?? [];
+  if (key === "watchLast7") return scan.watchLast7 ?? scan.last7 ?? [];
+  return scan.watchLast30 ?? scan.last30 ?? [];
+}
+
+function pianoVideos(scan: TikTokScanPayload, key: "pianoLast7" | "pianoLast30") {
+  return scan[key] ?? [];
+}
+
+function pianoTrendingVideos(scan: TikTokScanPayload) {
+  return scan.pianoTrending?.length ? scan.pianoTrending : (scan.trending ?? []);
+}
+
+function isPianoScanPhase(job: TikTokScanJobPublic | null) {
+  return Boolean(job && job.total > 0 && job.processed >= job.total);
 }
 
 function sleep(ms: number, signal?: AbortSignal) {
@@ -53,6 +70,7 @@ function sleep(ms: number, signal?: AbortSignal) {
 
 function scanButtonLabel(scanning: boolean, job: TikTokScanJobPublic | null) {
   if (!scanning) return "Scan now";
+  if (isPianoScanPhase(job)) return "Piano category…";
   if (job && job.total > 0) {
     const handle = job.nextHandle ? ` · @${job.nextHandle}` : "";
     return `Scanning ${job.processed}/${job.total}${handle}`;
@@ -304,7 +322,12 @@ export function TikTokScanTools({
     })();
   }
 
-  const featured = lastScan ? trendingVideos(lastScan) : [];
+  const featured = lastScan ? pianoTrendingVideos(lastScan) : [];
+  const watchedAllTime = lastScan ? watchVideos(lastScan, "watchAllTime") : [];
+  const watchedLast7 = lastScan ? watchVideos(lastScan, "watchLast7") : [];
+  const watchedLast30 = lastScan ? watchVideos(lastScan, "watchLast30") : [];
+  const categoryLast7 = lastScan ? pianoVideos(lastScan, "pianoLast7") : [];
+  const categoryLast30 = lastScan ? pianoVideos(lastScan, "pianoLast30") : [];
 
   return (
     <div className="flex flex-col gap-2">
@@ -402,38 +425,64 @@ export function TikTokScanTools({
         <div className="flex items-center justify-center gap-2 py-8" role="status" aria-live="polite">
           <OsSpinner size={26} />
           <p className="text-xs text-muted-foreground">
-            {scanJob && scanJob.total > 0
-              ? `Scanning ${scanJob.processed} of ${scanJob.total} accounts${
-                  scanJob.nextHandle ? ` · next @${scanJob.nextHandle}` : ""
-                }`
-              : "Starting watch scan…"}
+            {isPianoScanPhase(scanJob)
+              ? "Piano category search…"
+              : scanJob && scanJob.total > 0
+                ? `Scanning ${scanJob.processed} of ${scanJob.total} accounts${
+                    scanJob.nextHandle ? ` · next @${scanJob.nextHandle}` : ""
+                  }`
+                : "Starting watch scan…"}
           </p>
         </div>
       ) : null}
 
-      {lastScan && featured.length ? (
-        <Panel
-          title="Piano trending"
-          footer={
-            lastScan.trending?.length
-              ? "Treg piano-cover search from the last scan"
-              : "Latest + greatest from watched accounts"
-          }
-        >
-          <div className="-mx-px flex gap-2.5 overflow-x-auto px-3 py-3">
-            {featured.map((video, index) => (
-              <TrendingCard key={`${video.awemeId}-${video.handle}`} rank={index + 1} video={video} />
-            ))}
-          </div>
-        </Panel>
-      ) : null}
-
       {lastScan ? (
-        <div className="grid gap-2 lg:grid-cols-3">
-          <ScanRankList title="Top all-time" videos={lastScan.allTime} hint="From the latest posts Treg returned" />
-          <ScanRankList title="Last 7 days" videos={lastScan.last7} hint="Ranked by views, then likes" />
-          <ScanRankList title="Last 30 days" videos={lastScan.last30} hint="Ranked by views, then likes" />
-        </div>
+        <>
+          <SectionLabel>Watched accounts</SectionLabel>
+          <div className="grid gap-2 lg:grid-cols-3">
+            <ScanRankList
+              title="Watched accounts · all time"
+              videos={watchedAllTime}
+              hint="Latest Treg posts from the watch list, ranked by views then likes"
+            />
+            <ScanRankList
+              title="Watched accounts · last 7 days"
+              videos={watchedLast7}
+              hint="Watch-list videos with createTime in the last 7 days"
+            />
+            <ScanRankList
+              title="Watched accounts · last 30 days"
+              videos={watchedLast30}
+              hint="Watch-list videos with createTime in the last 30 days"
+            />
+          </div>
+
+          <SectionLabel>Piano category</SectionLabel>
+          {featured.length ? (
+            <Panel
+              title="Piano category · trending"
+              footer="Treg piano-cover search from the last scan — not limited to 7 or 30 days"
+            >
+              <div className="-mx-px flex gap-2.5 overflow-x-auto px-3 py-3">
+                {featured.map((video, index) => (
+                  <TrendingCard key={`${video.awemeId}-${video.handle}`} rank={index + 1} video={video} />
+                ))}
+              </div>
+            </Panel>
+          ) : null}
+          <div className="grid gap-2 lg:grid-cols-2">
+            <ScanRankList
+              title="Piano category · last 7 days"
+              videos={categoryLast7}
+              hint="Piano-cover search results with createTime in the last 7 days"
+            />
+            <ScanRankList
+              title="Piano category · last 30 days"
+              videos={categoryLast30}
+              hint="Piano-cover search results with createTime in the last 30 days"
+            />
+          </div>
+        </>
       ) : null}
     </div>
   );
@@ -527,32 +576,77 @@ const MOCK_WATCH_ACCOUNTS: TikTokWatchAccount[] = TIKTOK_SEED_HANDLES.map((handl
 
 function sampleScan(): TikTokScanPayload {
   const scannedAt = "2026-09-06T07:00:00.000Z";
+  const nowMs = Date.parse(scannedAt);
   const clip = (
-    partial: Pick<TikTokScanVideo, "awemeId" | "handle" | "playCount" | "diggCount" | "song" | "desc">,
-  ): TikTokScanVideo => ({
-    uniqueId: partial.handle,
-    coverUrl: `https://picsum.photos/seed/${partial.awemeId}/240/320`,
-    url: `https://www.tiktok.com/@${partial.handle}/video/${partial.awemeId}`,
-    createTimeMs: Date.parse(scannedAt) - 2 * 86_400_000,
-    ...partial,
-  });
-  const allTime = [
+    partial: Pick<TikTokScanVideo, "awemeId" | "handle" | "playCount" | "diggCount" | "song" | "desc"> & {
+      daysAgo: number;
+    },
+  ): TikTokScanVideo => {
+    const { daysAgo, ...rest } = partial;
+    return {
+      uniqueId: rest.handle,
+      coverUrl: `https://picsum.photos/seed/${rest.awemeId}/240/320`,
+      url: `https://www.tiktok.com/@${rest.handle}/video/${rest.awemeId}`,
+      createTimeMs: nowMs - daysAgo * 86_400_000,
+      ...rest,
+    };
+  };
+  const watchAllTime = [
     clip({
-      awemeId: "trend-1",
+      awemeId: "watch-old",
       handle: "friqtao",
       playCount: 2_400_000,
       diggCount: 180_000,
       song: "Love Story",
       desc: "song: Love Story — late night take",
+      daysAgo: 40,
     }),
     clip({
-      awemeId: "trend-2",
+      awemeId: "watch-week",
       handle: "alejs_tunes",
       playCount: 910_000,
       diggCount: 64_000,
       song: "Midnight Hours",
       desc: "Midnight Hours piano",
+      daysAgo: 2,
     }),
+  ];
+  const watchLast7 = watchAllTime.filter((video) => video.awemeId === "watch-week");
+  const watchLast30 = watchLast7;
+  const pianoLast7 = [
+    clip({
+      awemeId: "piano-week",
+      handle: "softkeys",
+      playCount: 320_000,
+      diggCount: 28_000,
+      song: "River Flows in You",
+      desc: "emotional piano cover",
+      daysAgo: 3,
+    }),
+  ];
+  const pianoLast30 = [
+    clip({
+      awemeId: "piano-month",
+      handle: "publicpiano",
+      playCount: 1_100_000,
+      diggCount: 90_000,
+      song: "Interstellar",
+      desc: "public piano cover",
+      daysAgo: 16,
+    }),
+    ...pianoLast7,
+  ];
+  const pianoTrending = [
+    clip({
+      awemeId: "piano-old",
+      handle: "keys",
+      playCount: 8_200_000,
+      diggCount: 640_000,
+      song: "Comptine d'un autre été",
+      desc: "piano cover",
+      daysAgo: 80,
+    }),
+    ...pianoLast30,
   ];
   return {
     scannedAt,
@@ -562,9 +656,15 @@ function sampleScan(): TikTokScanPayload {
       { handle: "friqtao", nickname: "friqtao", followers: 120_000, videoCount: 2, error: null },
       { handle: "alejs_tunes", nickname: "alejs_tunes", followers: 80_000, videoCount: 1, error: null },
     ],
-    allTime,
-    last7: allTime,
-    last30: allTime,
-    trending: allTime,
+    watchAllTime,
+    watchLast7,
+    watchLast30,
+    allTime: watchAllTime,
+    last7: watchLast7,
+    last30: watchLast30,
+    pianoLast7,
+    pianoLast30,
+    pianoTrending,
+    trending: pianoTrending,
   };
 }

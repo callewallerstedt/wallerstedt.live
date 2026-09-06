@@ -9,7 +9,7 @@ A collapsible sidebar on desktop and a fixed tab bar on phones. Video work lives
 | Tab | What it holds |
 | --- | --- |
 | **Overview** | Focus first — the ranked to-do list, drag a number to reprioritise — then cash, this month's revenue and result, estimated bolagsskatt, the running-result curve, upcoming tax and the latest entries. A small **Tasks** button opens the full to-do page. |
-| **TikTok** | Video ideas (song + saved Treg piano-cover search), clickable links in notes, and scan tools: watched accounts, on-demand Treg profile scans, thumbs, piano-trending strip, ranked clips, and the Monday Berlin digest hook |
+| **TikTok** | Video ideas (song + saved Treg piano-cover search), clickable links in notes, and scan tools: watched accounts, on-demand Treg profile scans, thumbs, piano-category 7d/30d lists, a piano-trending strip, ranked watch-list clips, and the Monday Berlin digest hook |
 | **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead (sidebar + Overview button; not a phone tab) |
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
@@ -165,7 +165,10 @@ curl -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" "$BASE/tiktok/watch/
 
 `GET /tiktok/watch` returns `{ ok, count, accounts, lastScan, scan }`. Each account is
 `{ id, handle, uniqueId, nickname, sortOrder }`. `lastScan` (and each item in
-`scans`) is `{ scannedAt, weekKey, routine, accounts, allTime, last7, last30, trending? }`.
+`scans`) is `{ scannedAt, weekKey, routine, accounts, watchAllTime, watchLast7, watchLast30, allTime, last7, last30, pianoLast7, pianoLast30, pianoTrending?, trending? }`.
+`watch*` / `allTime` / `last7` / `last30` are tracked-account videos only. `pianoLast7` /
+`pianoLast30` are Treg piano-category search results filtered by `createTime`.
+`pianoTrending` (`trending`) is the broader piano strip, not limited to 7 or 30 days.
 Video rows use `url` `https://www.tiktok.com/@{unique_id}/video/{aweme_id}` plus
 `coverUrl`, `playCount`, `diggCount`, and `song` when the caption names one.
 
@@ -198,7 +201,9 @@ immediately:
 ```
 
 Poll `GET /tiktok/watch` or `GET /tiktok/watch/scans` until `scan.status` is
-`done` (then `lastScan` is the ranked payload) or `failed`. Body options:
+`done` (then `lastScan` is the ranked payload, including `pianoLast7` /
+`pianoLast30`) or `failed`. After the watch-list accounts, later bursts run
+one piano-category Treg search each. Body options:
 
 - `{}` — start (or join) a full watch-list job
 - `{ "handle" }` / `{ "accountId" }` — process that one watched account

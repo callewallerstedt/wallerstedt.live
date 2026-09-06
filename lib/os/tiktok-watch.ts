@@ -9,17 +9,19 @@ import {
   attachHandle,
   berlinWeekKey,
   buildTikTokScanPayload,
+  dedupeScanVideos,
   isJobLocked,
   isJobStale,
   isOpenScanPayload,
   isTikTokHandle,
+  normalizeScanJobPayload,
   normalizeTikTokHandle,
+  pianoQueriesRemaining,
   pickPendingAccount,
   publicCompletedScanJob,
   publicScanJobFromPayload,
   toPublicLastScan,
-  PIANO_TRENDING_QUERY,
-  TIKTOK_SCAN_TOP,
+  PIANO_CATEGORY_QUERIES,
   TIKTOK_SEED_HANDLES,
   WEEKLY_PIANO_TIKTOK_WATCH,
   type TikTokScanAccountResult,
@@ -32,7 +34,12 @@ import {
 } from "./tiktok-scan";
 
 export type { TikTokWatchAccount };
-import { parseTregTikTokProfile, parseTregTikTokSearch, parseTregTikTokVideos } from "./tiktok-search";
+import {
+  parseTregTikTokProfile,
+  parseTregTikTokSearch,
+  parseTregTikTokVideos,
+  TIKTOK_SEARCH_MAX_LIMIT,
+} from "./tiktok-search";
 import {
   fetchTregTikTokProfile,
   fetchTregTikTokSearch,
@@ -179,10 +186,13 @@ export type TikTokScanPostResult = {
 
 function asJobPayload(payload: unknown, scanId: string): TikTokScanJobPayload | null {
   if (!isOpenScanPayload(payload)) return null;
-  return {
-    ...payload,
-    scanId: payload.scanId || scanId,
-  };
+  return normalizeScanJobPayload(
+    {
+      ...(payload as TikTokScanJobPayload),
+      scanId: payload.scanId || scanId,
+    },
+    scanId,
+  );
 }
 
 async function listScanRows(take = 16): Promise<ScanRow[]> {
@@ -306,7 +316,12 @@ export function publicWatchScanPost(result: TikTokScanPostResult): Omit<TikTokSc
 
 async function writeJob(rowId: string, job: TikTokScanJobPayload) {
   const db = getAccountingDb();
-  const preview = buildTikTokScanPayload(job.accountResults, job.videos, new Date(job.scannedAt), job.trending);
+  const preview = buildTikTokScanPayload(
+    job.accountResults,
+    job.videos,
+    new Date(job.scannedAt),
+    job.pianoVideos,
+  );
   const payload: TikTokScanJobPayload = {
     ...job,
     ...preview,
@@ -320,7 +335,9 @@ async function writeJob(rowId: string, job: TikTokScanJobPayload) {
     pending: job.pending,
     accountResults: job.accountResults,
     videos: job.videos,
-    trendingPending: job.trendingPending,
+    pianoVideos: job.pianoVideos,
+    pianoQueriesPending: job.pianoQueriesPending,
+    trendingPending: job.pianoQueriesPending.length > 0,
     lockedAt: job.lockedAt,
     startedAt: job.startedAt,
   };
@@ -337,7 +354,7 @@ async function writeJob(rowId: string, job: TikTokScanJobPayload) {
 async function failJob(rowId: string, job: TikTokScanJobPayload, message: string) {
   const db = getAccountingDb();
   const failed = {
-    ...buildTikTokScanPayload(job.accountResults, job.videos, new Date(), job.trending),
+    ...buildTikTokScanPayload(job.accountResults, job.videos, new Date(), job.pianoVideos),
     status: "failed" as const,
     scanId: rowId,
     processed: job.processed,
@@ -385,6 +402,8 @@ async function createWatchScanJob(accounts: TikTokWatchAccount[]): Promise<{
     pending,
     accountResults: [],
     videos: [],
+    pianoVideos: [],
+    pianoQueriesPending: [...PIANO_CATEGORY_QUERIES],
     trendingPending: true,
     lockedAt: null,
     startedAt: now.toISOString(),
@@ -465,9 +484,9 @@ async function updateWatchedProfile(accountId: string, account: TikTokScanAccoun
     .catch(() => undefined);
 }
 
-async function finalizeJob(rowId: string, job: TikTokScanJobPayload, trending: TikTokScanVideo[] | undefined) {
+async function finalizeJob(rowId: string, job: TikTokScanJobPayload, pianoVideos: TikTokScanVideo[] | undefined) {
   const db = getAccountingDb();
-  const payload = buildTikTokScanPayload(job.accountResults, job.videos, new Date(), trending);
+  const payload = buildTikTokScanPayload(job.accountResults, job.videos, new Date(), pianoVideos);
   try {
     await db.companyTikTokScan.update({
       where: { id: rowId },
@@ -488,9 +507,9 @@ async function finalizeJob(rowId: string, job: TikTokScanJobPayload, trending: T
   };
 }
 
-async function fetchTrendingVideos(): Promise<TikTokScanVideo[]> {
+async function fetchPianoCategoryVideos(query: string): Promise<TikTokScanVideo[]> {
   try {
-    const raw = await fetchTregTikTokSearch(PIANO_TRENDING_QUERY, TIKTOK_SCAN_TOP);
+    const raw = await fetchTregTikTokSearch(query, TIKTOK_SEARCH_MAX_LIMIT);
     return attachHandle(parseTregTikTokSearch(raw), "piano");
   } catch {
     return [];
@@ -536,21 +555,42 @@ export async function processWatchScanBurst(
 
   if ((requestedHandle || requestedId) && !picked) {
     const alreadyDone = job.accountResults.some((account) => account.handle === requestedHandle);
-    if (alreadyDone || (!job.pending.length && job.trendingPending)) {
+    if (alreadyDone || (!job.pending.length && pianoQueriesRemaining(job))) {
       return toPostResult(publicScanJobFromPayload(job, row.id), await latestWatchScan(), job.continueToken);
     }
     throw new AccountingError("That watched account is not part of this scan.", 400, "validation_error");
   }
 
   if (!picked) {
-    if (!job.trendingPending) {
-      const finished = await finalizeJob(row.id, job, job.trending);
+    const queries = job.pianoQueriesPending;
+    if (!queries.length) {
+      const finished = await finalizeJob(row.id, job, job.pianoVideos);
+      return toPostResult(finished.scan, finished.lastScan, job.continueToken, true);
+    }
+    const query = queries[0];
+    const rest = queries.slice(1);
+    if (!query) {
+      const finished = await finalizeJob(row.id, { ...job, pianoQueriesPending: [], trendingPending: false }, job.pianoVideos);
       return toPostResult(finished.scan, finished.lastScan, job.continueToken, true);
     }
     await writeJob(row.id, { ...job, lockedAt: new Date().toISOString(), status: "running" });
-    const trending = await fetchTrendingVideos();
-    const finished = await finalizeJob(row.id, { ...job, trendingPending: false }, trending);
-    return toPostResult(finished.scan, finished.lastScan, job.continueToken, true);
+    const found = await fetchPianoCategoryVideos(query);
+    const pianoVideos = dedupeScanVideos([...job.pianoVideos, ...found]);
+    const nextJob: TikTokScanJobPayload = {
+      ...job,
+      status: "running",
+      pianoVideos,
+      pianoQueriesPending: rest,
+      trendingPending: rest.length > 0,
+      lockedAt: null,
+      error: null,
+    };
+    if (!rest.length) {
+      const finished = await finalizeJob(row.id, nextJob, pianoVideos);
+      return toPostResult(finished.scan, finished.lastScan, job.continueToken, true);
+    }
+    await writeJob(row.id, nextJob);
+    return toPostResult(publicScanJobFromPayload(nextJob, row.id), await latestWatchScan(), job.continueToken, true);
   }
 
   const remaining = job.pending.filter((_, index) => index !== picked.index);

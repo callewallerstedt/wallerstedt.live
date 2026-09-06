@@ -68,10 +68,16 @@ export async function GET(request: Request, { params }: Params) {
           weekKey: "Berlin ISO week, e.g. 2026-W36",
           routine: "weekly-piano-tiktok-watch",
           accounts: "per-handle scan status (followers, videoCount, error)",
-          allTime: "ranked videos from the latest Treg posts",
-          last7: "videos from the last 7 days, ranked by views then likes",
-          last30: "videos from the last 30 days, ranked by views then likes",
-          trending: "optional Treg piano-cover strip",
+          watchAllTime: "tracked-account videos, ranked by views then likes",
+          watchLast7: "tracked-account videos with createTime in the last 7 days",
+          watchLast30: "tracked-account videos with createTime in the last 30 days",
+          allTime: "alias of watchAllTime (watch-only)",
+          last7: "alias of watchLast7 (watch-only)",
+          last30: "alias of watchLast30 (watch-only)",
+          pianoLast7: "piano-category Treg search with createTime in the last 7 days",
+          pianoLast30: "piano-category Treg search with createTime in the last 30 days",
+          pianoTrending: "optional broader piano-category strip, not time-windowed",
+          trending: "alias of pianoTrending",
           video: {
             awemeId: "string",
             uniqueId: "string",
@@ -103,7 +109,7 @@ export async function GET(request: Request, { params }: Params) {
           "Each list is ordered independently, open rows first, then the owner's sort. GET /tasks?list=video returns only active video ideas in that order — not Past/archived ones. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
         tiktokSeeds: `First load (and later list calls) ensure these watched handles exist: ${TIKTOK_SEED_HANDLES.join(", ")}.`,
         tiktokScan:
-          "POST /tiktok/watch/scan starts an async job and returns immediately with { ok, status: started|running|done|failed, scanId, processed, total, next, scan, lastScan }. Background bursts scan one account per invocation (under Vercel's time limit), persist progress on CompanyTikTokScan, and finish by writing the ranked lastScan. Poll GET /tiktok/watch or GET /tiktok/watch/scans for scan.status and lastScan. POST { handle } or { accountId } processes that one watched account as a burst. POST { scanId } resumes the next burst if the chain stalled. GET also nudges an open job.",
+          "POST /tiktok/watch/scan starts an async job and returns immediately with { ok, status: started|running|done|failed, scanId, processed, total, next, scan, lastScan }. Background bursts scan one watched account per invocation (under Vercel's time limit), then one piano-category Treg search per later burst (piano cover / emotional piano cover / public piano cover), persist progress on CompanyTikTokScan, and finish by writing the ranked lastScan (watch* + pianoLast7/pianoLast30). Poll GET /tiktok/watch or GET /tiktok/watch/scans for scan.status and lastScan. POST { handle } or { accountId } processes that one watched account as a burst. POST { scanId } resumes the next burst if the chain stalled. GET also nudges an open job.",
       },
     });
   });
