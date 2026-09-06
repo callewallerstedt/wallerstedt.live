@@ -62,7 +62,7 @@ reported, so a half-counted final day never reads as a cliff.
 
 ### Tasks need a migration
 
-The to-do list is stored in Postgres (`CompanyTask`). Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing:
+The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
 
 ```bash
 npm run prisma:deploy
