@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: Params) {
         tasks: {
           list: `GET ${base}/tasks?status=open|done|all&area=<area>&list=task|video&archived=1`,
           create: `POST ${base}/tasks`,
-          reorder: `PATCH ${base}/tasks  { "ids": [...] }`,
+          reorder: `PATCH ${base}/tasks  { "ids": [...], "list": "task"|"video" }  (list defaults to task)`,
         },
         task: {
           get: `GET ${base}/tasks/{id}`,
