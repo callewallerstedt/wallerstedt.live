@@ -35,12 +35,17 @@ export function youtubePianoTutorialUrl(query: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song} piano tutorial`)}`;
 }
 
+/** Same piano-flavored string the old TikTok search URL used. */
+export function tiktokPianoSearchQuery(query: string) {
+  return `${query.trim()} piano`;
+}
+
 /**
  * TikTok only runs a search when you hit the video-results path with a
  * fresh `t` timestamp — `/search?q=` just opens a blank TikTok page.
  */
 export function tiktokPianoSearchUrl(query: string, now = Date.now()) {
-  const q = encodeURIComponent(`${query.trim()} piano`);
+  const q = encodeURIComponent(tiktokPianoSearchQuery(query));
   return `https://www.tiktok.com/search/video?q=${q}&t=${now}`;
 }
 

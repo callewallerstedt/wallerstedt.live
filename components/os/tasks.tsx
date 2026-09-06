@@ -20,6 +20,7 @@ import {
   YoutubeIcon,
 } from "lucide-react";
 
+import { TikTokSearchDialog } from "@/components/os/tiktok-search";
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,6 @@ import {
   spotifySearchUrl,
   TASK_AREA_LABELS,
   TASK_AREAS,
-  tiktokPianoSearchUrl,
   youtubePianoTutorialUrl,
 } from "@/lib/os/task-meta";
 import type { ActionItem, TaskArea, TaskList as TaskListName, TaskRow } from "@/lib/os/types";
@@ -505,7 +505,9 @@ export function TaskList({
 
   function itemProps(task: TaskRow) {
     return {
+      accessKey,
       celebrating: sweepingId === task.id,
+      localOnly,
       showSong: list === "video",
       dragging: dragId === task.id,
       justAdded: justAddedId === task.id,
@@ -687,10 +689,19 @@ export function TaskList({
 
 /**
  * Action menu on a video idea: Spotify for the track, YouTube for a piano
- * tutorial, or TikTok for the song plus “piano”.
+ * tutorial, or an in-app TikTok piano-cover search.
  */
-function SongSearchMenu({ query }: { query: string }) {
+function SongSearchMenu({
+  accessKey,
+  localOnly,
+  query,
+}: {
+  accessKey: string;
+  localOnly: boolean;
+  query: string;
+}) {
   const [open, setOpen] = useState(false);
+  const [tiktokOpen, setTiktokOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -767,24 +778,31 @@ function SongSearchMenu({ query }: { query: string }) {
                 <YoutubeIcon className="size-3.5 text-muted-foreground" />
                 YouTube tutorial
               </a>
-              <a
-                className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                href={tiktokPianoSearchUrl(query)}
+              <button
+                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs font-medium text-foreground hover:bg-muted"
                 onClick={(event) => {
                   event.stopPropagation();
-                  event.currentTarget.href = tiktokPianoSearchUrl(query);
+                  setOpen(false);
+                  setTiktokOpen(true);
                 }}
-                rel="noreferrer"
                 role="menuitem"
-                target="_blank"
+                type="button"
               >
                 <TikTokIcon className="size-3.5 text-muted-foreground" />
                 TikTok
-              </a>
+              </button>
             </div>,
             document.querySelector(".os-root") ?? document.body,
           )
         : null}
+      {tiktokOpen ? (
+        <TikTokSearchDialog
+          accessKey={accessKey}
+          localOnly={localOnly}
+          onClose={() => setTiktokOpen(false)}
+          songQuery={query}
+        />
+      ) : null}
     </>
   );
 }
@@ -808,6 +826,7 @@ function TikTokIcon({ className }: { className?: string }) {
  * an open row is never a wall of date pickers and a delete button.
  */
 function TaskItem({
+  accessKey,
   task,
   todayYmd,
   expanded,
@@ -815,6 +834,7 @@ function TaskItem({
   dragging,
   floating = false,
   justAdded,
+  localOnly,
   rank,
   showSong,
   registerRow,
@@ -825,6 +845,7 @@ function TaskItem({
   onDelete,
   onToggleExpanded,
 }: {
+  accessKey: string;
   task: TaskRow;
   todayYmd: string;
   expanded: boolean;
@@ -832,6 +853,7 @@ function TaskItem({
   dragging: boolean;
   floating?: boolean;
   justAdded: boolean;
+  localOnly: boolean;
   rank?: number;
   showSong: boolean;
   registerRow: (element: HTMLElement | null) => void;
@@ -976,7 +998,9 @@ function TaskItem({
           <span className="w-3.5 shrink-0" aria-hidden />
         )}
 
-        {showSong ? <SongSearchMenu query={task.song || task.title} /> : null}
+        {showSong ? (
+          <SongSearchMenu accessKey={accessKey} localOnly={localOnly} query={task.song || task.title} />
+        ) : null}
 
         <button
           aria-expanded={expanded}
