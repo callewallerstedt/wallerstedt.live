@@ -26,6 +26,12 @@ export const TIKTOK_SCAN_TOP = 8;
 export const WEEKLY_PIANO_TIKTOK_WATCH = "weekly-piano-tiktok-watch";
 /** Treg search used for the piano-trending strip on Scan now. */
 export const PIANO_TRENDING_QUERY = "piano cover";
+/** One Treg video-search query per burst, then filter into 7d / 30d. */
+export const PIANO_CATEGORY_QUERIES = [
+  PIANO_TRENDING_QUERY,
+  "emotional piano cover",
+  "public piano cover",
+] as const;
 
 export type TikTokScanVideo = TikTokSearchResult & {
   handle: string;
@@ -44,10 +50,20 @@ export type TikTokScanPayload = {
   weekKey: string;
   routine: typeof WEEKLY_PIANO_TIKTOK_WATCH;
   accounts: TikTokScanAccountResult[];
+  /** Tracked-account videos only. */
+  watchAllTime: TikTokScanVideo[];
+  watchLast7: TikTokScanVideo[];
+  watchLast30: TikTokScanVideo[];
+  /** Watch-only aliases of watchAllTime / watchLast7 / watchLast30. */
   allTime: TikTokScanVideo[];
   last7: TikTokScanVideo[];
   last30: TikTokScanVideo[];
-  /** Optional Treg "piano cover" strip; UI falls back to allTime. */
+  /** Piano-category Treg search, createTime in the last 7 / 30 days. */
+  pianoLast7: TikTokScanVideo[];
+  pianoLast30: TikTokScanVideo[];
+  /** Broader piano-category strip (not time-windowed). */
+  pianoTrending?: TikTokScanVideo[];
+  /** Alias of pianoTrending. */
   trending?: TikTokScanVideo[];
 };
 
@@ -93,6 +109,8 @@ export type TikTokScanJobPayload = TikTokScanPayload & {
   pending: TikTokScanPendingAccount[];
   accountResults: TikTokScanAccountResult[];
   videos: TikTokScanVideo[];
+  pianoVideos: TikTokScanVideo[];
+  pianoQueriesPending: string[];
   trendingPending: boolean;
   lockedAt: string | null;
   startedAt: string;
@@ -186,29 +204,87 @@ const JOB_ONLY_KEYS = [
   "pending",
   "accountResults",
   "videos",
+  "pianoVideos",
+  "pianoQueriesPending",
   "trendingPending",
   "lockedAt",
   "startedAt",
 ] as const;
+
+function videoList(value: Record<string, unknown>, ...keys: string[]): TikTokScanVideo[] | null {
+  for (const key of keys) {
+    if (Array.isArray(value[key])) return value[key] as TikTokScanVideo[];
+  }
+  return null;
+}
 
 export function toPublicLastScan(payload: unknown): TikTokScanPayload | null {
   if (!payload || typeof payload !== "object") return null;
   if (isOpenScanPayload(payload)) return null;
   const value = payload as TikTokScanPayload & Record<string, unknown>;
   if (value.status === "failed") return null;
-  if (!Array.isArray(value.accounts) || !Array.isArray(value.allTime)) return null;
+  const watchAllTime = videoList(value, "watchAllTime", "allTime");
+  if (!Array.isArray(value.accounts) || !watchAllTime) return null;
+  const watchLast7 = videoList(value, "watchLast7", "last7") ?? [];
+  const watchLast30 = videoList(value, "watchLast30", "last30") ?? [];
+  const pianoLast7 = videoList(value, "pianoLast7") ?? [];
+  const pianoLast30 = videoList(value, "pianoLast30") ?? [];
+  const pianoTrending = videoList(value, "pianoTrending", "trending");
   const publicPayload: TikTokScanPayload = {
     scannedAt: typeof value.scannedAt === "string" ? value.scannedAt : new Date().toISOString(),
     weekKey: typeof value.weekKey === "string" ? value.weekKey : "",
     routine: WEEKLY_PIANO_TIKTOK_WATCH,
     accounts: value.accounts,
-    allTime: value.allTime,
-    last7: Array.isArray(value.last7) ? value.last7 : [],
-    last30: Array.isArray(value.last30) ? value.last30 : [],
-    ...(Array.isArray(value.trending) ? { trending: value.trending } : {}),
+    watchAllTime,
+    watchLast7,
+    watchLast30,
+    allTime: watchAllTime,
+    last7: watchLast7,
+    last30: watchLast30,
+    pianoLast7,
+    pianoLast30,
+    ...(pianoTrending?.length ? { pianoTrending, trending: pianoTrending } : {}),
   };
   for (const key of JOB_ONLY_KEYS) delete (publicPayload as Record<string, unknown>)[key];
   return publicPayload;
+}
+
+export function normalizeScanJobPayload(
+  payload: Omit<TikTokScanJobPayload, "pianoVideos" | "pianoQueriesPending"> & {
+    pianoVideos?: TikTokScanVideo[];
+    pianoQueriesPending?: string[];
+  },
+  scanId = payload.scanId,
+): TikTokScanJobPayload {
+  const pianoVideos = Array.isArray(payload.pianoVideos) ? payload.pianoVideos : [];
+  const listed = Array.isArray(payload.pianoQueriesPending)
+    ? payload.pianoQueriesPending.filter((query) => typeof query === "string" && query.trim())
+    : null;
+  const pianoQueriesPending =
+    listed ?? (payload.trendingPending ? [...PIANO_CATEGORY_QUERIES] : []);
+  return {
+    ...payload,
+    scanId: payload.scanId || scanId,
+    pianoVideos,
+    pianoQueriesPending,
+    trendingPending: pianoQueriesPending.length > 0,
+  };
+}
+
+export function dedupeScanVideos(videos: TikTokScanVideo[]) {
+  const seen = new Set<string>();
+  const unique: TikTokScanVideo[] = [];
+  for (const video of videos) {
+    if (seen.has(video.awemeId)) continue;
+    seen.add(video.awemeId);
+    unique.push(video);
+  }
+  return unique;
+}
+
+export function pianoQueriesRemaining(job: Pick<TikTokScanJobPayload, "pianoQueriesPending" | "trendingPending">) {
+  if (Array.isArray(job.pianoQueriesPending)) return job.pianoQueriesPending.length > 0;
+  return job.trendingPending;
 }
 
 export function pickPendingAccount(
@@ -279,9 +355,19 @@ export function berlinWeekKey(now = new Date(), timeZone = COMPANY.timeZone) {
   return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
-function withinDays(video: TikTokScanVideo, days: number, nowMs: number) {
+export function videoWithinDays(video: TikTokScanVideo, days: number, nowMs: number) {
   if (video.createTimeMs == null) return false;
   return nowMs - video.createTimeMs <= days * 86_400_000;
+}
+
+export function rankScanWindow(
+  videos: TikTokScanVideo[],
+  days: number | null,
+  nowMs: number,
+  top = TIKTOK_SCAN_TOP,
+) {
+  const filtered = days == null ? videos : videos.filter((video) => videoWithinDays(video, days, nowMs));
+  return rankTikTokResults(filtered).slice(0, top) as TikTokScanVideo[];
 }
 
 export function attachHandle(videos: TikTokSearchResult[], handle: string): TikTokScanVideo[] {
@@ -292,28 +378,29 @@ export function buildTikTokScanPayload(
   accounts: TikTokScanAccountResult[],
   videos: TikTokScanVideo[],
   now = new Date(),
-  trending?: TikTokScanVideo[],
+  pianoVideos?: TikTokScanVideo[],
 ): TikTokScanPayload {
   const nowMs = now.getTime();
-  const ranked = rankTikTokResults(videos) as TikTokScanVideo[];
-  const trend =
-    trending && trending.length
-      ? (rankTikTokResults(trending).slice(0, TIKTOK_SCAN_TOP) as TikTokScanVideo[])
-      : undefined;
+  const watchAllTime = rankScanWindow(videos, null, nowMs);
+  const watchLast7 = rankScanWindow(videos, 7, nowMs);
+  const watchLast30 = rankScanWindow(videos, 30, nowMs);
+  const pianoPool = pianoVideos?.length ? pianoVideos : [];
+  const pianoLast7 = rankScanWindow(pianoPool, 7, nowMs);
+  const pianoLast30 = rankScanWindow(pianoPool, 30, nowMs);
+  const pianoTrending = pianoPool.length ? rankScanWindow(pianoPool, null, nowMs) : undefined;
   return {
     scannedAt: now.toISOString(),
     weekKey: berlinWeekKey(now),
     routine: WEEKLY_PIANO_TIKTOK_WATCH,
     accounts,
-    allTime: ranked.slice(0, TIKTOK_SCAN_TOP),
-    last7: rankTikTokResults(ranked.filter((video) => withinDays(video, 7, nowMs))).slice(
-      0,
-      TIKTOK_SCAN_TOP,
-    ) as TikTokScanVideo[],
-    last30: rankTikTokResults(ranked.filter((video) => withinDays(video, 30, nowMs))).slice(
-      0,
-      TIKTOK_SCAN_TOP,
-    ) as TikTokScanVideo[],
-    ...(trend ? { trending: trend } : {}),
+    watchAllTime,
+    watchLast7,
+    watchLast30,
+    allTime: watchAllTime,
+    last7: watchLast7,
+    last30: watchLast30,
+    pianoLast7,
+    pianoLast30,
+    ...(pianoTrending?.length ? { pianoTrending, trending: pianoTrending } : {}),
   };
 }

@@ -36,7 +36,7 @@ export async function chainWatchScanContinue(request: Request, scanId: string, t
   }
 }
 
-/** Process one account (or trending) after the response, then hop to a new invocation. */
+/** Process one account (or one piano-category search) after the response, then hop. */
 export function scheduleWatchScanBurst(request: Request, scanId: string, token: string) {
   if (!scanId || !token) return;
   after(async () => {
