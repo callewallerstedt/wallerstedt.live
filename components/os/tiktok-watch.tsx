@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/os/format";
 import {
+  TIKTOK_SEED_HANDLES,
   WEEKLY_PIANO_TIKTOK_WATCH,
   type TikTokScanPayload,
   type TikTokScanVideo,
@@ -177,7 +178,7 @@ export function TikTokScanTools({
       <SectionLabel>Scan tools</SectionLabel>
       <Panel
         title="Watched accounts"
-        footer="Seeded with @friqtao and @alejs_tunes. Scan pulls each profile and their latest videos through Treg."
+        footer="Seeded with @friqtao, @alejs_tunes, @tonyannn, @andy_morris, @willkim_3, @jon.piano, @danny.vega18 and @alkis_ant. Scan pulls each profile and their latest videos through Treg."
         action={
           <Button disabled={scanning || loading || !accounts.length} onClick={scanNow} size="sm" variant="brand">
             {scanning ? "Scanning…" : "Scan now"}
@@ -377,10 +378,13 @@ function ScanRankList({
   );
 }
 
-const MOCK_WATCH_ACCOUNTS: TikTokWatchAccount[] = [
-  { id: "seed-1", handle: "friqtao", uniqueId: "friqtao", nickname: "", sortOrder: 0 },
-  { id: "seed-2", handle: "alejs_tunes", uniqueId: "alejs_tunes", nickname: "", sortOrder: 1 },
-];
+const MOCK_WATCH_ACCOUNTS: TikTokWatchAccount[] = TIKTOK_SEED_HANDLES.map((handle, index) => ({
+  id: `seed-${index + 1}`,
+  handle,
+  uniqueId: handle,
+  nickname: "",
+  sortOrder: index,
+}));
 
 function sampleScan(): TikTokScanPayload {
   const scannedAt = "2026-09-06T07:00:00.000Z";

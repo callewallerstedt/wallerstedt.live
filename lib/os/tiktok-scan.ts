@@ -12,7 +12,16 @@ export type TikTokWatchAccount = {
   sortOrder: number;
 };
 
-export const TIKTOK_SEED_HANDLES = ["friqtao", "alejs_tunes"] as const;
+export const TIKTOK_SEED_HANDLES = [
+  "friqtao",
+  "alejs_tunes",
+  "tonyannn",
+  "andy_morris",
+  "willkim_3",
+  "jon.piano",
+  "danny.vega18",
+  "alkis_ant",
+] as const;
 export const TIKTOK_SCAN_TOP = 8;
 export const WEEKLY_PIANO_TIKTOK_WATCH = "weekly-piano-tiktok-watch";
 /** Treg search used for the piano-trending strip on Scan now. */

@@ -36,31 +36,50 @@ function watchUnavailable() {
   );
 }
 
-export async function listWatchAccounts(): Promise<TikTokWatchAccount[]> {
+const ACCOUNT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toWatchAccount(row: {
+  id: string;
+  handle: string;
+  uniqueId: string;
+  nickname: string;
+  sortOrder: number;
+}): TikTokWatchAccount {
+  return {
+    id: row.id,
+    handle: row.handle,
+    uniqueId: row.uniqueId || row.handle,
+    nickname: row.nickname,
+    sortOrder: row.sortOrder,
+  };
+}
+
+async function ensureSeedAccounts() {
   const db = getAccountingDb();
+  const rows = await db.companyTikTokAccount.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  const have = new Set(rows.map((row) => row.handle));
+  const missing = TIKTOK_SEED_HANDLES.filter((handle) => !have.has(handle));
+  if (!missing.length) return rows;
+  const maxSort = rows.reduce((max, row) => Math.max(max, row.sortOrder), -1);
+  await db.companyTikTokAccount.createMany({
+    data: missing.map((handle, index) => ({
+      handle,
+      uniqueId: handle,
+      sortOrder: maxSort + 1 + index,
+    })),
+  });
+  return db.companyTikTokAccount.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+export async function listWatchAccounts(): Promise<TikTokWatchAccount[]> {
   try {
-    let rows = await db.companyTikTokAccount.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    });
-    if (!rows.length) {
-      await db.companyTikTokAccount.createMany({
-        data: TIKTOK_SEED_HANDLES.map((handle, index) => ({
-          handle,
-          uniqueId: handle,
-          sortOrder: index,
-        })),
-      });
-      rows = await db.companyTikTokAccount.findMany({
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      });
-    }
-    return rows.map((row) => ({
-      id: row.id,
-      handle: row.handle,
-      uniqueId: row.uniqueId || row.handle,
-      nickname: row.nickname,
-      sortOrder: row.sortOrder,
-    }));
+    const rows = await ensureSeedAccounts();
+    return rows.map(toWatchAccount);
   } catch (error) {
     if (isMissingTable(error)) throw watchUnavailable();
     throw error;
@@ -93,15 +112,32 @@ export async function addWatchAccount(rawHandle: string): Promise<TikTokWatchAcc
   return listWatchAccounts();
 }
 
-export async function removeWatchAccount(id: string): Promise<TikTokWatchAccount[]> {
+export async function removeWatchAccount(idOrHandle: string): Promise<TikTokWatchAccount[]> {
   const db = getAccountingDb();
+  const trimmed = idOrHandle.trim();
+  const handle = normalizeTikTokHandle(trimmed);
   try {
-    await db.companyTikTokAccount.deleteMany({ where: { id } });
+    await db.companyTikTokAccount.deleteMany({
+      where: ACCOUNT_ID_RE.test(trimmed) ? { id: trimmed } : { handle },
+    });
   } catch (error) {
     if (isMissingTable(error)) throw watchUnavailable();
     throw error;
   }
   return listWatchAccounts();
+}
+
+export async function removeWatchAccountOrThrow(idOrHandle: string): Promise<TikTokWatchAccount[]> {
+  const trimmed = idOrHandle.trim();
+  const handle = normalizeTikTokHandle(trimmed);
+  const current = await listWatchAccounts();
+  const exists = current.some((account) =>
+    ACCOUNT_ID_RE.test(trimmed) ? account.id === trimmed : account.handle === handle,
+  );
+  if (!exists) {
+    throw new AccountingError("That watched account was not found.", 404, "not_found");
+  }
+  return removeWatchAccount(trimmed);
 }
 
 export async function latestWatchScan(): Promise<TikTokScanPayload | null> {
@@ -112,6 +148,21 @@ export async function latestWatchScan(): Promise<TikTokScanPayload | null> {
     return row.payload as TikTokScanPayload;
   } catch (error) {
     if (isMissingTable(error)) return null;
+    throw error;
+  }
+}
+
+export async function listWatchScans(limit = 8): Promise<TikTokScanPayload[]> {
+  const db = getAccountingDb();
+  try {
+    const take = Math.min(Math.max(1, Math.round(limit)), 8);
+    const rows = await db.companyTikTokScan.findMany({
+      orderBy: { scannedAt: "desc" },
+      take,
+    });
+    return rows.map((row) => row.payload as TikTokScanPayload);
+  } catch (error) {
+    if (isMissingTable(error)) return [];
     throw error;
   }
 }

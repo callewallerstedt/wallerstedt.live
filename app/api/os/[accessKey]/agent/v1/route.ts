@@ -1,6 +1,7 @@
 import { requireAgentOrOwnerSession } from "@/lib/accounting/auth";
 import { privateJson, route } from "@/lib/accounting/http";
 import { TASK_AREAS } from "@/lib/os/task-meta";
+import { TIKTOK_SEED_HANDLES } from "@/lib/os/tiktok-scan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export async function GET(request: Request, { params }: Params) {
     const base = `/api/os/${encodeURIComponent(accessKey)}/agent/v1`;
     return privateJson({
       ok: true,
-      name: "Wallerstedt company task API",
+      name: "Wallerstedt company OS agent API",
       version: 1,
       authentication: {
         bearer: "Authorization: Bearer <ACCOUNTING_AGENT_API_TOKEN>",
@@ -31,6 +32,13 @@ export async function GET(request: Request, { params }: Params) {
           update: `PATCH ${base}/tasks/{id}`,
           remove: `DELETE ${base}/tasks/{id}`,
         },
+        tiktokWatch: {
+          list: `GET ${base}/tiktok/watch`,
+          add: `POST ${base}/tiktok/watch  { "handle": "tonyannn" }`,
+          remove: `DELETE ${base}/tiktok/watch/{id|handle}`,
+          scan: `POST ${base}/tiktok/watch/scan`,
+          scans: `GET ${base}/tiktok/watch/scans`,
+        },
       },
       fields: {
         title: "string, 1-300 characters, required on create",
@@ -46,13 +54,47 @@ export async function GET(request: Request, { params }: Params) {
         done: "boolean, PATCH only",
         archived:
           "boolean, PATCH only — hides the task from the active list (dashboard Past). GET /tasks omits these unless archived=1",
+        handle:
+          "TikTok username without or with @ — tonyannn and @tonyannn both work. Also accepts a profile URL. Normalized to lowercase.",
+        account: {
+          id: "uuid",
+          handle: "normalized unique_id",
+          uniqueId: "TikTok unique_id after a scan, else the handle",
+          nickname: "display name after a scan",
+          sortOrder: "int",
+        },
+        lastScan: {
+          scannedAt: "ISO timestamp",
+          weekKey: "Berlin ISO week, e.g. 2026-W36",
+          routine: "weekly-piano-tiktok-watch",
+          accounts: "per-handle scan status (followers, videoCount, error)",
+          allTime: "ranked videos from the latest Treg posts",
+          last7: "videos from the last 7 days, ranked by views then likes",
+          last30: "videos from the last 30 days, ranked by views then likes",
+          trending: "optional Treg piano-cover strip",
+          video: {
+            awemeId: "string",
+            uniqueId: "string",
+            handle: "string",
+            desc: "caption",
+            song: "guess from caption, or null",
+            playCount: "number or null",
+            diggCount: "number or null",
+            coverUrl: "https thumbnail or null",
+            url: "https://www.tiktok.com/@{unique_id}/video/{aweme_id}",
+            createTimeMs: "number or null",
+          },
+        },
       },
       guarantees: {
         idempotency:
-          "POST returns the existing open task when its title already matches, so a retry never duplicates a row.",
-        scope: "Tasks are separate from bokföring. Writing one never touches the ledger.",
+          "POST /tasks returns the existing open task when its title already matches, so a retry never duplicates a row. POST /tiktok/watch returns the current list when the handle is already watched.",
+        scope: "Tasks and TikTok watches are separate from bokföring. Writing one never touches the ledger.",
         ordering:
           "Each list is ordered independently, open rows first, then the owner's sort. GET /tasks?list=video returns only active video ideas in that order — not Past/archived ones. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
+        tiktokSeeds: `First load (and later list calls) ensure these watched handles exist: ${TIKTOK_SEED_HANDLES.join(", ")}.`,
+        tiktokScan:
+          "POST /tiktok/watch/scan pulls each watched profile through Treg, stores the ranked payload, and returns it as lastScan. GET /tiktok/watch includes the latest lastScan. GET /tiktok/watch/scans returns up to the last 8.",
       },
     });
   });

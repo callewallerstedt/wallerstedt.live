@@ -6,6 +6,7 @@ import {
   buildTikTokScanPayload,
   isTikTokHandle,
   normalizeTikTokHandle,
+  TIKTOK_SEED_HANDLES,
 } from "./tiktok-scan";
 import { extractSongFromCaption, tiktokVideoUrl, type TikTokSearchResult } from "./tiktok-search";
 
@@ -28,8 +29,28 @@ function video(
 test("handles normalize from @, URL, or mixed case", () => {
   assert.equal(normalizeTikTokHandle("@FriqTao"), "friqtao");
   assert.equal(normalizeTikTokHandle("https://www.tiktok.com/@alejs_tunes/video/1"), "alejs_tunes");
+  assert.equal(normalizeTikTokHandle("@tonyannn"), "tonyannn");
+  assert.equal(normalizeTikTokHandle("Jon.Piano"), "jon.piano");
   assert.equal(isTikTokHandle("alejs_tunes"), true);
+  assert.equal(isTikTokHandle("jon.piano"), true);
+  assert.equal(isTikTokHandle("danny.vega18"), true);
   assert.equal(isTikTokHandle("no spaces"), false);
+});
+
+test("seed list keeps the original pair and the extra piano accounts", () => {
+  assert.deepEqual([...TIKTOK_SEED_HANDLES], [
+    "friqtao",
+    "alejs_tunes",
+    "tonyannn",
+    "andy_morris",
+    "willkim_3",
+    "jon.piano",
+    "danny.vega18",
+    "alkis_ant",
+  ]);
+  for (const handle of TIKTOK_SEED_HANDLES) {
+    assert.equal(isTikTokHandle(handle), true, handle);
+  }
 });
 
 test("captions yield a song title when one is named", () => {

@@ -116,9 +116,49 @@ curl -X POST "$BASE/tasks" -H "Authorization: Bearer $TOKEN"   -H "Content-Type:
 
 # Active video ideas only, in the same order as the dashboard list
 curl -H "Authorization: Bearer $TOKEN" "$BASE/tasks?list=video"
-``` A `POST` whose title matches an existing open task
+```
+
+A `POST` whose title matches an existing open task
 returns that task with `"created": false` instead of duplicating it, so a retry
 is safe. Tasks never touch bokföring.
+
+### TikTok watch agent API
+
+Same bearer (`ACCOUNTING_AGENT_API_TOKEN`) and discovery document
+(`GET $BASE`). Mirrors the owner TikTok tab — no cookie required. First list
+call seeds `friqtao`, `alejs_tunes`, `tonyannn`, `andy_morris`, `willkim_3`,
+`jon.piano`, `danny.vega18`, `alkis_ant` if they are missing.
+
+```bash
+BASE=https://wallerstedt.live/api/os/$ACCOUNTING_ACCESS_KEY/agent/v1
+
+# Accounts + latest scan payload
+curl -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" "$BASE/tiktok/watch"
+
+# Add a handle (@ optional). Already-watched handles return the current list.
+curl -X POST "$BASE/tiktok/watch" \
+  -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"tonyannn"}'
+
+# Remove by uuid or handle
+curl -X DELETE "$BASE/tiktok/watch/<id-or-handle>" \
+  -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN"
+
+# Scan now — Treg profile + videos for every watched account (can take ~60s)
+curl -X POST "$BASE/tiktok/watch/scan" \
+  -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN"
+
+# Recent stored scans (up to 8). lastScan is scans[0].
+curl -H "Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN" "$BASE/tiktok/watch/scans"
+```
+
+`GET /tiktok/watch` returns `{ ok, count, accounts, lastScan }`. Each account is
+`{ id, handle, uniqueId, nickname, sortOrder }`. `lastScan` (and each item in
+`scans`) is `{ scannedAt, weekKey, routine, accounts, allTime, last7, last30, trending? }`.
+Video rows use `url` `https://www.tiktok.com/@{unique_id}/video/{aweme_id}` plus
+`coverUrl`, `playCount`, `diggCount`, and `song` when the caption names one.
+`POST /tiktok/watch/scan` returns `{ ok, lastScan }`.
 
 
 ## Bookkeeping web push (iPhone Home Screen)
