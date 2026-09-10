@@ -32,10 +32,19 @@ export function VoiceLive({ accessKey, autoStart = false }: { accessKey: string;
   }, [stop]);
   useEffect(() => { if (autoStart) start(); }, [autoStart, start]);
   return <>
-    <button type="button" aria-label={open ? "Cancel opening Live" : "Open GPT-Live microphone"} onClick={() => { if (open) { stop(); setOpen(false); } else start(); }}
-      className="fixed flex size-14 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ right: "calc(1rem + env(safe-area-inset-right))", bottom: "calc(4.5rem + env(safe-area-inset-bottom))", zIndex: zIndex.sticky }}>
-      <Mic className="size-6" />
+    <button
+      type="button"
+      aria-label={open ? "Cancel opening Live" : "Open GPT-Live microphone"}
+      onClick={() => { if (open) { stop(); setOpen(false); } else start(); }}
+      className="os-live-fab"
+      style={{ zIndex: zIndex.sticky }}
+    >
+      <span className="os-live-fab-pulse" aria-hidden />
+      <span className="os-live-fab-ring" aria-hidden>
+        <span className="os-live-fab-face">
+          <Mic className="size-6" />
+        </span>
+      </span>
     </button>
     {open && microphone && <VoiceSheet accessKey={accessKey} microphone={microphone} onClose={() => { stop(); setOpen(false); }} />}
   </>;

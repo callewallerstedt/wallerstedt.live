@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
       { key: "X-Frame-Options", value: "DENY" },
       { key: "Referrer-Policy", value: "no-referrer" },
       { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet" },
-      { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+      { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
     ];
 
     return [

@@ -329,11 +329,11 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const latestInbound = [...visibleEntries].reverse().find((entry) => entry.role === "assistant" || entry.role === "agent");
 
   return <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); onClose(); }} aria-label="GPT-Live"
-    className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none bg-background p-0 text-foreground backdrop:bg-black/70"
+    className="os-live-dialog fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 bg-background p-0 text-foreground shadow-none outline-none backdrop:bg-black/70"
     style={{ zIndex: zIndex.overlay }}>
-    <div className="relative flex h-full flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
+    <div className="os-live-shell relative flex h-full flex-col">
       <p role="status" className="sr-only">{status}{inboxError ? `. ${inboxError}` : ""}</p>
-      <button autoFocus type="button" aria-label="Close Live and stop microphone" onClick={onClose} className="absolute left-2 top-2 z-10 rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
+      <button autoFocus type="button" aria-label="Close Live and stop microphone" onClick={onClose} className="os-live-close">
         <X className="size-5" />
       </button>
       <div className="relative min-h-0 flex-1">
@@ -379,9 +379,9 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
                 previewHeard.current = true;
               }}
             />
-            <div className={`h-full overflow-y-auto overscroll-contain px-4 pb-2 ${hasTranscript ? "space-y-3 pt-24 os-enter" : "pt-4"}`} role="log" aria-label="Live transcript">
+            <div className={`os-live-transcript h-full overflow-y-auto overscroll-contain ${hasTranscript ? "os-live-transcript--docked os-enter" : ""}`} role="log" aria-label="Live transcript">
               {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="mx-auto w-fit max-w-full rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-sm text-brand">{entry.text}</div> :
-                entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent mr-auto max-w-[min(20rem,85%)]" data-agent={entry.agent}>
+                entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent mr-auto max-w-[min(20rem,82%)]" data-agent={entry.agent}>
                   <p className="os-live-bubble-agent-label">{agentLabel(entry.agent ?? "elon")}</p>
                   <p className="whitespace-pre-wrap break-words">{entry.text}</p>
                   {entry.images?.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mt-2 block">
@@ -390,7 +390,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
                     <img src={url} alt={`Image from ${agentLabel(entry.agent ?? "elon")} — open full image`} loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-lg object-contain" />
                   </a>)}
                 </article> :
-                <article key={entry.id} className={`max-w-[min(20rem,85%)] px-3.5 py-2.5 ${entry.role === "user" ? "ml-auto rounded-[1.25rem] rounded-br-md bg-brand-soft" : "mr-auto rounded-[1.25rem] rounded-bl-md bg-card"}`}>
+                <article key={entry.id} className={`max-w-[min(20rem,82%)] px-3.5 py-2.5 ${entry.role === "user" ? "ml-auto rounded-[1.25rem] rounded-br-md bg-brand-soft" : "mr-auto rounded-[1.25rem] rounded-bl-md bg-card"}`}>
                   {entry.role === "assistant" && <p className="mb-1 text-xs text-muted-foreground">Live</p>}
                   <p className="whitespace-pre-wrap break-words">{entry.text}</p>
                 </article>)}
@@ -399,10 +399,10 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
           </>
         )}
       </div>
-      <footer className="space-y-3 p-4 text-center">
+      <footer className="os-live-footer">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {needsPlayback && <button type="button" className="rounded-lg bg-brand px-4 py-2 text-brand-foreground" onClick={() => { void audio.current?.play().then(() => setNeedsPlayback(false)).catch(() => setError("Audio could not play. Check your device audio settings.")); }}>Tap to hear Live</button>}
-        <button type="button" disabled={status !== "Live" && status !== "Reconnecting"} aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={`mx-auto flex size-16 items-center justify-center rounded-full border border-border/70 bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-40 ${muted ? "opacity-50" : ""}`} onClick={() => {
+        <button type="button" disabled={status !== "Live" && status !== "Reconnecting"} aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={`os-live-mute ${muted ? "os-live-mute--off" : ""}`} onClick={() => {
           mutedRef.current = !mutedRef.current;
           if (mutedRef.current) {
             pendingInput.current.forEach((id) => ignoredInput.current.add(id));
