@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: Params) {
       },
       endpoints: {
         tasks: {
-          list: `GET ${base}/tasks?status=open|done|all&area=<area>&list=task|video&archived=1`,
+          list: `GET ${base}/tasks?status=open|in_progress|done|all&area=<area>&list=task|video&archived=1`,
           create: `POST ${base}/tasks`,
           reorder: `PATCH ${base}/tasks  { "ids": [...], "list": "task"|"video" }  (list defaults to task)`,
         },
@@ -51,7 +51,10 @@ export async function GET(request: Request, { params }: Params) {
         area: TASK_AREAS,
         priority: ["low", "normal", "high"],
         dueDate: "YYYY-MM-DD or null",
-        done: "boolean, PATCH only",
+        done: "boolean, PATCH only — marks finished. Video ideas: second tap on the check.",
+        inProgress:
+          "boolean, PATCH only — video-idea practice. First tap on the check. GET rows also expose status: open|in_progress|done.",
+        status: "open | in_progress | done — PATCH alternative to done/inProgress booleans",
         archived:
           "boolean, PATCH only — hides the task from the active list (dashboard Past). GET /tasks omits these unless archived=1",
         handle:
@@ -106,7 +109,7 @@ export async function GET(request: Request, { params }: Params) {
           "POST /tasks returns the existing open task when its title already matches, so a retry never duplicates a row. POST /tiktok/watch returns the current list when the handle is already watched.",
         scope: "Tasks and TikTok watches are separate from bokföring. Writing one never touches the ledger.",
         ordering:
-          "Each list is ordered independently, open rows first, then the owner's sort. GET /tasks?list=video returns only active video ideas in that order — not Past/archived ones. PATCH /tasks with a partial id list moves exactly those to the top, in that order, and leaves the rest alone.",
+          "Each list is ordered independently. Video ideas that are in_progress (practicing) sit above other open rows, most recently started first. Other open rows keep the owner's sort. GET /tasks?status=open includes in_progress. GET /tasks?list=video returns only active video ideas — not Past/archived ones. PATCH /tasks reorders regular open rows only; practicing rows stay pinned.",
         tiktokSeeds: `First load (and later list calls) ensure these watched handles exist: ${TIKTOK_SEED_HANDLES.join(", ")}.`,
         tiktokScan:
           "POST /tiktok/watch/scan starts an async job and returns immediately with { ok, status: started|running|done|failed, scanId, processed, total, next, scan, lastScan }. Background bursts scan one watched account per invocation (under Vercel's time limit), then one piano-category Treg search per later burst (piano cover / emotional piano cover / public piano cover), persist progress on CompanyTikTokScan, and finish by writing the ranked lastScan (watch* + pianoLast7/pianoLast30). Poll GET /tiktok/watch or GET /tiktok/watch/scans for scan.status and lastScan. POST { handle } or { accountId } processes that one watched account as a burst. POST { scanId } resumes the next burst if the chain stalled. GET also nudges an open job.",

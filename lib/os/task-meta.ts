@@ -1,4 +1,4 @@
-import type { TaskArea, TaskList, TaskRow } from "./types";
+import type { TaskArea, TaskList, TaskRow, TaskWorkStatus } from "./types";
 
 /**
  * Client-safe task constants. Kept out of `tasks.ts` so importing a label into
@@ -49,7 +49,17 @@ export function tiktokPianoSearchUrl(query: string, now = Date.now()) {
   return `https://www.tiktok.com/search/video?q=${q}&t=${now}`;
 }
 
-export type TaskListStatus = "open" | "done" | "all";
+export const TASK_WORK_STATUSES = ["open", "in_progress", "done"] as const;
+
+export function isTaskWorkStatus(value: unknown): value is TaskWorkStatus {
+  return value === "open" || value === "in_progress" || value === "done";
+}
+
+export function isInProgress(task: Pick<TaskRow, "inProgress" | "status" | "done">) {
+  return !task.done && (task.inProgress === true || task.status === "in_progress");
+}
+
+export type TaskListStatus = "open" | "in_progress" | "done" | "all";
 
 export type TaskListQuery = {
   list?: TaskList;
@@ -68,19 +78,42 @@ export function taskListWhere(query: TaskListQuery = {}) {
   const where: {
     list?: TaskList;
     area?: TaskArea;
-    status?: "open" | "done";
+    status?: TaskWorkStatus | { in: TaskWorkStatus[] };
     archivedAt?: null;
   } = {};
   if (query.list) where.list = query.list;
   if (query.area) where.area = query.area;
-  if (status === "open" || status === "done") where.status = status;
+  // "open" on the agent/dashboard means still in play — practicing counts.
+  if (status === "open") where.status = { in: ["open", "in_progress"] };
+  else if (status === "in_progress" || status === "done") where.status = status;
   if (!includeArchived) where.archivedAt = null;
   return where;
 }
 
-/** Same order the dashboard uses: open first, then the owner's sort. */
+/**
+ * First tap on a video-idea check starts practice; second tap marks it done;
+ * a tap on a done row opens it again.
+ */
+export function nextVideoCheckPatch(task: Pick<TaskRow, "done" | "inProgress" | "status">): {
+  done: boolean;
+  inProgress: boolean;
+} {
+  if (task.done) return { done: false, inProgress: false };
+  if (isInProgress(task)) return { done: true, inProgress: false };
+  return { done: false, inProgress: true };
+}
+
+/** Same order the dashboard uses: practicing, then open, then the owner's sort. */
 export function compareTaskRows(a: TaskRow, b: TaskRow) {
   if (a.done !== b.done) return a.done ? 1 : -1;
+  const aProgress = isInProgress(a);
+  const bProgress = isInProgress(b);
+  if (aProgress !== bProgress) return aProgress ? -1 : 1;
+  if (aProgress && bProgress) {
+    // Most recently started (higher sortOrder we assign on first tap) on top.
+    if (a.sortOrder !== b.sortOrder) return b.sortOrder - a.sortOrder;
+    return b.createdAt.localeCompare(a.createdAt);
+  }
   if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
   return b.createdAt.localeCompare(a.createdAt);
 }

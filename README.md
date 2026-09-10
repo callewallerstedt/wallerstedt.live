@@ -111,6 +111,13 @@ independently, so reordering one never disturbs the other. `GET /tasks` returns
 the active working list in that order — archived Past rows are omitted unless
 you pass `archived=1`.
 
+Video ideas use a three-way check on the phone: first tap sets `inProgress`
+(`status: "in_progress"`, practicing, gradient outline, pinned to the top);
+second tap marks `done`; tapping a done row opens it again. Regular to-dos stay
+open ↔ done. `GET /tasks?status=open` includes practicing rows. Max can PATCH
+`{ "inProgress": true }` or `{ "status": "in_progress" }`. No extra column —
+this reuses `CompanyTask.status`. No Prisma migration.
+
 ```bash
 curl -X POST "$BASE/tasks" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"title": "Soluppgång över Vallda, slowed", "list": "video", "song": "Memories"}'
 

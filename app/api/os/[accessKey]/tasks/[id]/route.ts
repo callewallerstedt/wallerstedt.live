@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireOwnerSession } from "@/lib/accounting/auth";
 import { AccountingError } from "@/lib/accounting/errors";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
-import { deleteTask, TASK_AREAS, updateTask } from "@/lib/os/tasks";
+import { deleteTask, TASK_AREAS, TASK_WORK_STATUSES, updateTask } from "@/lib/os/tasks";
 
 function parseTaskBody<TSchema extends z.ZodTypeAny>(schema: TSchema, value: unknown): z.output<TSchema> {
   const result = schema.safeParse(value);
@@ -27,6 +27,8 @@ const patchSchema = z
     notes: z.string().max(4000).optional(),
     song: z.string().max(300).optional(),
     done: z.boolean().optional(),
+    inProgress: z.boolean().optional(),
+    status: z.enum(TASK_WORK_STATUSES).optional(),
     archived: z.boolean().optional(),
     area: z.enum(TASK_AREAS as [string, ...string[]]).optional(),
     priority: z.enum(["low", "normal", "high"]).optional(),

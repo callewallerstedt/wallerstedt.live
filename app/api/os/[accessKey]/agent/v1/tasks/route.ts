@@ -36,7 +36,9 @@ export async function GET(request: Request, { params }: Params) {
     const url = new URL(request.url);
     const statusParam = url.searchParams.get("status") ?? "open";
     const status: TaskListStatus =
-      statusParam === "done" || statusParam === "all" ? statusParam : "open";
+      statusParam === "done" || statusParam === "all" || statusParam === "in_progress"
+        ? statusParam
+        : "open";
     const areaParam = url.searchParams.get("area");
     const listParam = url.searchParams.get("list");
     if (areaParam && !isTaskArea(areaParam)) {

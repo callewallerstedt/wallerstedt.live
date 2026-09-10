@@ -7,20 +7,25 @@ import {
   compareTaskRows,
   isTaskArea,
   isTaskList,
+  isTaskWorkStatus,
   taskListWhere,
   type TaskListQuery,
 } from "./task-meta";
 import { listTikTokSearchTimes } from "./tiktok-search-store";
-import type { TaskArea, TaskList, TaskRow } from "./types";
+import type { TaskArea, TaskList, TaskRow, TaskWorkStatus } from "./types";
 
 export {
   compareTaskRows,
+  isInProgress,
   isTaskArea,
   isTaskList,
+  isTaskWorkStatus,
+  nextVideoCheckPatch,
   spotifySearchUrl,
   TASK_AREAS,
   TASK_AREA_LABELS,
   TASK_LISTS,
+  TASK_WORK_STATUSES,
   taskListWhere,
 } from "./task-meta";
 export type { TaskListQuery, TaskListStatus } from "./task-meta";
@@ -56,6 +61,8 @@ function toRow(record: TaskRecord, searchedAt?: string | null): TaskRow {
     list: isTaskList(record.list) ? record.list : "task",
     song: record.song,
     done: record.status === "done",
+    inProgress: record.status === "in_progress",
+    status: isTaskWorkStatus(record.status) ? record.status : "open",
     priority: record.priority === 2 ? "high" : record.priority === 0 ? "low" : "normal",
     area: isTaskArea(record.area) ? record.area : "company",
     dueDate: record.dueDate ? berlinYmd(record.dueDate) : null,
@@ -127,7 +134,7 @@ export async function findOpenTaskByTitle(
   list: TaskList = "task",
 ): Promise<TaskRow | null> {
   const row = await getAccountingDb().companyTask.findFirst({
-    where: { status: "open", archivedAt: null, list, title: title.slice(0, 300) },
+    where: { status: { in: ["open", "in_progress"] }, archivedAt: null, list, title: title.slice(0, 300) },
     orderBy: { createdAt: "desc" },
   });
   return row ? toRow(row) : null;
@@ -171,6 +178,18 @@ export async function createTask(input: {
   );
 }
 
+function resolveWorkStatus(input: {
+  status?: TaskWorkStatus;
+  done?: boolean;
+  inProgress?: boolean;
+}): TaskWorkStatus | undefined {
+  if (input.status) return input.status;
+  if (input.done === true) return "done";
+  if (input.inProgress === true) return "in_progress";
+  if (input.inProgress === false || input.done === false) return "open";
+  return undefined;
+}
+
 export async function updateTask(
   id: string,
   input: {
@@ -178,12 +197,18 @@ export async function updateTask(
     notes?: string;
     song?: string;
     done?: boolean;
+    inProgress?: boolean;
+    status?: TaskWorkStatus;
     archived?: boolean;
     area?: TaskArea;
     priority?: TaskRow["priority"];
     dueDate?: string | null;
   },
 ): Promise<TaskRow | null> {
+  const db = getAccountingDb();
+  const current = await db.companyTask.findUnique({ where: { id } });
+  if (!current) return null;
+
   const data: Record<string, unknown> = {};
   if (input.title != null) data.title = input.title.slice(0, 300);
   if (input.notes != null) data.notes = input.notes.slice(0, 4000);
@@ -193,17 +218,38 @@ export async function updateTask(
   if (input.dueDate !== undefined) {
     data.dueDate = input.dueDate ? new Date(`${input.dueDate}T00:00:00Z`) : null;
   }
-  if (input.done != null) {
-    data.status = input.done ? "done" : "open";
-    data.completedAt = input.done ? new Date() : null;
+
+  const nextStatus = resolveWorkStatus(input);
+  if (nextStatus) {
+    data.status = nextStatus;
+    data.completedAt = nextStatus === "done" ? new Date() : null;
+    if (nextStatus === "in_progress" && current.status !== "in_progress") {
+      const last = await db.companyTask.findFirst({
+        where: { list: current.list, status: "in_progress" },
+        orderBy: { sortOrder: "desc" },
+        select: { sortOrder: true },
+      });
+      // Newest practice sits at the top of the in-progress group (sort desc).
+      data.sortOrder = (last?.sortOrder ?? 0) + 1;
+    }
+    if (nextStatus === "open" && current.status === "in_progress") {
+      const firstOpen = await db.companyTask.findFirst({
+        where: { list: current.list, status: "open", archivedAt: null },
+        orderBy: { sortOrder: "asc" },
+        select: { sortOrder: true },
+      });
+      // Dropping practice puts the idea back at the top of the regular list.
+      data.sortOrder = (firstOpen?.sortOrder ?? 0) - 1;
+    }
   }
+
   if (input.archived != null) {
     // Archiving hides a task from the working list without destroying it.
     data.archivedAt = input.archived ? new Date() : null;
   }
   if (!Object.keys(data).length) return null;
   try {
-    return toRow(await getAccountingDb().companyTask.update({ where: { id }, data }));
+    return toRow(await db.companyTask.update({ where: { id }, data }));
   } catch (error) {
     if ((error as { code?: string } | null)?.code === "P2025") return null;
     throw error;

@@ -371,6 +371,7 @@ model CompanyTask {
   list         String               @default("task")
   /** Optional track a video idea is built around, used for the Spotify search. */
   song         String               @default("")
+  /** open | in_progress | done. in_progress is the video-idea "practicing" state. */
   status       String               @default("open")
   priority     Int                  @default(1)
   area         String               @default("company")

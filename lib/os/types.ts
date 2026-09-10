@@ -124,6 +124,9 @@ export type TaskArea = "company" | "money" | "music" | "project" | "admin";
 /** The to-do list and the TikTok video-idea list share one table. */
 export type TaskList = "task" | "video";
 
+/** Stored on CompanyTask.status. in_progress is video-idea practice. */
+export type TaskWorkStatus = "open" | "in_progress" | "done";
+
 export type TaskRow = {
   id: string;
   title: string;
@@ -132,6 +135,9 @@ export type TaskRow = {
   /** Track a video idea is built around; drives the song search menu. */
   song: string;
   done: boolean;
+  /** Video ideas only: first tap on the check — practicing, pinned to the top. */
+  inProgress?: boolean;
+  status?: TaskWorkStatus;
   priority: "low" | "normal" | "high";
   area: TaskArea;
   dueDate: string | null;
