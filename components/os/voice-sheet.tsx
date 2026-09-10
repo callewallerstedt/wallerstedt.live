@@ -122,21 +122,27 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
       if (!callId || handledCalls.has(callId)) return;
       handledCalls.add(callId);
       const name = string(item.name);
-      update(callId, "tool", `${name === "send_to_boss" ? "Elon" : "Tool"} · Sending…`);
+      let label = name === "send_to_boss" ? "Elon" : "Agent";
       let result: Json;
       try {
-        if (name !== "send_to_boss") throw new Error("Unknown tool.");
+        if (name !== "send_to_boss" && name !== "send_to_agent") throw new Error("Unknown tool.");
         const args = record(JSON.parse(string(item.arguments)));
-        if (!string(args.message).trim()) throw new Error("Elon message was empty.");
-        result = await jsonResponse(await fetch(`${base}/boss`, {
+        const agent = name === "send_to_boss" ? "elon" : string(args.agent).trim().toLowerCase();
+        if (!agent) throw new Error("Agent name was empty.");
+        label = agent[0].toUpperCase() + agent.slice(1);
+        update(callId, "tool", `${label} · Sending…`);
+        if (!string(args.message).trim()) throw new Error(`${label} message was empty.`);
+        result = await jsonResponse(await fetch(`${base}/agent`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: args.message }), signal: controller.signal,
+          body: JSON.stringify({ agent, message: args.message }), signal: controller.signal,
         }));
-        if (result.ok !== true) throw new Error("Elon did not confirm delivery.");
-        if (!disposed) update(callId, "tool", "Sent to Elon");
+        if (result.ok !== true) throw new Error(`${label} did not confirm delivery.`);
+        const recipient = string(result.agent) || agent;
+        label = recipient[0].toUpperCase() + recipient.slice(1);
+        if (!disposed) update(callId, "tool", `Sent to ${label}`);
       } catch (cause) {
-        result = { ok: false, message: cause instanceof Error ? cause.message : "Elon could not be reached." };
-        if (!disposed) update(callId, "tool", `Elon · ${string(result.message)}`);
+        result = { ok: false, message: cause instanceof Error ? cause.message : `${label} could not be reached.` };
+        if (!disposed) update(callId, "tool", `${label} · ${string(result.message)}`);
       }
       send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(result) } });
       toolContinuation = true;

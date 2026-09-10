@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const bossMessageSchema = z.object({ message: z.string().trim().min(1).max(8000) });
+export const agentMessageSchema = bossMessageSchema.extend({ agent: z.string().trim().min(1).max(100) });
 const imageUrl = z.string().max(2048).url().refine((value) => {
   const url = new URL(value);
   return url.protocol === "https:" && !url.username && !url.password;
@@ -12,4 +13,3 @@ export const bossReplySchema = z.object({
   imageUrls: z.array(imageUrl).max(12).optional(),
   source: z.string().max(100).optional(),
 }).refine((value) => Boolean(value.message?.trim() || value.text?.trim() || value.images?.length || value.imageUrls?.length), "Reply is empty.");
-
