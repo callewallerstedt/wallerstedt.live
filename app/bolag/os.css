@@ -666,9 +666,11 @@ body:has(.os-root) > .footer {
   border-radius: 50%;
   transform: scale(calc(1 + (var(--os-live-level) * 0.11)));
   transition: transform 70ms linear;
-  filter:
-    drop-shadow(0 0 18px color-mix(in oklch, var(--brand) 42%, transparent))
-    drop-shadow(0 0 42px color-mix(in oklch, var(--brand) 22%, transparent));
+}
+
+.os-live-orb--loading,
+.os-live-orb--engaging {
+  filter: none;
 }
 
 .os-live-orb-ring {
@@ -710,6 +712,9 @@ body:has(.os-root) > .footer {
 .os-live-orb--live {
   padding: 6px;
   background: linear-gradient(135deg, var(--brand-from), var(--brand), var(--brand-to));
+  filter:
+    drop-shadow(0 0 18px color-mix(in oklch, var(--brand) 42%, transparent))
+    drop-shadow(0 0 42px color-mix(in oklch, var(--brand) 22%, transparent));
   box-shadow:
     0 0 0 1px color-mix(in oklch, var(--brand) 28%, transparent),
     0 0 28px color-mix(in oklch, var(--brand) 34%, transparent),
@@ -752,12 +757,9 @@ body:has(.os-root) > .footer {
   inset: 7px;
   width: auto;
   height: auto;
-}
-
-.os-live-orb--engaging .os-live-orb-face {
-  opacity: 0.35;
-  transform: scale(0.92);
-  transition-delay: 0.45s;
+  opacity: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .os-live-wave {

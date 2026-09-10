@@ -81,17 +81,17 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => {
     if (!preview) return;
-    const timer = setTimeout(() => setPreviewReady(true), 900);
+    setPreviewReady(false);
+    const timer = setTimeout(() => {
+      setPreviewReady(true);
+      setEntries([
+        { id: "preview-user", role: "user", text: "Hey Live — ping the crew", at: 1 },
+        { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists.", at: 2 },
+        ...PREVIEW_AGENTS.map(({ agent, text }, index) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text, at: 3 + index })),
+      ]);
+    }, 900);
     return () => clearTimeout(timer);
   }, [preview]);
-  useEffect(() => {
-    if (!preview || !previewReady) return;
-    setEntries([
-      { id: "preview-user", role: "user", text: "Hey Live — ping the crew", at: 1 },
-      { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists.", at: 2 },
-      ...PREVIEW_AGENTS.map(({ agent, text }, index) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text, at: 3 + index })),
-    ]);
-  }, [preview, previewReady]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [entries]);
 
   useEffect(() => {
@@ -326,15 +326,16 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         for (const value of Array.isArray(data.items) ? data.items : []) {
           const item = record(value);
           const id = string(item.id);
-          if (typeof item.timestamp !== "number" || item.timestamp < openedAt) continue;
+          const timestamp = item.timestamp;
+          if (typeof timestamp !== "number" || timestamp < openedAt) continue;
           if (!id || seen.has(id)) continue;
           seen.add(id);
-          if (typeof item.timestamp === "number") cursor = Math.max(cursor, item.timestamp);
+          cursor = Math.max(cursor, timestamp);
           const images = (Array.isArray(item.images) ? item.images : []).filter((url): url is string => typeof url === "string" && url.startsWith("https://"));
           const text = (string(item.message) || string(item.text)).trim();
           if (!text && !images.length) continue;
           const agent = namedVoiceAgent(string(item.agent), string(item.source)) ?? lastRouted.current;
-          setEntries((previous) => insertEntry(previous, { id: `agent-${id}`, role: "agent", agent, text, images, at: item.timestamp }));
+          setEntries((previous) => insertEntry(previous, { id: `agent-${id}`, role: "agent", agent, text, images, at: timestamp }));
           pendingReplies.current.push({ id, text, images });
         }
         flushReplies.current();
