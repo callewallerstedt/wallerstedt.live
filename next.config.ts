@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   typedRoutes: true,
+  experimental: {
+    // Tab switches reuse the last RSC payload instead of waiting on the ledger.
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
   async redirects() {
     return [
       { source: "/os/:path*", destination: "/bolag/:path*", permanent: false },

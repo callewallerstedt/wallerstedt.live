@@ -5,7 +5,7 @@ import { AccountingError } from "@/lib/accounting/errors";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
 import { parseWithSchema } from "@/lib/accounting/validation";
 import { deleteTask, getTask, updateTask } from "@/lib/os/tasks";
-import { TASK_AREAS } from "@/lib/os/task-meta";
+import { TASK_AREAS, TASK_WORK_STATUSES } from "@/lib/os/task-meta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,8 @@ const patchSchema = z
     notes: z.string().max(4000).optional(),
     song: z.string().max(300).optional(),
     done: z.boolean().optional(),
+    inProgress: z.boolean().optional(),
+    status: z.enum(TASK_WORK_STATUSES).optional(),
     archived: z.boolean().optional(),
     area: z.enum(TASK_AREAS as [string, ...string[]]).optional(),
     priority: z.enum(["low", "normal", "high"]).optional(),

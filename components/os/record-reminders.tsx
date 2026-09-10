@@ -49,17 +49,6 @@ function pushBase(accessKey: string) {
   return `/api/os/${encodeURIComponent(accessKey)}/push`;
 }
 
-export function BolagServiceWorker() {
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker
-      .register("/bolag-sw.js", { scope: "/bolag/", updateViaCache: "none" })
-      .then((registration) => registration.update())
-      .catch(() => undefined);
-  }, []);
-  return null;
-}
-
 export function RecordReminders({ accessKey }: { accessKey: string }) {
   const [isIos, setIsIos] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);

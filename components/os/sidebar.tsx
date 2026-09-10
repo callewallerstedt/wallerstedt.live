@@ -101,6 +101,7 @@ export function OsSidebar({
                 active && "bg-brand-soft text-foreground ring-1 ring-brand/40",
               )}
               href={routeHref(href)}
+              prefetch
               title={collapsed ? item.label : undefined}
             >
               <Icon className={cn("size-[1.15rem] shrink-0", active && "text-brand")} />
@@ -163,6 +164,7 @@ export function OsTabBar({ accessKey, taskCount }: { accessKey: string; taskCoun
                 active ? "text-brand" : "text-muted-foreground",
               )}
               href={routeHref(href)}
+              prefetch
             >
               <span className="relative">
                 <Icon className="size-[1.3rem]" />

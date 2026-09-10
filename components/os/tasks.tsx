@@ -20,8 +20,9 @@ import {
   YoutubeIcon,
 } from "lucide-react";
 
+import dynamic from "next/dynamic";
+
 import { TikTokIcon } from "@/components/os/tiktok-icon";
-import { TikTokSearchDialog } from "@/components/os/tiktok-search";
 import { LinkedNotes } from "@/components/os/linked-notes";
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
 import {
+  isInProgress,
+  nextVideoCheckPatch,
   spotifySearchUrl,
   TASK_AREA_LABELS,
   TASK_AREAS,
@@ -39,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { zIndex } from "@/lib/z-index";
 
 type Patch = Partial<
-  Pick<TaskRow, "title" | "notes" | "song" | "done" | "area" | "priority" | "dueDate">
+  Pick<TaskRow, "title" | "notes" | "song" | "done" | "inProgress" | "area" | "priority" | "dueDate">
 > & {
   archived?: boolean;
 };
@@ -49,6 +52,10 @@ const PRIORITY_LABELS: Record<TaskRow["priority"], string> = {
   normal: "Normal",
   high: "High",
 };
+
+const TikTokSearchDialog = dynamic(
+  () => import("@/components/os/tiktok-search").then((mod) => ({ default: mod.TikTokSearchDialog })),
+);
 
 function endpoint(accessKey: string, id?: string) {
   return `/api/os/${encodeURIComponent(accessKey)}/tasks${id ? `/${id}` : ""}`;
@@ -75,7 +82,7 @@ function notesPreview(notes: string) {
 
 function openIdsInOrder(rows: TaskRow[], list: TaskListName) {
   return rows
-    .filter((task) => task.list === list && !task.archivedAt && !task.done)
+    .filter((task) => task.list === list && !task.archivedAt && !task.done && !isInProgress(task))
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((task) => task.id);
 }
@@ -160,9 +167,34 @@ export function TaskList({
       current.map((task) => {
         if (task.id !== id) return task;
         const { archived, ...rest } = next;
+        const inProgress =
+          rest.inProgress === true
+            ? true
+            : rest.done === true || rest.inProgress === false
+              ? false
+              : task.inProgress;
+        const done = rest.done === true ? true : rest.inProgress === true ? false : (rest.done ?? task.done);
+        let sortOrder = task.sortOrder;
+        if (inProgress && !isInProgress(task)) {
+          const last = current
+            .filter((row) => row.id !== id && isInProgress(row))
+            .reduce((max, row) => Math.max(max, row.sortOrder), 0);
+          sortOrder = last + 1;
+        }
+        if (!inProgress && !done && isInProgress(task)) {
+          const firstOpen = current
+            .filter((row) => row.id !== id && !row.archivedAt && !row.done && !isInProgress(row))
+            .reduce((min, row) => Math.min(min, row.sortOrder), 0);
+          sortOrder = firstOpen - 1;
+        }
         return {
           ...task,
           ...rest,
+          done,
+          inProgress,
+          status: done ? "done" : inProgress ? "in_progress" : "open",
+          sortOrder,
+          completedAt: done ? new Date().toISOString() : rest.done === false || rest.inProgress ? null : task.completedAt,
           ...(archived == null
             ? {}
             : { archivedAt: archived ? new Date().toISOString() : null }),
@@ -190,23 +222,32 @@ export function TaskList({
   const { open, done, doneCount, archived } = useMemo(() => {
     const live = serverTasks.filter((task) => !task.archivedAt);
     const stillOpen = (task: TaskRow) => !task.done || task.id === sweepingId;
-    // Open vs done first, then the user's order. Overdue stays a visual cue —
-    // sorting by it after a drag would yank rows back to the top.
+    // Open vs done first, then practicing above other open, then the user's
+    // order. Overdue stays a visual cue — sorting by it after a drag would
+    // yank rows back to the top.
     const sorted = [...live].sort((a, b) => {
       if (stillOpen(a) !== stillOpen(b)) return stillOpen(a) ? -1 : 1;
+      if (stillOpen(a) && stillOpen(b)) {
+        const aProgress = isInProgress(a);
+        const bProgress = isInProgress(b);
+        if (aProgress !== bProgress) return aProgress ? -1 : 1;
+        if (aProgress && bProgress && a.sortOrder !== b.sortOrder) return b.sortOrder - a.sortOrder;
+      }
       return a.sortOrder - b.sortOrder;
     });
     const openTasks = sorted.filter(stillOpen);
+    const practicing = openTasks.filter((task) => isInProgress(task));
+    const regular = openTasks.filter((task) => !isInProgress(task));
     if (localOrder) {
       const position = new Map(localOrder.map((id, index) => [id, index]));
-      openTasks.sort(
+      regular.sort(
         (a, b) =>
           (position.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
           (position.get(b.id) ?? Number.MAX_SAFE_INTEGER),
       );
     }
     return {
-      open: openTasks,
+      open: [...practicing, ...regular],
       done: sorted.filter((task) => !stillOpen(task)),
       doneCount: live.filter((task) => task.done).length,
       archived: serverTasks.filter((task) => task.archivedAt),
@@ -521,7 +562,7 @@ export function TaskList({
         const row = rowRefs.current.get(task.id);
         if (!row) return;
         const box = row.getBoundingClientRect();
-        const order = open.map((rowItem) => rowItem.id);
+        const order = open.filter((rowItem) => !isInProgress(rowItem)).map((rowItem) => rowItem.id);
         localOrderRef.current = order;
         dragStartOrderRef.current = order.join();
         pointerOriginRef.current = { x: event.clientX, y: event.clientY };
@@ -557,8 +598,14 @@ export function TaskList({
       title={title}
       action={
         <span className="text-xs text-muted-foreground">
-          {serverTasks.filter((task) => !task.archivedAt).length - doneCount} open
-          {doneCount ? ` · ${doneCount} done` : ""}
+          {(() => {
+            const live = serverTasks.filter((task) => !task.archivedAt);
+            const practicing = live.filter((task) => isInProgress(task)).length;
+            const openCount = live.length - doneCount;
+            return `${practicing ? `${practicing} practicing · ` : ""}${openCount} open${
+              doneCount ? ` · ${doneCount} done` : ""
+            }`;
+          })()}
         </span>
       }
     >
@@ -601,7 +648,7 @@ export function TaskList({
 
       {visible.length ? (
         <div className="flex flex-col gap-1 px-2 pb-2">
-          {visible.map((task, index) =>
+          {visible.map((task) =>
             lift && task.id === lift.id ? (
               <div
                 aria-hidden
@@ -614,7 +661,11 @@ export function TaskList({
                 style={{ height: lift.height }}
               />
             ) : (
-              <TaskItem key={task.id} rank={index + 1} {...itemProps(task)} />
+              <TaskItem
+                key={task.id}
+                rank={isInProgress(task) ? undefined : visible.filter((row) => !isInProgress(row)).indexOf(task) + 1}
+                {...itemProps(task)}
+              />
             ),
           )}
         </div>
@@ -912,7 +963,9 @@ function TaskItem({
   const SWIPE_THRESHOLD = 88;
   // Keep open-row size while the accent sweep plays — otherwise the done
   // styles shrink the card mid-animation.
+  const practicing = isInProgress(task);
   const appearOpen = !task.done || celebrating;
+  const isVideo = task.list === "video";
 
   function onPointerDown(event: React.PointerEvent) {
     if (editing || floating) return;
@@ -955,6 +1008,7 @@ function TaskItem({
         justAdded && "os-pop-in",
         dragging && !floating && !celebrating && "bg-card shadow-lg ring-brand/40",
       )}
+      data-progress={practicing && !celebrating ? "true" : undefined}
       data-celebrate={celebrating ? "true" : undefined}
       data-dragging={dragging ? "true" : undefined}
       ref={registerRow}
@@ -1059,14 +1113,29 @@ function TaskItem({
               </span>
             ) : null}
           </span>
-          {task.priority === "high" && appearOpen ? <Pill tone="warn">High</Pill> : null}
+          {practicing && appearOpen ? <Pill tone="brand">Practicing</Pill> : null}
+          {task.priority === "high" && appearOpen && !practicing ? <Pill tone="warn">High</Pill> : null}
         </button>
 
         <button
-          aria-label={task.done ? `Reopen ${task.title}` : `Complete ${task.title}`}
-          aria-pressed={task.done}
+          aria-label={
+            task.done
+              ? `Reopen ${task.title}`
+              : practicing
+                ? `Mark ${task.title} done`
+                : isVideo
+                  ? `Start practicing ${task.title}`
+                  : `Complete ${task.title}`
+          }
+          aria-pressed={task.done || practicing}
           className="-m-1 flex shrink-0 touch-manipulation p-1"
           onClick={() => {
+            if (isVideo) {
+              const next = nextVideoCheckPatch(task);
+              if (next.done) onCelebrate();
+              onPatch(next);
+              return;
+            }
             if (!task.done) onCelebrate();
             onPatch({ done: !task.done });
           }}
@@ -1076,6 +1145,7 @@ function TaskItem({
             className={cn(
               "os-task-check flex size-5 items-center justify-center rounded-full ring-1 ring-foreground/25 transition-colors",
               task.done && "bg-brand-gradient ring-0",
+              practicing && !task.done && "os-task-check-progress ring-0",
             )}
           >
             {task.done ? (

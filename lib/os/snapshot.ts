@@ -1,10 +1,12 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 
 import { listAccounts } from "@/lib/accounting/service";
 import { getAccountingDb } from "@/lib/accounting/db";
 import { catalogSongs } from "@/lib/site-data";
 
 import { buildActions } from "./actions";
+import { OS_LEDGER_CACHE_TAG } from "./cache";
 import { taxUpcoming } from "./calendar";
 import { COMPANY } from "./company";
 import { berlinYmd, parseCatalogDate } from "./format";
@@ -14,8 +16,12 @@ import type { OsPageSlug } from "./route";
 import { hasOsSession } from "./session";
 import { listTasks } from "./tasks";
 import { connectBlocks, detectSources, sourceById } from "./sources";
+import { osSnapshotKind, publishLedger } from "./snapshot-shape";
 import type { LedgerSnapshot, OsSnapshot, ReleaseRow, UpcomingRow } from "./types";
 import { loadPersonalWealth, loadSpotifyArtist } from "./wealth";
+
+export { osSnapshotKind, publishLedger } from "./snapshot-shape";
+export type { OsSnapshotKind } from "./snapshot-shape";
 
 async function loadRawEntries(): Promise<RawLedgerEntry[]> {
   const rows = await getAccountingDb().accountingEntry.findMany({
@@ -115,10 +121,10 @@ function emptySnapshot(overrides: Partial<OsSnapshot> = {}): OsSnapshot {
   };
 }
 
-export const loadLedgerBundle = cache(async (): Promise<{
+async function readLedgerBundle(): Promise<{
   ledger: LedgerSnapshot | null;
   ledgerError: string | null;
-}> => {
+}> {
   try {
     const [entries, accounts, pendingDraftCount] = await Promise.all([
       loadRawEntries(),
@@ -135,7 +141,14 @@ export const loadLedgerBundle = cache(async (): Promise<{
       ledgerError: error instanceof Error ? error.message : "Ledger unavailable",
     };
   }
+}
+
+const readCachedLedgerBundle = unstable_cache(readLedgerBundle, ["os-ledger-bundle"], {
+  revalidate: 20,
+  tags: [OS_LEDGER_CACHE_TAG],
 });
+
+export const loadLedgerBundle = cache(readCachedLedgerBundle);
 
 export const loadSpotifyBundle = cache(async () => {
   const sources = detectSources();
@@ -161,11 +174,25 @@ export async function loadOverviewSnapshot(accessKey: string): Promise<OsSnapsho
   };
   return emptySnapshot({
     ...ledgerBundle,
+    ledger: ledgerBundle.ledger ? publishLedger(ledgerBundle.ledger, "overview") : null,
     tasks: taskBundle.tasks,
     tasksError: taskBundle.error,
     upcoming,
     actions: buildActions(context),
   });
+}
+
+export async function loadTikTokSnapshot(): Promise<OsSnapshot> {
+  const taskBundle = await listTasks();
+  return emptySnapshot({
+    releases: [],
+    tasks: taskBundle.tasks,
+    tasksError: taskBundle.error,
+  });
+}
+
+export async function loadSettingsSnapshot(): Promise<OsSnapshot> {
+  return emptySnapshot({ releases: [] });
 }
 
 export async function loadMusicSnapshot(): Promise<OsSnapshot> {
@@ -174,22 +201,26 @@ export async function loadMusicSnapshot(): Promise<OsSnapshot> {
 
 export async function loadWealthSnapshot(): Promise<OsSnapshot> {
   const [ledgerBundle, wealth] = await Promise.all([loadLedgerBundle(), loadWealthBundle()]);
-  return emptySnapshot({ ...ledgerBundle, wealth });
+  return emptySnapshot({
+    ...ledgerBundle,
+    ledger: ledgerBundle.ledger ? publishLedger(ledgerBundle.ledger, "money") : null,
+    wealth,
+  });
 }
 
 export async function loadPageSnapshot(accessKey: string, page: OsPageSlug): Promise<OsSnapshot> {
-  switch (page) {
+  switch (osSnapshotKind(page)) {
     case "music":
       return loadMusicSnapshot();
-    // Money absorbed Tax, Work, Invest and Wealth, so it needs the trading book
-    // alongside the ledger.
     case "money":
       return loadWealthSnapshot();
-    // Tasks and TikTok both need the owner's lists (to-dos vs video ideas).
-    case "tasks":
     case "tiktok":
-      return loadOverviewSnapshot(accessKey);
-    default:
+      return loadTikTokSnapshot();
+    case "settings":
+    case "vault":
+      return loadSettingsSnapshot();
+    case "tasks":
+    case "overview":
       return loadOverviewSnapshot(accessKey);
   }
 }

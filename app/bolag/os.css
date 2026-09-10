@@ -320,6 +320,48 @@ body:has(.os-root) > .footer {
   animation: os-check-draw 280ms 40ms ease-out backwards;
 }
 
+/* Persistent version of the celebrate ring — video ideas that are in progress. */
+.os-task-row[data-progress="true"] {
+  isolation: isolate;
+}
+
+.os-task-row[data-progress="true"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+.os-task-row[data-progress="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    125deg,
+    var(--brand-from),
+    var(--brand),
+    var(--brand-to)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.os-task-check-progress {
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, var(--brand-from), var(--brand-to)) border-box;
+  border: 2px solid transparent;
+}
+
 /* Opening the app: the brand gradient sweeps around the logo's edge while the
    first paint is still on its way. */
 @property --os-spin {
@@ -385,18 +427,10 @@ body:has(.os-root) > .footer {
   padding: 7px;
 }
 
-/* Sections arrive in sequence rather than all at once. */
+/* A short fade, no stagger — tab switches should feel instant, not choreographed. */
 .os-enter > * {
-  animation: os-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: os-fade-up 140ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-
-.os-enter > *:nth-child(1) { animation-delay: 0ms; }
-.os-enter > *:nth-child(2) { animation-delay: 40ms; }
-.os-enter > *:nth-child(3) { animation-delay: 80ms; }
-.os-enter > *:nth-child(4) { animation-delay: 120ms; }
-.os-enter > *:nth-child(5) { animation-delay: 160ms; }
-.os-enter > *:nth-child(6) { animation-delay: 200ms; }
-.os-enter > *:nth-child(n + 7) { animation-delay: 240ms; }
 
 .os-pop-in {
   animation: os-pop-in 300ms cubic-bezier(0.22, 1, 0.36, 1);

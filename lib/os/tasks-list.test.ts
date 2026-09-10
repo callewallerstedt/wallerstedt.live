@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compareTaskRows, taskListWhere } from "./task-meta";
+import { compareTaskRows, nextVideoCheckPatch, taskListWhere } from "./task-meta";
 import type { TaskRow } from "./types";
 
 function row(partial: Partial<TaskRow> & Pick<TaskRow, "id" | "sortOrder">): TaskRow {
@@ -24,7 +24,15 @@ function row(partial: Partial<TaskRow> & Pick<TaskRow, "id" | "sortOrder">): Tas
 test("the agent working list drops Past rows and keeps one list", () => {
   assert.deepEqual(taskListWhere({ list: "video", status: "open", includeArchived: false }), {
     list: "video",
-    status: "open",
+    status: { in: ["open", "in_progress"] },
+    archivedAt: null,
+  });
+});
+
+test("the agent can ask only for ideas that are being practiced", () => {
+  assert.deepEqual(taskListWhere({ list: "video", status: "in_progress", includeArchived: false }), {
+    list: "video",
+    status: "in_progress",
     archivedAt: null,
   });
 });
@@ -42,10 +50,31 @@ test("video ideas stay in the owner's sort, open ones first", () => {
   const later = row({ id: "later", sortOrder: 2, createdAt: "2026-09-03T00:00:00.000Z" });
   const first = row({ id: "first", sortOrder: 1, createdAt: "2026-09-04T00:00:00.000Z" });
   const done = row({ id: "done", sortOrder: 0, done: true });
+  const practicingOlder = row({
+    id: "practice-old",
+    sortOrder: 1,
+    inProgress: true,
+    status: "in_progress",
+  });
+  const practicingNewer = row({
+    id: "practice-new",
+    sortOrder: 4,
+    inProgress: true,
+    status: "in_progress",
+  });
 
-  const ordered = [done, later, first, past].sort(compareTaskRows);
+  const ordered = [done, later, first, past, practicingOlder, practicingNewer].sort(compareTaskRows);
   assert.deepEqual(
     ordered.map((task) => task.id),
-    ["past", "first", "later", "done"],
+    ["practice-new", "practice-old", "past", "first", "later", "done"],
   );
+});
+
+test("the video-idea check cycles open → practicing → done → open", () => {
+  const open = row({ id: "clip", sortOrder: 0 });
+  const practicing = nextVideoCheckPatch(open);
+  assert.deepEqual(practicing, { done: false, inProgress: true });
+  const done = nextVideoCheckPatch({ ...open, ...practicing });
+  assert.deepEqual(done, { done: true, inProgress: false });
+  assert.deepEqual(nextVideoCheckPatch({ ...open, ...done }), { done: false, inProgress: false });
 });

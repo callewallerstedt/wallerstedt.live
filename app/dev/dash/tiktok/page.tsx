@@ -1,4 +1,4 @@
-import { TikTokPage } from "@/components/os/pages";
+import { TikTokPage } from "@/components/os/tiktok-page";
 import type { TaskRow } from "@/lib/os/types";
 
 function todayYmd() {
@@ -29,6 +29,8 @@ function sampleTasks(today: string): TaskRow[] {
       song: "Midnight Hours",
       tiktokSearchedAt: "2026-09-05T18:00:00.000Z",
       done: false,
+      inProgress: true,
+      status: "in_progress",
       priority: "high",
       area: "music",
       dueDate: daysFromToday(1),
