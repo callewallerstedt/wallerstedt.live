@@ -64,9 +64,11 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const [needsPlayback, setNeedsPlayback] = useState(false);
   const [inboxError, setInboxError] = useState("");
   const [spotlight, setSpotlight] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
   const previewHeard = useRef(false);
   const previewVoiceFrames = useRef(0);
   const base = `/api/os/${encodeURIComponent(accessKey)}/voice`;
+  const orbReady = preview ? previewReady : status === "Live" || status === "Reconnecting";
 
   function update(id: string, role: Entry["role"], text: string, append = false, at = Date.now()) {
     setEntries((previous) => {
@@ -79,12 +81,17 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => {
     if (!preview) return;
+    const timer = setTimeout(() => setPreviewReady(true), 900);
+    return () => clearTimeout(timer);
+  }, [preview]);
+  useEffect(() => {
+    if (!preview || !previewReady) return;
     setEntries([
       { id: "preview-user", role: "user", text: "Hey Live — ping the crew", at: 1 },
       { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists.", at: 2 },
       ...PREVIEW_AGENTS.map(({ agent, text }, index) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text, at: 3 + index })),
     ]);
-  }, [preview]);
+  }, [preview, previewReady]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [entries]);
 
   useEffect(() => {
@@ -359,6 +366,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
               mode="spotlight"
               microphone={microphone}
               muted={muted}
+              ready={orbReady}
               onToggle={() => setSpotlight(false)}
             />
             {latestInbound && (
@@ -383,6 +391,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
               mode={orbMode === "docked" ? "docked" : "idle"}
               microphone={microphone}
               muted={muted}
+              ready={orbReady}
               onToggle={hasTranscript ? () => setSpotlight(true) : undefined}
               onVoice={(level) => {
                 if (!preview || previewHeard.current) return;
@@ -396,18 +405,18 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
               }}
             />
             <div className={`os-live-transcript h-full overflow-y-auto overscroll-contain ${hasTranscript ? "os-live-transcript--docked os-enter" : ""}`} role="log" aria-label="Live transcript">
-              {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="mx-auto w-fit max-w-full rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-sm text-brand">{entry.text}</div> :
-                entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent mr-auto max-w-[min(20rem,82%)]" data-agent={entry.agent}>
+              {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="os-live-tool-chip">{entry.text}</div> :
+                entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent" data-agent={entry.agent}>
                   <p className="os-live-bubble-agent-label">{voiceAgentLabel(entry.agent ?? "elon")}</p>
                   <p className="whitespace-pre-wrap break-words">{entry.text}</p>
-                  {entry.images?.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mt-2 block">
+                  {entry.images?.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mt-1.5 block">
                     {/* Remote agent images have arbitrary HTTPS hosts. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={url} alt={`Image from ${voiceAgentLabel(entry.agent ?? "elon")} — open full image`} loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-lg object-contain" />
                   </a>)}
                 </article> :
-                <article key={entry.id} className={`max-w-[min(20rem,82%)] px-3.5 py-2.5 ${entry.role === "user" ? "ml-auto rounded-[1.25rem] rounded-br-md bg-brand-soft" : "mr-auto rounded-[1.25rem] rounded-bl-md bg-card"}`}>
-                  {entry.role === "assistant" && <p className="mb-1 text-xs text-muted-foreground">Live</p>}
+                <article key={entry.id} className={`os-live-bubble ${entry.role === "user" ? "os-live-bubble--user" : "os-live-bubble--assistant"}`}>
+                  {entry.role === "assistant" && <p className="os-live-bubble-live-label">Live</p>}
                   <p className="whitespace-pre-wrap break-words">{entry.text}</p>
                 </article>)}
               {hasTranscript && <div ref={bottom} />}

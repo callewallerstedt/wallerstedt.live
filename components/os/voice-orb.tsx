@@ -41,12 +41,18 @@ export function VoiceOrb({
       return;
     }
     let settle: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
     setPhase((current) => {
       if (current === "live") return "live";
-      settle = setTimeout(() => setPhase("live"), 980);
       return "engaging";
     });
-    return () => clearTimeout(settle);
+    settle = setTimeout(() => {
+      if (!cancelled) setPhase("live");
+    }, 980);
+    return () => {
+      cancelled = true;
+      clearTimeout(settle);
+    };
   }, [ready]);
 
   useEffect(() => {
