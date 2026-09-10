@@ -659,6 +659,7 @@ body:has(.os-root) > .footer {
 
 .os-live-orb {
   --os-live-level: 0;
+  --os-live-ring: 6px;
   position: relative;
   box-sizing: border-box;
   width: 100%;
@@ -666,6 +667,14 @@ body:has(.os-root) > .footer {
   border-radius: 50%;
   transform: scale(calc(1 + (var(--os-live-level) * 0.11)));
   transition: transform 70ms linear;
+}
+
+.os-live-stage--docked .os-live-orb {
+  --os-live-ring: 4px;
+}
+
+.os-live-stage--spotlight .os-live-orb {
+  --os-live-ring: 10px;
 }
 
 .os-live-orb--loading,
@@ -685,10 +694,19 @@ body:has(.os-root) > .footer {
     var(--brand-to) 78%,
     transparent 92% 100%
   );
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--os-live-ring)),
+    #000 calc(100% - var(--os-live-ring))
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--os-live-ring)),
+    #000 calc(100% - var(--os-live-ring))
+  );
   opacity: 0;
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 .os-live-orb--loading .os-live-orb-ring,
@@ -696,21 +714,12 @@ body:has(.os-root) > .footer {
   opacity: 1;
 }
 
-.os-live-orb--loading .os-live-orb-ring {
-  animation: os-live-orb-spin 1.15s linear infinite;
-}
-
-.os-live-orb--engaging .os-live-orb-ring {
-  animation: os-live-orb-engage 0.98s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
-}
-
 .os-live-orb--live .os-live-orb-ring {
   opacity: 0;
-  animation: none;
 }
 
 .os-live-orb--live {
-  padding: 6px;
+  padding: var(--os-live-ring);
   background: linear-gradient(135deg, var(--brand-from), var(--brand), var(--brand-to));
   filter:
     drop-shadow(0 0 18px color-mix(in oklch, var(--brand) 42%, transparent))
@@ -721,14 +730,6 @@ body:has(.os-root) > .footer {
     0 0 64px color-mix(in oklch, var(--brand) 18%, transparent);
 }
 
-.os-live-stage--docked .os-live-orb--live {
-  padding: 4px;
-}
-
-.os-live-stage--spotlight .os-live-orb--live {
-  padding: 10px;
-}
-
 .os-live-orb-face {
   display: grid;
   place-items: center;
@@ -736,14 +737,12 @@ body:has(.os-root) > .footer {
   height: 100%;
   overflow: hidden;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 38% 32%, color-mix(in oklch, var(--brand) 28%, transparent), transparent 58%),
-    radial-gradient(circle at 50% 70%, color-mix(in oklch, var(--background) 88%, var(--brand)), var(--background));
+  background: var(--background);
   opacity: 0;
-  transform: scale(0.86);
+  transform: scale(0.92);
   transition:
-    opacity 280ms ease,
-    transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 260ms ease,
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .os-live-orb--live .os-live-orb-face {
@@ -754,7 +753,7 @@ body:has(.os-root) > .footer {
 .os-live-orb--loading .os-live-orb-face,
 .os-live-orb--engaging .os-live-orb-face {
   position: absolute;
-  inset: 7px;
+  inset: var(--os-live-ring);
   width: auto;
   height: auto;
   opacity: 0;
@@ -770,7 +769,7 @@ body:has(.os-root) > .footer {
   width: 54%;
   height: 48%;
   opacity: 0;
-  transition: opacity 320ms ease 80ms;
+  transition: opacity 280ms ease 60ms;
 }
 
 .os-live-orb--live .os-live-wave {
@@ -790,30 +789,10 @@ body:has(.os-root) > .footer {
   height: 16%;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--brand-from), var(--brand-to));
-  box-shadow: 0 0 10px color-mix(in oklch, var(--brand) 35%, transparent);
 }
 
 .os-live-stage--docked .os-live-wave span {
   max-width: 0.18rem;
-}
-
-@keyframes os-live-orb-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes os-live-orb-engage {
-  0% { transform: rotate(0deg); filter: brightness(1); }
-  55% { transform: rotate(540deg); filter: brightness(1.15); }
-  85% {
-    transform: rotate(820deg);
-    opacity: 1;
-    filter: brightness(1.25);
-  }
-  100% {
-    transform: rotate(900deg);
-    opacity: 0;
-    filter: brightness(1.35);
-  }
 }
 
 @keyframes os-live-fab-pulse {

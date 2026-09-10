@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 const BARS = 7;
+const SPIN_IDLE = 320; // deg/sec while connecting
+const SPIN_MAX = 2400;
 
 function audioContext() {
   const Ctor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -29,11 +31,15 @@ export function VoiceOrb({
 }) {
   const bars = useRef<(HTMLSpanElement | null)[]>([]);
   const orb = useRef<HTMLDivElement>(null);
+  const ring = useRef<HTMLDivElement>(null);
   const mutedRef = useRef(muted);
   const onVoiceRef = useRef(onVoice);
+  const phaseRef = useRef<OrbPhase>(ready ? "engaging" : "loading");
+  const angleRef = useRef(0);
   const [phase, setPhase] = useState<OrbPhase>(ready ? "engaging" : "loading");
   mutedRef.current = muted;
   onVoiceRef.current = onVoice;
+  phaseRef.current = phase;
 
   useEffect(() => {
     if (!ready) {
@@ -42,18 +48,41 @@ export function VoiceOrb({
     }
     let settle: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
-    setPhase((current) => {
-      if (current === "live") return "live";
-      return "engaging";
-    });
+    setPhase((current) => (current === "live" ? "live" : "engaging"));
     settle = setTimeout(() => {
       if (!cancelled) setPhase("live");
-    }, 980);
+    }, 820);
     return () => {
       cancelled = true;
       clearTimeout(settle);
     };
   }, [ready]);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    let speed = SPIN_IDLE;
+    const tick = (now: number) => {
+      const current = phaseRef.current;
+      if (current === "live") {
+        if (ring.current) ring.current.style.opacity = "0";
+        return;
+      }
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (current === "loading") speed = SPIN_IDLE;
+      else speed = Math.min(SPIN_MAX, speed + 4200 * dt);
+      angleRef.current = (angleRef.current + speed * dt) % 360;
+      if (ring.current) {
+        ring.current.style.transform = `rotate(${angleRef.current}deg)`;
+        const fade = current === "engaging" ? Math.max(0, 1 - (speed - SPIN_IDLE) / (SPIN_MAX - SPIN_IDLE)) : 1;
+        ring.current.style.opacity = String(current === "engaging" ? Math.max(0.15, fade) : 1);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [phase === "live"]);
 
   useEffect(() => {
     let raf = 0;
@@ -113,7 +142,7 @@ export function VoiceOrb({
   const stage = mode === "docked" ? "os-live-stage os-live-stage--docked" : mode === "spotlight" ? "os-live-stage os-live-stage--spotlight" : "os-live-stage";
   const body = (
     <div ref={orb} className={`os-live-orb os-live-orb--${phase}`} aria-busy={phase !== "live"}>
-      <div className="os-live-orb-ring" />
+      <div ref={ring} className="os-live-orb-ring" />
       <div className="os-live-orb-face">
         <div className="os-live-wave" aria-hidden={phase !== "live"}>
           {Array.from({ length: BARS }, (_, index) => (

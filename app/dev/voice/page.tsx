@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import VoiceSheet from "@/components/os/voice-sheet";
-import { VoiceLive } from "@/components/os/voice-live";
 
 export default function VoicePreviewPage() {
   const [open, setOpen] = useState(true);
@@ -25,7 +24,16 @@ export default function VoicePreviewPage() {
       {open && microphone ? (
         <VoiceSheet accessKey="dev" microphone={microphone} onClose={() => setOpen(false)} preview />
       ) : (
-        <VoiceLive accessKey="dev" />
+        <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-sm text-muted-foreground">GPT-Live preview</p>
+          <button
+            type="button"
+            className="rounded-xl bg-brand px-4 py-2.5 text-sm font-medium text-brand-foreground"
+            onClick={() => setOpen(true)}
+          >
+            Open preview
+          </button>
+        </div>
       )}
     </div>
   );
