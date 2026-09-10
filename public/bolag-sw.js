@@ -1,12 +1,62 @@
+const STATIC_CACHE = "wallerstedt-bolag-static-v1";
 const LAST_PUSH_CACHE = "wallerstedt-bolag-push";
 const LAST_PUSH_PATH = "/__bolag-last-push";
+const PRECACHE = [
+  "/accounting-logo.png",
+  "/accounting-icon-180.png",
+  "/accounting-icon-192.png",
+  "/accounting-icon-512.png",
+];
+
+function isStaticAsset(url) {
+  return PRECACHE.includes(url.pathname) || url.pathname.startsWith("/_next/static/");
+}
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches.open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => (
+            key.startsWith("wallerstedt-bolag-")
+            && key !== STATIC_CACHE
+            && key !== LAST_PUSH_CACHE
+          ))
+          .map((key) => caches.delete(key)),
+      ))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  // Icons and hashed JS/CSS only. HTML, RSC, APIs and cookies stay on the network.
+  if (
+    event.request.method !== "GET"
+    || url.origin !== self.location.origin
+    || !isStaticAsset(url)
+  ) {
+    return;
+  }
+  event.respondWith(
+    caches.open(STATIC_CACHE).then((cache) =>
+      cache.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
+          if (response.ok) cache.put(event.request, response.clone());
+          return response;
+        });
+      }),
+    ),
+  );
 });
 
 function cacheJson(path, value) {

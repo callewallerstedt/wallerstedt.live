@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
+import { BolagServiceWorker } from "@/components/os/bolag-sw";
 import type { CompanyField } from "@/components/os/company-menu";
-import { BolagServiceWorker } from "@/components/os/record-reminders";
+import { OsPrefetch } from "@/components/os/prefetch";
 import { OsHeader, OsSidebar, OsTabBar } from "@/components/os/sidebar";
 import { osPageFromPathname } from "@/lib/os/route";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ export function OsShell({
   return (
     <div className="flex h-dvh max-w-full overflow-hidden bg-background text-foreground">
       <BolagServiceWorker />
+      <OsPrefetch accessKey={accessKey} />
       <OsSidebar
         accessKey={accessKey}
         collapsed={collapsed}

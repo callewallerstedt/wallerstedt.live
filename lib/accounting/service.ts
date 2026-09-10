@@ -10,6 +10,7 @@ import {
   serializeRevision,
 } from "./serialize";
 import { classifyEntryPatch, safeNotifyAccountingPosts } from "../push";
+import { invalidateOsLedgerCache } from "../os/cache";
 import type { NormalizedEntryInput } from "./validation";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -142,6 +143,7 @@ export async function createEntryInTransaction(
 export async function createEntry(input: NormalizedEntryInput, actor = "web") {
   const db = getAccountingDb();
   const entry = await db.$transaction((tx) => createEntryInTransaction(tx, input, actor));
+  invalidateOsLedgerCache();
   await safeNotifyAccountingPosts("create", [entry]);
   return entry;
 }
@@ -202,6 +204,7 @@ export async function updateEntry(
   const entry = await db.$transaction((tx) =>
     updateEntryInTransaction(tx, id, expectedVersion, input, actor),
   );
+  invalidateOsLedgerCache();
   await safeNotifyAccountingPosts(classifyEntryPatch(input), [entry]);
   return entry;
 }
@@ -247,6 +250,7 @@ export async function deleteEntry(
   const entry = await db.$transaction((tx) =>
     deleteEntryInTransaction(tx, id, expectedVersion, actor),
   );
+  invalidateOsLedgerCache();
   await safeNotifyAccountingPosts("delete", [entry]);
   return entry;
 }

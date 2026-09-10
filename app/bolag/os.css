@@ -385,18 +385,10 @@ body:has(.os-root) > .footer {
   padding: 7px;
 }
 
-/* Sections arrive in sequence rather than all at once. */
+/* A short fade, no stagger — tab switches should feel instant, not choreographed. */
 .os-enter > * {
-  animation: os-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: os-fade-up 140ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-
-.os-enter > *:nth-child(1) { animation-delay: 0ms; }
-.os-enter > *:nth-child(2) { animation-delay: 40ms; }
-.os-enter > *:nth-child(3) { animation-delay: 80ms; }
-.os-enter > *:nth-child(4) { animation-delay: 120ms; }
-.os-enter > *:nth-child(5) { animation-delay: 160ms; }
-.os-enter > *:nth-child(6) { animation-delay: 200ms; }
-.os-enter > *:nth-child(n + 7) { animation-delay: 240ms; }
 
 .os-pop-in {
   animation: os-pop-in 300ms cubic-bezier(0.22, 1, 0.36, 1);

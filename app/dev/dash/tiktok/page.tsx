@@ -1,4 +1,4 @@
-import { TikTokPage } from "@/components/os/pages";
+import { TikTokPage } from "@/components/os/tiktok-page";
 import type { TaskRow } from "@/lib/os/types";
 
 function todayYmd() {

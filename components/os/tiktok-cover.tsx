@@ -36,9 +36,13 @@ export function TikTokCover({
         wide ? "h-28 w-20 rounded-lg" : "size-12 rounded-md",
         className,
       )}
+      decoding="async"
+      height={wide ? 144 : 48}
+      loading="lazy"
       onError={() => setFailed(true)}
       referrerPolicy="no-referrer"
       src={src}
+      width={wide ? 80 : 48}
     />
   );
 }

@@ -20,8 +20,9 @@ import {
   YoutubeIcon,
 } from "lucide-react";
 
+import dynamic from "next/dynamic";
+
 import { TikTokIcon } from "@/components/os/tiktok-icon";
-import { TikTokSearchDialog } from "@/components/os/tiktok-search";
 import { LinkedNotes } from "@/components/os/linked-notes";
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,10 @@ const PRIORITY_LABELS: Record<TaskRow["priority"], string> = {
   normal: "Normal",
   high: "High",
 };
+
+const TikTokSearchDialog = dynamic(
+  () => import("@/components/os/tiktok-search").then((mod) => ({ default: mod.TikTokSearchDialog })),
+);
 
 function endpoint(accessKey: string, id?: string) {
   return `/api/os/${encodeURIComponent(accessKey)}/tasks${id ? `/${id}` : ""}`;
