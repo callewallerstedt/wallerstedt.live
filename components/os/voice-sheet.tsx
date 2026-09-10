@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, X } from "lucide-react";
 import { VoiceOrb } from "@/components/os/voice-orb";
-import { normalizeVoiceAgent, type VoiceAgentSlug } from "@/lib/os/voice-agents";
+import { namedVoiceAgent, voiceAgentLabel, type VoiceAgentSlug } from "@/lib/os/voice-agents";
 import { speechTranscript } from "@/lib/os/voice-transcript";
 import { elonResponse, nextVoiceAction } from "@/lib/os/voice-readout";
 import { zIndex } from "@/lib/z-index";
@@ -14,11 +14,18 @@ type Entry = {
   agent?: VoiceAgentSlug;
   text: string;
   images?: string[];
+  at: number;
 };
 type Json = Record<string, unknown>;
 const record = (value: unknown): Json => value && typeof value === "object" ? value as Json : {};
 const string = (value: unknown) => typeof value === "string" ? value : "";
-const agentLabel = (agent: string) => agent === "bjorn" ? "Björn" : agent[0].toUpperCase() + agent.slice(1);
+
+function insertEntry(previous: Entry[], next: Entry): Entry[] {
+  if (previous.some((entry) => entry.id === next.id)) return previous;
+  const index = previous.findIndex((entry) => entry.at > next.at);
+  const list = index === -1 ? [...previous, next] : [...previous.slice(0, index), next, ...previous.slice(index)];
+  return list.slice(-200);
+}
 
 const PREVIEW_AGENTS: { agent: VoiceAgentSlug; text: string }[] = [
   { agent: "elon", text: "Got it — running that now." },
@@ -48,6 +55,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const seenReplies = useRef(new Set<string>());
   const pendingInput = useRef(new Set<string>());
   const ignoredInput = useRef(new Set<string>());
+  const speechAt = useRef(new Map<string, number>());
+  const lastRouted = useRef<VoiceAgentSlug>("elon");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [status, setStatus] = useState("Connecting");
   const [error, setError] = useState("");
@@ -59,11 +68,11 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const previewVoiceFrames = useRef(0);
   const base = `/api/os/${encodeURIComponent(accessKey)}/voice`;
 
-  function update(id: string, role: Entry["role"], text: string, append = false) {
+  function update(id: string, role: Entry["role"], text: string, append = false, at = Date.now()) {
     setEntries((previous) => {
       const existing = previous.find((entry) => entry.id === id);
       if (!existing && !text.trim()) return previous;
-      if (!existing) return [...previous, { id, role, text }].slice(-200);
+      if (!existing) return insertEntry(previous, { id, role, text, at });
       return previous.map((entry) => entry.id === id ? { ...entry, text: append ? entry.text + text : text } : entry);
     });
   }
@@ -71,9 +80,9 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   useEffect(() => {
     if (!preview) return;
     setEntries([
-      { id: "preview-user", role: "user", text: "Hey Live — ping the crew" },
-      { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists." },
-      ...PREVIEW_AGENTS.map(({ agent, text }) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text })),
+      { id: "preview-user", role: "user", text: "Hey Live — ping the crew", at: 1 },
+      { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists.", at: 2 },
+      ...PREVIEW_AGENTS.map(({ agent, text }, index) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text, at: 3 + index })),
     ]);
   }, [preview]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [entries]);
@@ -160,7 +169,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         const args = record(JSON.parse(string(item.arguments)));
         const agent = name === "send_to_boss" ? "elon" : string(args.agent).trim().toLowerCase();
         if (!agent) throw new Error("Agent name was empty.");
-        label = agent[0].toUpperCase() + agent.slice(1);
+        label = voiceAgentLabel(agent);
         update(callId, "tool", `${label} · Sending…`);
         if (!string(args.message).trim()) throw new Error(`${label} message was empty.`);
         result = await jsonResponse(await fetch(`${base}/agent`, {
@@ -169,7 +178,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         }));
         if (result.ok !== true) throw new Error(`${label} did not confirm delivery.`);
         const recipient = string(result.agent) || agent;
-        label = recipient[0].toUpperCase() + recipient.slice(1);
+        lastRouted.current = namedVoiceAgent(recipient) ?? "elon";
+        label = voiceAgentLabel(lastRouted.current);
         if (!disposed) update(callId, "tool", `Sent to ${label}`);
       } catch (cause) {
         result = { ok: false, message: cause instanceof Error ? cause.message : `${label} could not be reached.` };
@@ -190,7 +200,10 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       const id = string(data.item_id) || string(item.id);
       if (type === "input_audio_buffer.speech_started" && id) {
         if (mutedRef.current || speaking.current) ignoredInput.current.add(id);
-        else pendingInput.current.add(id);
+        else {
+          pendingInput.current.add(id);
+          if (!speechAt.current.has(id)) speechAt.current.set(id, Date.now());
+        }
       }
       if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && mutedRef.current) ignoredInput.current.add(id);
       if (type === "response.created") { responding = true; activeResponseId = string(record(data.response).id); }
@@ -222,7 +235,9 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       if (id && type === "conversation.item.input_audio_transcription.completed") {
         pendingInput.current.delete(id);
         const text = speechTranscript(string(data.transcript));
-        if (!mutedRef.current && !ignoredInput.current.has(id) && text) update(id, "user", text);
+        const at = speechAt.current.get(id) ?? Date.now();
+        if (!mutedRef.current && !ignoredInput.current.has(id) && text) update(id, "user", text, false, at);
+        speechAt.current.delete(id);
         ignoredInput.current.delete(id);
         // VAD owns user responses. Transcription events never create responses.
       } else if (id && /response\.(output_audio_transcript|audio_transcript|output_text|text)\.(delta|done)$/.test(type)) {
@@ -233,6 +248,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       }
       if (type === "conversation.item.input_audio_transcription.failed" && id) {
         pendingInput.current.delete(id);
+        speechAt.current.delete(id);
         ignoredInput.current.delete(id);
       }
       if (type === "error") setError("Live encountered an error. If it stops responding, close and reopen the mic.");
@@ -310,8 +326,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
           const images = (Array.isArray(item.images) ? item.images : []).filter((url): url is string => typeof url === "string" && url.startsWith("https://"));
           const text = (string(item.message) || string(item.text)).trim();
           if (!text && !images.length) continue;
-          const agent = normalizeVoiceAgent(string(item.agent) || string(item.source)) ?? "elon";
-          setEntries((previous) => [...previous, { id: `agent-${id}`, role: "agent" as const, agent, text, images }].slice(-200));
+          const agent = namedVoiceAgent(string(item.agent), string(item.source)) ?? lastRouted.current;
+          setEntries((previous) => insertEntry(previous, { id: `agent-${id}`, role: "agent", agent, text, images, at: item.timestamp }));
           pendingReplies.current.push({ id, text, images });
         }
         flushReplies.current();
@@ -333,10 +349,10 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     style={{ zIndex: zIndex.overlay }}>
     <div className="os-live-shell relative flex h-full flex-col">
       <p role="status" className="sr-only">{status}{inboxError ? `. ${inboxError}` : ""}</p>
-      <button autoFocus type="button" aria-label="Close Live and stop microphone" onClick={onClose} className="os-live-close">
-        <X className="size-5" />
-      </button>
       <div className="relative min-h-0 flex-1">
+        <button autoFocus type="button" aria-label="Close Live and stop microphone" onClick={onClose} className="os-live-close">
+          <X className="size-5" />
+        </button>
         {spotlight ? (
           <div className="os-live-spotlight">
             <VoiceOrb
@@ -347,7 +363,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
             />
             {latestInbound && (
               <div className="os-live-focus" role="status">
-                <p className="os-live-focus-label">{latestInbound.role === "agent" ? agentLabel(latestInbound.agent ?? "elon") : "Live"}</p>
+                <p className="os-live-focus-label">{latestInbound.role === "agent" ? voiceAgentLabel(latestInbound.agent ?? "elon") : "Live"}</p>
                 {latestInbound.text.trim() && <p className="os-live-focus-text">{latestInbound.text}</p>}
                 {!!latestInbound.images?.length && (
                   <div className="os-live-focus-images">
@@ -382,12 +398,12 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
             <div className={`os-live-transcript h-full overflow-y-auto overscroll-contain ${hasTranscript ? "os-live-transcript--docked os-enter" : ""}`} role="log" aria-label="Live transcript">
               {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="mx-auto w-fit max-w-full rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-sm text-brand">{entry.text}</div> :
                 entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent mr-auto max-w-[min(20rem,82%)]" data-agent={entry.agent}>
-                  <p className="os-live-bubble-agent-label">{agentLabel(entry.agent ?? "elon")}</p>
+                  <p className="os-live-bubble-agent-label">{voiceAgentLabel(entry.agent ?? "elon")}</p>
                   <p className="whitespace-pre-wrap break-words">{entry.text}</p>
                   {entry.images?.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mt-2 block">
                     {/* Remote agent images have arbitrary HTTPS hosts. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt={`Image from ${agentLabel(entry.agent ?? "elon")} — open full image`} loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-lg object-contain" />
+                    <img src={url} alt={`Image from ${voiceAgentLabel(entry.agent ?? "elon")} — open full image`} loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-lg object-contain" />
                   </a>)}
                 </article> :
                 <article key={entry.id} className={`max-w-[min(20rem,82%)] px-3.5 py-2.5 ${entry.role === "user" ? "ml-auto rounded-[1.25rem] rounded-br-md bg-brand-soft" : "mr-auto rounded-[1.25rem] rounded-bl-md bg-card"}`}>

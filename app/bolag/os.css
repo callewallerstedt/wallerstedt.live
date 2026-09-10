@@ -450,13 +450,13 @@ body:has(.os-root) > .footer {
 
 .os-live-close {
   position: absolute;
-  top: 0.25rem;
+  top: 0.2rem;
   left: 0.15rem;
   z-index: 10;
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3.15rem;
+  height: 3.15rem;
   border: 0;
   border-radius: 999px;
   background: color-mix(in oklch, var(--background) 82%, transparent);

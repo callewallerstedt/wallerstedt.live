@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agentWebhookPayload, listVoiceAgents, normalizeVoiceAgent, resolveVoiceAgent } from "./voice-agents";
+import { agentWebhookPayload, listVoiceAgents, namedVoiceAgent, normalizeVoiceAgent, replyVoiceAgent, resolveVoiceAgent, voiceAgentLabel } from "./voice-agents";
 
 test("voice agents resolve aliases, prefer JSON, and fall back only for missing Elon", (t) => {
   const keys = ["VOICE_AGENT_WEBHOOKS", "BOSS_VOICE_WEBHOOK_URL", "BOSS_VOICE_WEBHOOK_TOKEN"];
@@ -39,4 +39,9 @@ test("normalization and webhook payload use canonical slugs", () => {
   assert.deepEqual(agentWebhookPayload("Hello", "jensen", new Date("2026-09-10T12:00:00Z")), {
     message: "Hello", source: "wallerstedt-dash", agent: "jensen", timestamp: "2026-09-10T12:00:00.000Z",
   });
+  assert.equal(replyVoiceAgent("wallerstedt-dash", "max"), "max");
+  assert.equal(replyVoiceAgent(undefined, "wallerstedt-dash"), "elon");
+  assert.equal(namedVoiceAgent("wallerstedt-dash"), undefined);
+  assert.equal(voiceAgentLabel("bjorn"), "Björn");
+  assert.equal(voiceAgentLabel("max"), "Max");
 });

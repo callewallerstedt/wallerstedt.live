@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckIcon, MoonIcon, SunIcon } from "lucide-react";
+import { useState } from "react";
+import { CheckIcon, CopyIcon, MoonIcon, SunIcon } from "lucide-react";
 
 import { useAccent, useOsTheme } from "@/components/os/providers";
 import { Panel, Row } from "@/components/os/ui";
@@ -72,6 +73,49 @@ export function AppearanceSettings() {
               {accent === id ? <CheckIcon className="size-4 shrink-0" /> : null}
             </button>
           ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+export function LiveShortcut({ accessKey }: { accessKey: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `https://wallerstedt.live/bolag/${encodeURIComponent(accessKey)}/live`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Panel
+      title="GPT-Live"
+      footer="Paste this into an iPhone Shortcut Open URL action, or assign it to the Action Button."
+    >
+      <div className="border-t border-border px-3 py-3">
+        <p className="text-sm font-medium">Live deep link</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Opens GPT-Live immediately, with the microphone.
+        </p>
+        <div className="mt-2 flex items-start gap-2">
+          <p className="min-w-0 flex-1 break-all font-mono text-xs leading-snug">{url}</p>
+          <button
+            aria-label={copied ? "Live link copied" : "Copy Live link"}
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 ring-foreground/15",
+              copied ? "text-brand" : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => void copy()}
+            type="button"
+          >
+            {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+          </button>
         </div>
       </div>
     </Panel>

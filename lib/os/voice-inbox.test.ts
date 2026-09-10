@@ -22,6 +22,12 @@ test("inbox accepts both image fields and deduplicates", () => {
   const inbox = new VoiceInbox();
   assert.deepEqual(inbox.add("a", { images: [url], imageUrls: [url] }).images, [url]);
 });
+test("inbox stores the specialist name and ignores the dashboard source label", () => {
+  const inbox = new VoiceInbox();
+  assert.equal(inbox.add("a", { text: "clip queued", agent: "max", source: "wallerstedt-dash" }).agent, "max");
+  assert.equal(inbox.add("a", { text: "shipping that", agent: "Björn" }).agent, "bjorn");
+  assert.equal(inbox.add("a", { text: "ops", source: "wallerstedt-dash" }).agent, undefined);
+});
 test("opening with a current cursor skips history and preserves new replies across polls", () => {
   const inbox = new VoiceInbox();
   inbox.add("a", { text: "old reply" }, 100);

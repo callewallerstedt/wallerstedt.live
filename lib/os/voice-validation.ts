@@ -11,5 +11,6 @@ export const bossReplySchema = z.object({
   text: z.string().max(8000).optional(),
   images: z.array(imageUrl).max(12).optional(),
   imageUrls: z.array(imageUrl).max(12).optional(),
+  agent: z.string().max(100).optional(),
   source: z.string().max(100).optional(),
 }).refine((value) => Boolean(value.message?.trim() || value.text?.trim() || value.images?.length || value.imageUrls?.length), "Reply is empty.");

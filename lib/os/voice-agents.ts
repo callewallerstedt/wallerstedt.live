@@ -40,3 +40,21 @@ export function listVoiceAgents(): VoiceAgentSlug[] {
 export function agentWebhookPayload(message: string, agent: VoiceAgentSlug, now = new Date()) {
   return { message, source: "wallerstedt-dash", agent, timestamp: now.toISOString() };
 }
+
+export function voiceAgentLabel(agent: string) {
+  const slug = normalizeVoiceAgent(agent) ?? agent.trim().toLowerCase();
+  if (slug === "bjorn") return "Björn";
+  return slug ? slug[0].toUpperCase() + slug.slice(1) : "Elon";
+}
+
+/** First recognisable specialist name; ignores dashboard source labels. */
+export function namedVoiceAgent(...names: Array<string | undefined>): VoiceAgentSlug | undefined {
+  for (const name of names) {
+    const agent = name ? normalizeVoiceAgent(name) : undefined;
+    if (agent) return agent;
+  }
+}
+
+export function replyVoiceAgent(...names: Array<string | undefined>): VoiceAgentSlug {
+  return namedVoiceAgent(...names) ?? "elon";
+}

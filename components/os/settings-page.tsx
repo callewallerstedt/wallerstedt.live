@@ -1,5 +1,5 @@
 import { RecordReminders } from "@/components/os/record-reminders";
-import { AppearanceSettings, SignOutRow } from "@/components/os/settings";
+import { AppearanceSettings, LiveShortcut, SignOutRow } from "@/components/os/settings";
 import { PageFrame, PageTitle, Panel, Pill, Row } from "@/components/os/ui";
 import type { OsSnapshot } from "@/lib/os/types";
 
@@ -14,6 +14,7 @@ export function SettingsPage({
     <PageFrame>
       <PageTitle aside="Appearance, reminders, company details and data sources.">Settings</PageTitle>
       <AppearanceSettings />
+      <LiveShortcut accessKey={accessKey} />
       <RecordReminders accessKey={accessKey} />
 
       <Panel title="Company">

@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
-export type BossReplyInput = { message?: string; text?: string; images?: string[]; imageUrls?: string[] };
+import { namedVoiceAgent, type VoiceAgentSlug } from "./voice-agents";
 
-export type BossReply = { id: string; timestamp: number; message: string; images: string[] };
+export type BossReplyInput = {
+  message?: string;
+  text?: string;
+  images?: string[];
+  imageUrls?: string[];
+  agent?: string;
+  source?: string;
+};
+
+export type BossReply = { id: string; timestamp: number; message: string; images: string[]; agent?: VoiceAgentSlug };
 export function bossPayload(message: string, now = new Date()) {
   return { message, source: "wallerstedt-dash", timestamp: now.toISOString() };
 }
@@ -22,6 +31,7 @@ export class VoiceInbox {
       id: randomUUID(), timestamp: now,
       message: [input.message, input.text].filter(Boolean).join("\n"),
       images: [...new Set([...(input.images ?? []), ...(input.imageUrls ?? [])])].slice(0, 12),
+      agent: namedVoiceAgent(input.agent, input.source),
     };
     this.entries.set(key, [...(this.entries.get(key) ?? []), item].slice(-this.cap));
     return item;
