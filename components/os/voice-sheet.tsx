@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, X } from "lucide-react";
-import { speechTranscript, elonReadout } from "@/lib/os/voice-transcript";
+import { speechTranscript } from "@/lib/os/voice-transcript";
+import { elonResponse, nextVoiceAction } from "@/lib/os/voice-readout";
 import { zIndex } from "@/lib/z-index";
 
 type Entry = { id: string; role: "user" | "assistant" | "Elon" | "tool"; text: string; images?: string[] };
@@ -60,6 +61,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
     let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     let responding = false;
+    let activeResponseId = "";
+    let readoutPending = false;
     let toolContinuation = false;
     const handledCalls = new Set<string>();
     const playback = audio.current;
@@ -90,16 +93,28 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
       tracks?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current && !speaking.current; });
     }
     function flush() {
-      if (disposed || channel?.readyState !== "open" || responding || speaking.current || pendingInput.current.size) return;
-      if (toolContinuation) {
-        toolContinuation = false;
-      } else {
-        const reply = pendingReplies.current.shift();
-        if (!reply) return;
-        send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: elonReadout(reply.text, reply.images.length) }] } });
+      const action = nextVoiceAction({
+        open: !disposed && channel?.readyState === "open", replies: pendingReplies.current.length,
+        responding, speaking: speaking.current, pendingInput: pendingInput.current.size, toolContinuation,
+      });
+      if (action === "wait") return;
+      if (action === "elon") {
+        // Elon outranks ambient VAD, queued tool acknowledgements and playback.
+        clearTimeout(echoTailTimer);
+        pendingInput.current.forEach((id) => ignoredInput.current.add(id));
+        pendingInput.current.clear();
+        if (responding) send({ type: "response.cancel" });
+        send({ type: "output_audio_buffer.clear" });
+        send({ type: "input_audio_buffer.clear" });
+        readoutPending = true;
+        speaking.current = true;
+        syncInput();
       }
+      toolContinuation = false;
+      activeResponseId = "";
       responding = true;
-      send({ type: "response.create" });
+      // Read a poll batch together so its replies do not interrupt one another.
+      send(action === "elon" ? elonResponse(pendingReplies.current.splice(0)) : { type: "response.create" });
     }
     flushReplies.current = flush;
     async function tool(item: Json) {
@@ -141,7 +156,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
         else pendingInput.current.add(id);
       }
       if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && mutedRef.current) ignoredInput.current.add(id);
-      if (type === "response.created") responding = true;
+      if (type === "response.created") { responding = true; activeResponseId = string(record(data.response).id); }
       if (type === "output_audio_buffer.started") {
         clearTimeout(echoTailTimer);
         speaking.current = true;
@@ -149,6 +164,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
         send({ type: "input_audio_buffer.clear" });
       }
       if (type === "output_audio_buffer.stopped" || type === "output_audio_buffer.cleared") {
+        // A cancelled response must not unmute the mic during its replacement.
+        if (string(data.response_id) !== activeResponseId || !activeResponseId) return;
         // Keep the speaker tail out of the microphone after playback ends.
         echoTailTimer = setTimeout(() => {
           speaking.current = false;
@@ -156,7 +173,15 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
           flush();
         }, 250);
       }
-      if (type === "response.done") { responding = false; flush(); }
+      if (type === "response.done" && activeResponseId && string(record(data.response).id) === activeResponseId) {
+        responding = false;
+        if (readoutPending && record(data.response).status !== "completed") {
+          speaking.current = false;
+          syncInput();
+        }
+        readoutPending = false;
+        flush();
+      }
       if (id && type === "conversation.item.input_audio_transcription.completed") {
         pendingInput.current.delete(id);
         const text = speechTranscript(string(data.transcript));
@@ -227,7 +252,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
 
   useEffect(() => {
     let stopped = false;
-    let cursor = 0;
+    const openedAt = Date.now();
+    let cursor = openedAt;
     let timer: ReturnType<typeof setTimeout>;
     const seen = seenReplies.current;
     const controller = new AbortController();
@@ -239,6 +265,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
         for (const value of Array.isArray(data.items) ? data.items : []) {
           const item = record(value);
           const id = string(item.id);
+          if (typeof item.timestamp !== "number" || item.timestamp < openedAt) continue;
           if (!id || seen.has(id)) continue;
           seen.add(id);
           if (typeof item.timestamp === "number") cursor = Math.max(cursor, item.timestamp);
