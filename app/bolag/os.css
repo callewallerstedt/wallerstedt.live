@@ -427,6 +427,216 @@ body:has(.os-root) > .footer {
   padding: 7px;
 }
 
+/* GPT-Live listening orb: hollow accent ring with a waveform inside.
+   When the transcript starts it docks to the top-right. */
+.os-live-stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  width: 11rem;
+  height: 11rem;
+  translate: -50% -50%;
+  pointer-events: none;
+  transition:
+    top 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+    translate 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.os-live-stage--docked {
+  top: 0.5rem;
+  left: auto;
+  right: 0.5rem;
+  width: 3.15rem;
+  height: 3.15rem;
+  translate: none;
+}
+
+.os-live-stage--spotlight {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: 11rem;
+  height: 11rem;
+  translate: none;
+  flex-shrink: 0;
+}
+
+.os-live-stage--interactive {
+  pointer-events: auto;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.os-live-stage--interactive:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand) 55%, transparent);
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+/* Spotlight: one centered stack — orb above, latest inbound under it. */
+.os-live-spotlight {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.35rem;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 1rem 1.25rem 4.5rem;
+  transform: translateY(-6%);
+}
+
+.os-live-focus {
+  width: min(22rem, 100%);
+  text-align: center;
+}
+
+.os-live-focus-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.os-live-focus-text {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.5;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+
+.os-live-focus-images {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  margin-top: 0.75rem;
+}
+
+.os-live-focus-images img {
+  max-height: 12rem;
+  max-width: 100%;
+  border-radius: 0.75rem;
+  object-fit: contain;
+}
+
+.os-live-orb {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-from), var(--brand), var(--brand-to));
+}
+
+.os-live-stage--docked .os-live-orb {
+  padding: 4px;
+}
+
+.os-live-stage--spotlight .os-live-orb {
+  padding: 10px;
+}
+
+.os-live-orb-face {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--background);
+}
+
+.os-live-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  width: 52%;
+  height: 46%;
+}
+
+.os-live-stage--docked .os-live-wave {
+  gap: 0.12rem;
+  width: 58%;
+  height: 50%;
+}
+
+.os-live-wave span {
+  flex: 1;
+  max-width: 0.48rem;
+  min-height: 18%;
+  height: 18%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand-from), var(--brand-to));
+}
+
+.os-live-stage--docked .os-live-wave span {
+  max-width: 0.2rem;
+}
+
+@keyframes os-live-elon-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.96);
+    filter: blur(4px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes os-live-elon-sheen {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* Specialist / Grok inbound bubble — gradient rim, soft glow, slide-in. */
+.os-live-bubble-agent {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  padding: 0.7rem 0.95rem;
+  border-radius: 1.25rem 1.25rem 1.25rem 0.45rem;
+  color: var(--foreground);
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(120deg, var(--brand-from), var(--brand), var(--brand-to), var(--brand-from)) border-box;
+  background-size: auto, 220% 220%;
+  border: 1.5px solid transparent;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--brand) 18%, transparent),
+    0 10px 28px color-mix(in oklch, var(--brand) 16%, transparent);
+  animation:
+    os-live-elon-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    os-live-elon-sheen 4.5s linear infinite;
+}
+
+.os-live-bubble-agent-label {
+  margin-bottom: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
 /* A short fade, no stagger — tab switches should feel instant, not choreographed. */
 .os-enter > * {
   animation: os-fade-up 140ms cubic-bezier(0.22, 1, 0.36, 1) backwards;

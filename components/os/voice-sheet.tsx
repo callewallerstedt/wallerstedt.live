@@ -2,14 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, X } from "lucide-react";
+import { VoiceOrb } from "@/components/os/voice-orb";
+import { normalizeVoiceAgent, type VoiceAgentSlug } from "@/lib/os/voice-agents";
 import { speechTranscript } from "@/lib/os/voice-transcript";
 import { elonResponse, nextVoiceAction } from "@/lib/os/voice-readout";
 import { zIndex } from "@/lib/z-index";
 
-type Entry = { id: string; role: "user" | "assistant" | "Elon" | "tool"; text: string; images?: string[] };
+type Entry = {
+  id: string;
+  role: "user" | "assistant" | "agent" | "tool";
+  agent?: VoiceAgentSlug;
+  text: string;
+  images?: string[];
+};
 type Json = Record<string, unknown>;
 const record = (value: unknown): Json => value && typeof value === "object" ? value as Json : {};
 const string = (value: unknown) => typeof value === "string" ? value : "";
+const agentLabel = (agent: string) => agent === "bjorn" ? "Björn" : agent[0].toUpperCase() + agent.slice(1);
+
+const PREVIEW_AGENTS: { agent: VoiceAgentSlug; text: string }[] = [
+  { agent: "elon", text: "Got it — running that now." },
+  { agent: "bjorn", text: "I can take the coding side." },
+  { agent: "jensen", text: "Books look fine for this week." },
+  { agent: "max", text: "New clip idea queued." },
+];
 
 async function jsonResponse(response: Response) {
   const body = record(await response.json());
@@ -17,8 +33,8 @@ async function jsonResponse(response: Response) {
   return body;
 }
 
-export default function VoiceSheet({ accessKey, microphone, onClose }: {
-  accessKey: string; microphone: Promise<MediaStream>; onClose: () => void;
+export default function VoiceSheet({ accessKey, microphone, onClose, preview = false }: {
+  accessKey: string; microphone: Promise<MediaStream>; onClose: () => void; preview?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const audio = useRef<HTMLAudioElement>(null);
@@ -38,6 +54,9 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
   const [muted, setMuted] = useState(false);
   const [needsPlayback, setNeedsPlayback] = useState(false);
   const [inboxError, setInboxError] = useState("");
+  const [spotlight, setSpotlight] = useState(false);
+  const previewHeard = useRef(false);
+  const previewVoiceFrames = useRef(0);
   const base = `/api/os/${encodeURIComponent(accessKey)}/voice`;
 
   function update(id: string, role: Entry["role"], text: string, append = false) {
@@ -49,6 +68,14 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
     });
   }
   useEffect(() => { dialog.current?.showModal(); }, []);
+  useEffect(() => {
+    if (!preview) return;
+    setEntries([
+      { id: "preview-user", role: "user", text: "Hey Live — ping the crew" },
+      { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists." },
+      ...PREVIEW_AGENTS.map(({ agent, text }) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text })),
+    ]);
+  }, [preview]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [entries]);
 
   useEffect(() => {
@@ -66,6 +93,10 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
     let toolContinuation = false;
     const handledCalls = new Set<string>();
     const playback = audio.current;
+    if (preview) {
+      setStatus("Live");
+      return;
+    }
     const timeout = setTimeout(() => fail("Connection timed out. Close Live and try again."), 30_000);
     function cleanup() {
       clearTimeout(timeout);
@@ -254,9 +285,10 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
     }
     void connect();
     return () => { disposed = true; cleanup(); };
-  }, [base, microphone]);
+  }, [base, microphone, preview]);
 
   useEffect(() => {
+    if (preview) return;
     let stopped = false;
     const openedAt = Date.now();
     let cursor = openedAt;
@@ -278,46 +310,99 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
           const images = (Array.isArray(item.images) ? item.images : []).filter((url): url is string => typeof url === "string" && url.startsWith("https://"));
           const text = (string(item.message) || string(item.text)).trim();
           if (!text && !images.length) continue;
-          setEntries((previous) => [...previous, { id: `elon-${id}`, role: "Elon" as const, text, images }].slice(-200));
+          const agent = normalizeVoiceAgent(string(item.agent) || string(item.source)) ?? "elon";
+          setEntries((previous) => [...previous, { id: `agent-${id}`, role: "agent" as const, agent, text, images }].slice(-200));
           pendingReplies.current.push({ id, text, images });
         }
         flushReplies.current();
-      } catch { if (!stopped) setInboxError("Elon inbox unavailable — retrying…"); }
+      } catch { if (!stopped) setInboxError("Agent inbox unavailable — retrying…"); }
       if (!stopped) timer = setTimeout(poll, 2500);
     }
     void poll();
     return () => { stopped = true; clearTimeout(timer); controller.abort(); };
-  }, [base]);
+  }, [base, preview]);
 
+  // Transcript lines dock the listening orb to the top-right.
   const visibleEntries = entries.filter((entry) => entry.text.trim() || entry.images?.length);
+  const hasTranscript = visibleEntries.length > 0;
+  const orbMode = !hasTranscript ? "idle" : spotlight ? "spotlight" : "docked";
+  const latestInbound = [...visibleEntries].reverse().find((entry) => entry.role === "assistant" || entry.role === "agent");
 
-  return <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); onClose(); }} aria-labelledby="voice-title"
+  return <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); onClose(); }} aria-label="GPT-Live"
     className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none bg-background p-0 text-foreground backdrop:bg-black/70"
     style={{ zIndex: zIndex.overlay }}>
-    <div className="flex h-full flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
-      <header className="flex items-center justify-between border-b border-border p-4">
-        <div><h2 id="voice-title" className="font-semibold">GPT-Live</h2><p role="status" className="text-sm text-brand">{status}</p></div>
-        <button autoFocus type="button" aria-label="Close Live and stop microphone" onClick={onClose} className="rounded-full p-3 hover:bg-muted"><X /></button>
-      </header>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4" role="log" aria-label="Live transcript">
-        {!visibleEntries.length && <p className="mx-auto max-w-md py-12 text-center text-muted-foreground">Talk to Live in Swedish or English. Ask to send a message to Elon.</p>}
-        {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="mx-auto w-fit max-w-full rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-sm text-brand">{entry.text}</div> :
-          <article key={entry.id} className={`max-w-xl rounded-xl p-3 ${entry.role === "user" ? "ml-auto bg-brand-soft" : "mr-auto bg-card"}`}>
-            <p className="mb-1 text-xs text-muted-foreground">{entry.role === "user" ? "You" : entry.role === "assistant" ? "Live" : "Elon"}</p>
-            <p className="whitespace-pre-wrap break-words">{entry.text}</p>
-            {entry.images?.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mt-2 block">
-              {/* Remote Elon images have arbitrary HTTPS hosts. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="Image from Elon — open full image" loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-lg object-contain" />
-            </a>)}
-          </article>)}
-        <div ref={bottom} />
+    <div className="relative flex h-full flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
+      <p role="status" className="sr-only">{status}{inboxError ? `. ${inboxError}` : ""}</p>
+      <button autoFocus type="button" aria-label="Close Live and stop microphone" onClick={onClose} className="absolute left-2 top-2 z-10 rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <X className="size-5" />
+      </button>
+      <div className="relative min-h-0 flex-1">
+        {spotlight ? (
+          <div className="os-live-spotlight">
+            <VoiceOrb
+              mode="spotlight"
+              microphone={microphone}
+              muted={muted}
+              onToggle={() => setSpotlight(false)}
+            />
+            {latestInbound && (
+              <div className="os-live-focus" role="status">
+                <p className="os-live-focus-label">{latestInbound.role === "agent" ? agentLabel(latestInbound.agent ?? "elon") : "Live"}</p>
+                {latestInbound.text.trim() && <p className="os-live-focus-text">{latestInbound.text}</p>}
+                {!!latestInbound.images?.length && (
+                  <div className="os-live-focus-images">
+                    {latestInbound.images.map((url) => (
+                      // Remote agent images have arbitrary HTTPS hosts.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={url} src={url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <VoiceOrb
+              mode={orbMode === "docked" ? "docked" : "idle"}
+              microphone={microphone}
+              muted={muted}
+              onToggle={hasTranscript ? () => setSpotlight(true) : undefined}
+              onVoice={(level) => {
+                if (!preview || previewHeard.current) return;
+                if (level < 0.22) {
+                  previewVoiceFrames.current = 0;
+                  return;
+                }
+                previewVoiceFrames.current += 1;
+                if (previewVoiceFrames.current < 18) return;
+                previewHeard.current = true;
+              }}
+            />
+            <div className={`h-full overflow-y-auto overscroll-contain px-4 pb-2 ${hasTranscript ? "space-y-3 pt-24 os-enter" : "pt-4"}`} role="log" aria-label="Live transcript">
+              {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="mx-auto w-fit max-w-full rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-sm text-brand">{entry.text}</div> :
+                entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent mr-auto max-w-[min(20rem,85%)]" data-agent={entry.agent}>
+                  <p className="os-live-bubble-agent-label">{agentLabel(entry.agent ?? "elon")}</p>
+                  <p className="whitespace-pre-wrap break-words">{entry.text}</p>
+                  {entry.images?.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mt-2 block">
+                    {/* Remote agent images have arbitrary HTTPS hosts. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={`Image from ${agentLabel(entry.agent ?? "elon")} — open full image`} loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-lg object-contain" />
+                  </a>)}
+                </article> :
+                <article key={entry.id} className={`max-w-[min(20rem,85%)] px-3.5 py-2.5 ${entry.role === "user" ? "ml-auto rounded-[1.25rem] rounded-br-md bg-brand-soft" : "mr-auto rounded-[1.25rem] rounded-bl-md bg-card"}`}>
+                  {entry.role === "assistant" && <p className="mb-1 text-xs text-muted-foreground">Live</p>}
+                  <p className="whitespace-pre-wrap break-words">{entry.text}</p>
+                </article>)}
+              {hasTranscript && <div ref={bottom} />}
+            </div>
+          </>
+        )}
       </div>
-      <footer className="space-y-2 border-t border-border p-4 text-center">
+      <footer className="space-y-3 p-4 text-center">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {inboxError && <p className="text-xs text-muted-foreground">{inboxError}</p>}
         {needsPlayback && <button type="button" className="rounded-lg bg-brand px-4 py-2 text-brand-foreground" onClick={() => { void audio.current?.play().then(() => setNeedsPlayback(false)).catch(() => setError("Audio could not play. Check your device audio settings.")); }}>Tap to hear Live</button>}
-        <button type="button" disabled={status !== "Live" && status !== "Reconnecting"} aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className="mx-auto flex size-14 items-center justify-center rounded-full bg-brand text-brand-foreground disabled:opacity-40" onClick={() => {
+        <button type="button" disabled={status !== "Live" && status !== "Reconnecting"} aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={`mx-auto flex size-16 items-center justify-center rounded-full border border-border/70 bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-40 ${muted ? "opacity-50" : ""}`} onClick={() => {
           mutedRef.current = !mutedRef.current;
           if (mutedRef.current) {
             pendingInput.current.forEach((id) => ignoredInput.current.add(id));
@@ -326,9 +411,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose }: {
           }
           media.current?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current && !speaking.current; });
           setMuted(mutedRef.current);
-        }}>{muted ? <MicOff /> : <Mic />}</button>
-        <p className="text-xs text-muted-foreground">{muted ? "Microphone muted" : "Voice is shared with OpenAI while connected"}</p>
-        <p className="text-xs text-muted-foreground">Action Button URL: <a className="break-all underline" href={`/bolag/${encodeURIComponent(accessKey)}/live`}>{`https://wallerstedt.live/bolag/${encodeURIComponent(accessKey)}/live`}</a></p>
+        }}>{muted ? <MicOff className="size-6" /> : <Mic className="size-6" />}</button>
       </footer>
       <audio ref={audio} autoPlay playsInline />
     </div>
