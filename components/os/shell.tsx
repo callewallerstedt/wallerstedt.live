@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { BolagServiceWorker } from "@/components/os/bolag-sw";
 import type { CompanyField } from "@/components/os/company-menu";
+import { VoiceLive } from "@/components/os/voice-live";
 import { OsPrefetch } from "@/components/os/prefetch";
 import { OsHeader, OsSidebar, OsTabBar } from "@/components/os/sidebar";
 import { osPageFromPathname } from "@/lib/os/route";
@@ -63,6 +64,7 @@ export function OsShell({
         </div>
       </div>
       <OsTabBar accessKey={accessKey} taskCount={taskCount} />
+      <VoiceLive accessKey={accessKey} />
     </div>
   );
 }

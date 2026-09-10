@@ -21,6 +21,12 @@ The header holds only the logo; pressing it drops down the registry details
 
 `Content`, `Customers`, `Accounting`, `Investments`, `Wealth`, `Upcoming`, `Alerts` and `Projects` were merged away; their URLs redirect rather than 404.
 
+### GPT-Live voice
+
+The floating Live mic on every signed-in Bolag page opens fullscreen duplex OpenAI Realtime voice with a two-sided transcript. Ask Live to use `send_to_boss`; successful delivery shows **Sent to Boss**. Configure the server-only OpenAI and Boss variables in `.env.example` (`gpt-realtime` by default). The browser receives only a short-lived Realtime credential. Setup follows the [OpenAI Realtime WebRTC API](https://developers.openai.com/api/docs/guides/voice-webrtc).
+
+Boss / Grok Bot can POST `{ "text": "Reply", "imageUrls": ["https://…"] }` to `/api/os/<key>/voice/boss/inbox`, using Bearer `BOSS_VOICE_INBOX_TOKEN` (or the webhook token). The open sheet polls every 2.5 seconds and displays text and HTTPS images, without reverse audio. Inbox retention is one hour / 50 replies per owner, in process memory: restarts lose replies and separate server instances do not share them. Use a shared store for reliable delivery across instances. Closing Live stops the microphone; reopen to see retained replies.
+
 ### Refreshing the streaming numbers
 
 The Music tab reads `lib/os/music-data.json`, built from a Spotify for Artists
