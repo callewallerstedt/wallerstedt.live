@@ -95,7 +95,7 @@ export function VoiceOrb({
       if (!ctx) return;
       if (ctx.state === "suspended") await ctx.resume();
       if (cancelled) {
-        void ctx.close();
+        void ctx.close().catch(() => {});
         return;
       }
       const source = ctx.createMediaStreamSource(stream);
@@ -131,11 +131,11 @@ export function VoiceOrb({
         raf = requestAnimationFrame(tick);
       };
       tick();
-    }, () => {});
+    }).catch(() => { /* Meter failure must not break the voice connection. */ });
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
-      void ctx?.close();
+      void ctx?.close().catch(() => {});
     };
   }, [microphone]);
 

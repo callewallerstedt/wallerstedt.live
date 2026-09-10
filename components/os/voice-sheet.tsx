@@ -73,7 +73,8 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   function update(id: string, role: Entry["role"], text: string, append = false, at = Date.now()) {
     setEntries((previous) => {
       const existing = previous.find((entry) => entry.id === id);
-      if (!existing && !text.trim()) return previous;
+      // Empty entries reserve conversation order before transcription finishes.
+      if (existing && !text) return previous;
       if (!existing) return insertEntry(previous, { id, role, text, at });
       return previous.map((entry) => entry.id === id ? { ...entry, text: append ? entry.text + text : text } : entry);
     });
@@ -100,13 +101,14 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     let peer: RTCPeerConnection | undefined;
     let channel: RTCDataChannel | undefined;
     let tracks: MediaStream | undefined;
-    let echoTailTimer: ReturnType<typeof setTimeout> | undefined;
+    let playbackResponseId = "";
     let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     let responding = false;
     let activeResponseId = "";
-    let readoutPending = false;
+
     let toolContinuation = false;
+    let pendingTools = 0;
     const handledCalls = new Set<string>();
     const playback = audio.current;
     if (preview) {
@@ -116,9 +118,13 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     const timeout = setTimeout(() => fail("Connection timed out. Close Live and try again."), 30_000);
     function cleanup() {
       clearTimeout(timeout);
-      clearTimeout(echoTailTimer);
       clearTimeout(disconnectTimer);
       controller.abort();
+      tracks?.getAudioTracks().forEach((track) => { track.onended = null; });
+      speaking.current = false;
+      pendingInput.current.clear();
+      ignoredInput.current.clear();
+      speechAt.current.clear();
       connection.current = null;
       flushReplies.current = () => {};
       if (channel) { channel.onclose = null; channel.onerror = null; channel.close(); }
@@ -128,7 +134,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     function fail(message: string) {
       if (disposed) return;
       failed = true;
-      tracks?.getTracks().forEach((track) => track.stop());
+      void microphone.then((stream) => stream.getTracks().forEach((track) => track.stop()), () => {});
       setError(message); setStatus("Error");
       disposed = true;
       cleanup();
@@ -137,26 +143,15 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       if (!disposed && channel?.readyState === "open") channel.send(JSON.stringify(event));
     }
     function syncInput() {
-      tracks?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current && !speaking.current; });
+      tracks?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current; });
     }
     function flush() {
+      if (pendingTools) return;
       const action = nextVoiceAction({
         open: !disposed && channel?.readyState === "open", replies: pendingReplies.current.length,
         responding, speaking: speaking.current, pendingInput: pendingInput.current.size, toolContinuation,
       });
       if (action === "wait") return;
-      if (action === "elon") {
-        // Elon outranks ambient VAD, queued tool acknowledgements and playback.
-        clearTimeout(echoTailTimer);
-        pendingInput.current.forEach((id) => ignoredInput.current.add(id));
-        pendingInput.current.clear();
-        if (responding) send({ type: "response.cancel" });
-        send({ type: "output_audio_buffer.clear" });
-        send({ type: "input_audio_buffer.clear" });
-        readoutPending = true;
-        speaking.current = true;
-        syncInput();
-      }
       toolContinuation = false;
       activeResponseId = "";
       responding = true;
@@ -168,6 +163,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       const callId = string(item.call_id);
       if (!callId || handledCalls.has(callId)) return;
       handledCalls.add(callId);
+      pendingTools++;
       const name = string(item.name);
       let label = name === "send_to_boss" ? "Elon" : "Agent";
       let result: Json;
@@ -181,7 +177,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         if (!string(args.message).trim()) throw new Error(`${label} message was empty.`);
         result = await jsonResponse(await fetch(`${base}/agent`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agent, message: args.message }), signal: controller.signal,
+          body: JSON.stringify({ agent, message: args.message }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]),
         }));
         if (result.ok !== true) throw new Error(`${label} did not confirm delivery.`);
         const recipient = string(result.agent) || agent;
@@ -192,6 +188,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         result = { ok: false, message: cause instanceof Error ? cause.message : `${label} could not be reached.` };
         if (!disposed) update(callId, "tool", `${label} · ${string(result.message)}`);
       }
+      pendingTools--;
       send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(result) } });
       toolContinuation = true;
       flush();
@@ -206,47 +203,45 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       if (type === "response.output_item.done" && item.type === "function_call") void tool(item);
       const id = string(data.item_id) || string(item.id);
       if (type === "input_audio_buffer.speech_started" && id) {
-        if (mutedRef.current || speaking.current) ignoredInput.current.add(id);
+        if (mutedRef.current) ignoredInput.current.add(id);
         else {
           pendingInput.current.add(id);
           if (!speechAt.current.has(id)) speechAt.current.set(id, Date.now());
+          update(id, "user", "", false, speechAt.current.get(id));
         }
       }
       if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && mutedRef.current) ignoredInput.current.add(id);
+      if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && !ignoredInput.current.has(id)) {
+        update(id, "user", "", false, speechAt.current.get(id) ?? Date.now());
+      }
+      if (id && type === "response.output_item.added" && item.role === "assistant") update(id, "assistant", "");
       if (type === "response.created") { responding = true; activeResponseId = string(record(data.response).id); }
       if (type === "output_audio_buffer.started") {
-        clearTimeout(echoTailTimer);
+        playbackResponseId = string(data.response_id);
         speaking.current = true;
-        syncInput();
-        send({ type: "input_audio_buffer.clear" });
       }
       if (type === "output_audio_buffer.stopped" || type === "output_audio_buffer.cleared") {
-        // A cancelled response must not unmute the mic during its replacement.
-        if (string(data.response_id) !== activeResponseId || !activeResponseId) return;
-        // Keep the speaker tail out of the microphone after playback ends.
-        echoTailTimer = setTimeout(() => {
+        if (string(data.response_id) === playbackResponseId) {
           speaking.current = false;
-          syncInput();
+          playbackResponseId = "";
           flush();
-        }, 250);
-      }
-      if (type === "response.done" && activeResponseId && string(record(data.response).id) === activeResponseId) {
-        responding = false;
-        if (readoutPending && record(data.response).status !== "completed") {
-          speaking.current = false;
-          syncInput();
         }
-        readoutPending = false;
+      }
+      if (type === "response.done" && string(record(data.response).id) === activeResponseId) {
+        responding = false;
+        const response = record(data.response);
+        if (response.status === "failed") setError("Live could not complete that reply. Please try speaking again.");
         flush();
       }
       if (id && type === "conversation.item.input_audio_transcription.completed") {
         pendingInput.current.delete(id);
         const text = speechTranscript(string(data.transcript));
         const at = speechAt.current.get(id) ?? Date.now();
-        if (!mutedRef.current && !ignoredInput.current.has(id) && text) update(id, "user", text, false, at);
+        if (!ignoredInput.current.has(id) && text) update(id, "user", text, false, at);
         speechAt.current.delete(id);
         ignoredInput.current.delete(id);
-        // VAD owns user responses. Transcription events never create responses.
+        flush();
+        // VAD owns user responses; flush only resumes queued readouts/tools.
       } else if (id && /response\.(output_audio_transcript|audio_transcript|output_text|text)\.(delta|done)$/.test(type)) {
         update(id, "assistant", string(data.transcript) || string(data.text) || string(data.delta), type.endsWith("delta"));
       } else if (id && /^conversation\.item\.(created|added|done)$/.test(type) && item.role === "assistant" && Array.isArray(item.content)) {
@@ -257,19 +252,25 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         pendingInput.current.delete(id);
         speechAt.current.delete(id);
         ignoredInput.current.delete(id);
+        setError("Could not transcribe that speech. Please try again.");
+        flush();
       }
       if (type === "error") setError("Live encountered an error. If it stops responding, close and reopen the mic.");
     }
     async function connect() {
       try {
-        tracks = await microphone;
+        const [stream, session] = await Promise.all([microphone,
+          fetch(`${base}/session`, { method: "POST", signal: controller.signal }).then(jsonResponse),
+        ]);
+        tracks = stream;
         if (disposed) {
           if (failed) tracks.getTracks().forEach((track) => track.stop());
           return;
         }
+        if (!tracks.getAudioTracks().some((track) => track.readyState === "live")) throw new Error("Microphone is unavailable. Close Live and try again.");
+        tracks.getAudioTracks().forEach((track) => { track.onended = () => fail("Microphone disconnected. Close Live and try again."); });
         media.current = tracks;
         syncInput();
-        const session = await jsonResponse(await fetch(`${base}/session`, { method: "POST", signal: controller.signal }));
         if (disposed) return;
         if (!string(session.value)) throw new Error("Invalid Live session.");
         peer = new RTCPeerConnection();
@@ -320,7 +321,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     const controller = new AbortController();
     async function poll() {
       try {
-        const data = await jsonResponse(await fetch(`${base}/boss/inbox?since=${cursor}`, { cache: "no-store", signal: controller.signal }));
+        const data = await jsonResponse(await fetch(`${base}/boss/inbox?since=${cursor}`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) }));
         if (stopped) return;
         setInboxError("");
         for (const value of Array.isArray(data.items) ? data.items : []) {
@@ -435,7 +436,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
             pendingInput.current.clear();
             if (connection.current?.readyState === "open") connection.current.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
           }
-          media.current?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current && !speaking.current; });
+          media.current?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current; });
           setMuted(mutedRef.current);
         }}>{muted ? <MicOff className="size-6" /> : <Mic className="size-6" />}</button>
       </footer>

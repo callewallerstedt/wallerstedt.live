@@ -4,7 +4,7 @@ export function nextVoiceAction(state: {
   open: boolean; replies: number; responding: boolean; speaking: boolean;
   pendingInput: number; toolContinuation: boolean;
 }): "elon" | "tool" | "wait" {
-  if (!state.open) return "wait";
+  if (!state.open || state.responding || state.speaking || state.pendingInput) return "wait";
   if (state.replies) return "elon";
   return state.toolContinuation && !state.responding && !state.speaking && !state.pendingInput ? "tool" : "wait";
 }

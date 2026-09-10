@@ -426,6 +426,19 @@ model CompanyTikTokScan {
   @@index([weekKey])
 }
 
+/** Durable replies shared by webhook and polling server instances. */
+model CompanyVoiceReply {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerHash String
+  message   String
+  images    String[]
+  agent     String?
+  createdAt DateTime @default(now())
+
+  @@index([ownerHash, createdAt])
+  @@index([createdAt])
+}
+
 /** Single-row lock so the 20:00 Berlin record nudge fires once per day. */
 model CompanyRecordNudge {
   id          String   @id

@@ -4,16 +4,19 @@ import { elonResponse, nextVoiceAction } from "./voice-readout";
 
 const idle = { open: true, replies: 0, responding: false, speaking: false, pendingInput: 0, toolContinuation: false };
 
-test("Elon wakes idle Live and preempts responses, playback, phantom VAD and tools", () => {
+test("agent replies wake idle Live but never preempt speech or playback", () => {
   assert.equal(nextVoiceAction({ ...idle, replies: 1 }), "elon");
-  assert.equal(nextVoiceAction({ ...idle, replies: 1, responding: true, speaking: true, pendingInput: 2, toolContinuation: true }), "elon");
+  assert.equal(nextVoiceAction({ ...idle, replies: 1, responding: true, speaking: true, pendingInput: 2, toolContinuation: true }), "wait");
 });
 
 test("queued replies wait for channel open, then flush without user activity", () => {
-  const state = { ...idle, replies: 2, pendingInput: 1 };
+  const state = { ...idle, replies: 2 };
   assert.equal(nextVoiceAction({ ...state, open: false }), "wait");
   assert.equal(nextVoiceAction(state), "elon");
   assert.equal(nextVoiceAction(idle), "wait");
+  for (const busy of [{ speaking: true }, { responding: true }, { pendingInput: 1 }]) {
+    assert.equal(nextVoiceAction({ ...state, ...busy }), "wait");
+  }
 });
 
 test("ordinary tool continuation still waits for speech and input", () => {

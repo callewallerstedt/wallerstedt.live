@@ -357,7 +357,7 @@ body:has(.os-root) > .footer {
 
 .os-task-check-progress {
   background:
-    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(color-mix(in oklch, var(--card) 94%, white), color-mix(in oklch, var(--card) 94%, white)) padding-box,
     linear-gradient(135deg, var(--brand-from), var(--brand-to)) border-box;
   border: 2px solid transparent;
 }
@@ -492,13 +492,13 @@ body:has(.os-root) > .footer {
 .os-live-bubble--user {
   margin-left: auto;
   border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
-  background: var(--brand-soft);
+  background: color-mix(in oklch, var(--brand-soft) 94%, white);
 }
 
 .os-live-bubble--assistant {
   margin-right: auto;
   border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
-  background: var(--card);
+  background: color-mix(in oklch, var(--card) 94%, white);
 }
 
 .os-live-bubble-live-label {
