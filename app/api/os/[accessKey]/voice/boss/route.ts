@@ -12,9 +12,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ acc
     const input = await voiceInput(request, bossMessageSchema);
     const url = process.env.BOSS_VOICE_WEBHOOK_URL;
     const token = process.env.BOSS_VOICE_WEBHOOK_TOKEN;
-    if (!url || !token) return privateJson({ ok: false, message: "Boss voice webhook is not configured." }, 503);
+    if (!url || !token) return privateJson({ ok: false, message: "Elon voice webhook is not configured." }, 503);
     const response = await voiceFetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(bossPayload(input.message)) });
-    if (!response?.ok) return privateJson({ ok: false, message: "Boss did not accept the message." }, 502);
+    if (!response?.ok) return privateJson({ ok: false, message: "Elon did not accept the message." }, 502);
     return privateJson({ ok: true });
   });
 }

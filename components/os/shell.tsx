@@ -26,6 +26,7 @@ export function OsShell({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const live = pathname === `/bolag/${encodeURIComponent(accessKey)}/live`;
   const vault = osPageFromPathname(pathname) === "vault";
 
   // The sidebar state is a per-device preference, so it lives in the browser.
@@ -41,7 +42,7 @@ export function OsShell({
   return (
     <div className="flex h-dvh max-w-full overflow-hidden bg-background text-foreground">
       <BolagServiceWorker />
-      <OsPrefetch accessKey={accessKey} />
+      {!live && <OsPrefetch accessKey={accessKey} />}
       <OsSidebar
         accessKey={accessKey}
         collapsed={collapsed}
@@ -64,7 +65,7 @@ export function OsShell({
         </div>
       </div>
       <OsTabBar accessKey={accessKey} taskCount={taskCount} />
-      <VoiceLive accessKey={accessKey} />
+      <VoiceLive key={live ? "live" : "dashboard"} accessKey={accessKey} autoStart={live} />
     </div>
   );
 }

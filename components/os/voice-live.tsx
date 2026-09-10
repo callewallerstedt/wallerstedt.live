@@ -1,35 +1,36 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Mic } from "lucide-react";
 import { zIndex } from "@/lib/z-index";
 
 const VoiceSheet = dynamic(() => import("./voice-sheet"), { ssr: false });
 
-export function VoiceLive({ accessKey }: { accessKey: string }) {
+export function VoiceLive({ accessKey, autoStart = false }: { accessKey: string; autoStart?: boolean }) {
   const [open, setOpen] = useState(false);
   const [microphone, setMicrophone] = useState<Promise<MediaStream> | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const generation = useRef(0);
-  function stop() {
+  const stop = useCallback(() => {
     generation.current++;
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
-  }
-  useEffect(() => () => { stop(); }, []);
-  function start() {
+  }, []);
+  useEffect(() => () => { stop(); }, [stop]);
+  const start = useCallback(() => {
     stop();
     const attempt = generation.current;
     // Request permission in the tap handler, before loading the sheet on iOS.
-    const pending = navigator.mediaDevices?.getUserMedia({ audio: true }) ?? Promise.reject(new Error("Microphone requires HTTPS and a supported browser."));
+    const pending = navigator.mediaDevices?.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }) ?? Promise.reject(new Error("Microphone requires HTTPS and a supported browser."));
     void pending.then((media) => {
       if (generation.current !== attempt) media.getTracks().forEach((track) => track.stop());
       else stream.current = media;
     }, () => {});
     setMicrophone(pending);
     setOpen(true);
-  }
+  }, [stop]);
+  useEffect(() => { if (autoStart) start(); }, [autoStart, start]);
   return <>
     <button type="button" aria-label={open ? "Cancel opening Live" : "Open GPT-Live microphone"} onClick={() => { if (open) { stop(); setOpen(false); } else start(); }}
       className="fixed flex size-14 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

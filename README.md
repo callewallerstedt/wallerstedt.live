@@ -23,9 +23,19 @@ The header holds only the logo; pressing it drops down the registry details
 
 ### GPT-Live voice
 
-The floating Live mic on every signed-in Bolag page opens fullscreen duplex OpenAI Realtime voice with a two-sided transcript. Ask Live to use `send_to_boss`; successful delivery shows **Sent to Boss**. Configure the server-only OpenAI and Boss variables in `.env.example` (`gpt-realtime` by default). The browser receives only a short-lived Realtime credential. Setup follows the [OpenAI Realtime WebRTC API](https://developers.openai.com/api/docs/guides/voice-webrtc).
+The floating Live mic on every signed-in Bolag page opens fullscreen OpenAI Realtime voice with a two-sided transcript. Ask Live to use `send_to_boss`; successful delivery shows **Sent to Elon**. Configure the server-only OpenAI and ops webhook variables in `.env.example` (`gpt-realtime` by default). The browser receives only a short-lived Realtime credential. Setup follows the [OpenAI Realtime WebRTC API](https://developers.openai.com/api/docs/guides/voice-webrtc).
 
-Boss / Grok Bot can POST `{ "text": "Reply", "imageUrls": ["https://…"] }` to `/api/os/<key>/voice/boss/inbox`, using Bearer `BOSS_VOICE_INBOX_TOKEN` (or the webhook token). The open sheet polls every 2.5 seconds and displays text and HTTPS images, without reverse audio. Inbox retention is one hour / 50 replies per owner, in process memory: restarts lose replies and separate server instances do not share them. Use a shared store for reliable delivery across instances. Closing Live stops the microphone; reopen to see retained replies.
+Elon (formerly Boss / Grok Bot) can POST `{ "text": "Reply", "imageUrls": ["https://…"] }` to `/api/os/<key>/voice/boss/inbox`, using Bearer `BOSS_VOICE_INBOX_TOKEN` (or the webhook token). The open sheet polls every 2.5 seconds and displays Elon text and HTTPS images, queues each inbox id once per open sheet, and asks Realtime to read it aloud after the current response finishes. Images without text get a brief announcement without invented captions. Inbox retention is one hour / 50 replies per owner, in process memory: restarts lose replies and separate server instances do not share them. Use a shared store for reliable delivery across instances. Closing Live stops the microphone; reopen to see and hear retained replies.
+
+User bubbles use completed transcripts only; empty entries, punctuation, and short non-Latin noise fragments are hidden. Echo cancellation and noise suppression are requested. While Live audio plays, microphone transmission pauses to prevent speaker echo and self-interruption (wait for Live to finish before speaking). Muting suppresses incoming transcription and clears buffered input; iOS may still display its microphone indicator while the connection owns the track. Closing Live releases it.
+
+For iPhone Action Button → Shortcuts → **Open URL**, use:
+
+```text
+https://wallerstedt.live/bolag/<key>/live
+```
+
+Replace `<key>` with your Bolag access key. This route opens the sheet, requests the microphone and connects automatically, without loading overview data or dashboard prefetches. It uses the normal owner session; if signed out, sign in on that same URL and Live continues automatically. Safari and the Home Screen app may have separate sessions. If iOS blocks automatic microphone access, close the sheet and tap the mic to retry; if playback is blocked, use **Tap to hear Live**. The Live footer also contains the direct URL.
 
 ### Refreshing the streaming numbers
 
