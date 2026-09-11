@@ -84,7 +84,7 @@ reported, so a half-counted final day never reads as a cliff.
 
 ### Tasks need a migration
 
-The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). Saved piano-cover searches per video idea need `CompanyTikTokSearch` (`taskId` unique; Refresh overwrites `query` + `payload`). The daily record reminder lock is `CompanyRecordNudge`. Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
+The to-do list is stored in Postgres (`CompanyTask`). Watched TikTok accounts and scan results need `CompanyTikTokAccount` / `CompanyTikTokScan` (same deploy). Saved piano-cover searches per video idea need `CompanyTikTokSearch` (`taskId` unique; Refresh overwrites `query` + `payload`). Shared caption tips need `CompanyTikTokCaptionPrompt`. Video-idea captions live on `CompanyTask.caption` (filled when an idea enters practicing). The daily record reminder lock is `CompanyRecordNudge`. Until the migration is applied the dashboard still works — the task panel just shows a notice instead of failing, and TikTok scan tools ask for the migration:
 
 ```bash
 npm run prisma:deploy
@@ -137,8 +137,16 @@ Video ideas use a three-way check on the phone: first tap sets `inProgress`
 (`status: "in_progress"`, practicing, gradient outline, pinned to the top);
 second tap marks `done`; tapping a done row opens it again. Regular to-dos stay
 open ↔ done. `GET /tasks?status=open` includes practicing rows. Max can PATCH
-`{ "inProgress": true }` or `{ "status": "in_progress" }`. No extra column —
-this reuses `CompanyTask.status`. No Prisma migration.
+`{ "inProgress": true }` or `{ "status": "in_progress" }`.
+
+The first transition into practicing generates a TikTok caption (title, song,
+notes, plus shared caption tips) and stores it on `CompanyTask.caption`. Later
+edits while already practicing do not regenerate. A failed generate still
+leaves the idea practicing, with an empty caption. Apply the migration:
+
+```bash
+npm run prisma:deploy
+```
 
 ```bash
 curl -X POST "$BASE/tasks" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{"title": "Soluppgång över Vallda, slowed", "list": "video", "song": "Memories"}'

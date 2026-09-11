@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, CopyIcon, Loader2Icon, SparklesIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, Loader2Icon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { CAPTION_PROMPT_MAX } from "@/lib/os/tiktok-caption";
 import { cn } from "@/lib/utils";
 
@@ -39,53 +38,14 @@ export function CaptionTipsField({
   );
 }
 
-export function GenerateCaptionButton({
-  busy,
-  disabled,
-  onClick,
-  title,
-}: {
-  busy: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  title: string;
-}) {
-  return (
-    <button
-      aria-busy={busy}
-      aria-label={`Generate caption for ${title}`}
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md ring-1 ring-foreground/12",
-        busy ? "text-brand" : "text-muted-foreground hover:text-brand",
-      )}
-      disabled={disabled || busy}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      title="Generate caption"
-      type="button"
-    >
-      {busy ? (
-        <Loader2Icon className="size-3.5 animate-spin" />
-      ) : (
-        <SparklesIcon className="size-3.5" />
-      )}
-    </button>
-  );
-}
-
 export function VideoCaptionBox({
   caption,
   busy,
   error,
-  onGenerate,
 }: {
   caption: string;
-  busy: boolean;
-  error: string;
-  onGenerate: () => void;
+  busy?: boolean;
+  error?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -100,24 +60,16 @@ export function VideoCaptionBox({
     }
   }
 
+  if (!busy && !error && !caption) return null;
+
   return (
     <div className="flex flex-col gap-2">
-      <Button
-        className="min-h-11 w-full md:min-h-9 md:w-auto"
-        disabled={busy}
-        onClick={onGenerate}
-        onPointerDown={(event) => event.stopPropagation()}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {busy ? (
-          <Loader2Icon className="size-4 animate-spin" />
-        ) : (
-          <SparklesIcon className="size-4" />
-        )}
-        {busy ? "Generating…" : caption ? "Regenerate caption" : "Generate caption"}
-      </Button>
+      {busy && !caption ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2Icon className="size-3.5 animate-spin" aria-hidden />
+          Generating caption…
+        </p>
+      ) : null}
       {error ? (
         <p className="text-xs text-destructive" role="alert">
           {error}

@@ -90,6 +90,15 @@ export function taskListWhere(query: TaskListQuery = {}) {
   return where;
 }
 
+/** True only when a video idea first becomes practicing — not on later saves. */
+export function enteredVideoPracticing(
+  list: string,
+  previousStatus: string,
+  nextStatus: TaskWorkStatus | undefined,
+) {
+  return list === "video" && nextStatus === "in_progress" && previousStatus !== "in_progress";
+}
+
 /**
  * First tap on a video-idea check starts practice; second tap marks it done;
  * a tap on a done row opens it again.

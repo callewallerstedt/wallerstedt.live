@@ -1,4 +1,6 @@
 import { AccountingError, redactedErrorDiagnostic } from "@/lib/accounting/errors";
+import { enteredVideoPracticing } from "@/lib/os/task-meta";
+import type { TaskWorkStatus } from "@/lib/os/types";
 
 /** OpenAI API id for GPT-Luna in the GPT-5.6 family. */
 export const TIKTOK_CAPTION_MODEL = "gpt-5.6-luna";
@@ -164,4 +166,43 @@ export async function generateTikTokCaption(
     );
   }
   return { caption, model };
+}
+
+/**
+ * Used when a video idea enters practicing. Never throws — a failed
+ * generate leaves an empty caption and a short error for the client.
+ */
+export async function safePracticingCaption(
+  idea: CaptionIdea,
+  customPrompt: string,
+  generate: CaptionGenerateFn = defaultCaptionGenerate,
+  model = TIKTOK_CAPTION_MODEL,
+): Promise<{ caption: string; captionError: string }> {
+  try {
+    const result = await generateTikTokCaption(idea, customPrompt, generate, model);
+    return { caption: result.caption, captionError: "" };
+  } catch (error) {
+    return {
+      caption: "",
+      captionError:
+        error instanceof Error ? error.message : "Could not generate a caption.",
+    };
+  }
+}
+
+/** Status-update path: generate once when a video idea enters practicing. */
+export async function captionForStatusChange(
+  input: {
+    list: string;
+    previousStatus: string;
+    nextStatus?: TaskWorkStatus;
+    idea: CaptionIdea;
+    customPrompt: string;
+  },
+  generate: CaptionGenerateFn = defaultCaptionGenerate,
+): Promise<{ caption: string; captionError: string } | null> {
+  if (!enteredVideoPracticing(input.list, input.previousStatus, input.nextStatus)) {
+    return null;
+  }
+  return safePracticingCaption(input.idea, input.customPrompt, generate);
 }

@@ -5,17 +5,21 @@ import { getAccountingDb } from "@/lib/accounting/db";
 import { berlinYmd } from "./format";
 import {
   compareTaskRows,
+  enteredVideoPracticing,
   isTaskArea,
   isTaskList,
   isTaskWorkStatus,
   taskListWhere,
   type TaskListQuery,
 } from "./task-meta";
+import { getCaptionPrompt } from "./tiktok-caption-store";
+import { captionForStatusChange } from "./tiktok-caption";
 import { listTikTokSearchTimes } from "./tiktok-search-store";
 import type { TaskArea, TaskList, TaskRow, TaskWorkStatus } from "./types";
 
 export {
   compareTaskRows,
+  enteredVideoPracticing,
   isInProgress,
   isTaskArea,
   isTaskList,
@@ -36,12 +40,17 @@ function isMissingTable(error: unknown) {
   return code === "P2021" || code === "42P01";
 }
 
+function isMissingColumn(error: unknown) {
+  return (error as { code?: string } | null)?.code === "P2022";
+}
+
 type TaskRecord = {
   id: string;
   title: string;
   notes: string;
   list: string;
   song: string;
+  caption?: string;
   status: string;
   priority: number;
   area: string;
@@ -53,13 +62,19 @@ type TaskRecord = {
   updatedAt: Date;
 };
 
-function toRow(record: TaskRecord, searchedAt?: string | null): TaskRow {
+function toRow(
+  record: TaskRecord,
+  searchedAt?: string | null,
+  captionError?: string,
+): TaskRow {
   return {
     id: record.id,
     title: record.title,
     notes: record.notes,
     list: isTaskList(record.list) ? record.list : "task",
     song: record.song,
+    caption: record.caption ?? "",
+    ...(captionError ? { captionError } : {}),
     done: record.status === "done",
     inProgress: record.status === "in_progress",
     status: isTaskWorkStatus(record.status) ? record.status : "open",
@@ -248,11 +263,46 @@ export async function updateTask(
     data.archivedAt = input.archived ? new Date() : null;
   }
   if (!Object.keys(data).length) return null;
+
+  let updated: TaskRecord;
   try {
-    return toRow(await db.companyTask.update({ where: { id }, data }));
+    updated = await db.companyTask.update({ where: { id }, data });
   } catch (error) {
     if ((error as { code?: string } | null)?.code === "P2025") return null;
     throw error;
+  }
+
+  if (!enteredVideoPracticing(current.list, current.status, nextStatus)) {
+    return toRow(updated);
+  }
+
+  // Status is already saved. Caption failure must not undo practicing.
+  const generated = await captionForStatusChange({
+    list: current.list,
+    previousStatus: current.status,
+    nextStatus,
+    idea: { title: updated.title, song: updated.song, notes: updated.notes },
+    customPrompt: await getCaptionPrompt(),
+  });
+  if (!generated) return toRow(updated);
+  if (!generated.caption) {
+    return toRow(updated, undefined, generated.captionError);
+  }
+  try {
+    const withCaption = await db.companyTask.update({
+      where: { id },
+      data: { caption: generated.caption },
+    });
+    return toRow(withCaption);
+  } catch (error) {
+    if (isMissingColumn(error) || (error as { code?: string } | null)?.code === "P2025") {
+      return toRow({ ...updated, caption: generated.caption }, undefined, generated.captionError);
+    }
+    return toRow(
+      { ...updated, caption: generated.caption },
+      undefined,
+      generated.captionError || "Could not save the caption.",
+    );
   }
 }
 

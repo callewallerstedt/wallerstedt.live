@@ -47,6 +47,8 @@ export async function GET(request: Request, { params }: Params) {
           "video — TikTok video ideas, shown under the to-dos",
         ],
         song: "string — the track a video idea uses; the dashboard turns it into Spotify / YouTube / TikTok searches",
+        caption:
+          "string — TikTok caption auto-generated when a video idea first enters practicing (in_progress). Empty until then. Read-only.",
         notes: "string, up to 4000 characters — the long description",
         area: TASK_AREAS,
         priority: ["low", "normal", "high"],
@@ -110,6 +112,8 @@ export async function GET(request: Request, { params }: Params) {
         scope: "Tasks and TikTok watches are separate from bokföring. Writing one never touches the ledger.",
         ordering:
           "Each list is ordered independently. Video ideas that are in_progress (practicing) sit above other open rows, most recently started first. Other open rows keep the owner's sort. GET /tasks?status=open includes in_progress. GET /tasks?list=video returns only active video ideas — not Past/archived ones. PATCH /tasks reorders regular open rows only; practicing rows stay pinned.",
+        caption:
+          "PATCH that first moves a video idea into in_progress generates a caption server-side and stores it on the row. Title/song/notes edits while already practicing do not regenerate. A generate failure still applies the status change and leaves caption empty (or the previous caption).",
         tiktokSeeds: `First load (and later list calls) ensure these watched handles exist: ${TIKTOK_SEED_HANDLES.join(", ")}.`,
         tiktokScan:
           "POST /tiktok/watch/scan starts an async job and returns immediately with { ok, status: started|running|done|failed, scanId, processed, total, next, scan, lastScan }. Background bursts scan one watched account per invocation (under Vercel's time limit), then one piano-category Treg search per later burst (piano cover / emotional piano cover / public piano cover), persist progress on CompanyTikTokScan, and finish by writing the ranked lastScan (watch* + pianoLast7/pianoLast30). Poll GET /tiktok/watch or GET /tiktok/watch/scans for scan.status and lastScan. POST { handle } or { accountId } processes that one watched account as a burst. POST { scanId } resumes the next burst if the chain stalled. GET also nudges an open job.",

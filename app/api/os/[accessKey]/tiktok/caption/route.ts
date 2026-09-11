@@ -7,6 +7,7 @@ import {
   CAPTION_PROMPT_MAX,
   generateTikTokCaption,
 } from "@/lib/os/tiktok-caption";
+import { getAccountingDb } from "@/lib/accounting/db";
 import { getCaptionPrompt, saveCaptionPrompt } from "@/lib/os/tiktok-caption-store";
 import { getTask } from "@/lib/os/tasks";
 
@@ -44,6 +45,14 @@ export async function POST(request: Request, { params }: Params) {
       { title: task.title, song: task.song, notes: task.notes },
       customPrompt,
     );
+    try {
+      await getAccountingDb().companyTask.update({
+        where: { id: task.id },
+        data: { caption: result.caption },
+      });
+    } catch {
+      // Still return the generated line if the caption column is not migrated yet.
+    }
     return privateJson({ ok: true, caption: result.caption, model: result.model });
   });
 }

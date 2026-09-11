@@ -27,6 +27,7 @@ function sampleTasks(today: string): TaskRow[] {
         "Dashboard cam + soft LED wash. Cap at 28 seconds.\nhttps://www.tiktok.com/@friqtao/video/7550123456789012345",
       list: "video",
       song: "Midnight Hours",
+      caption: "Midnight Hours #piano #coversong #tiktokpiano",
       tiktokSearchedAt: "2026-09-05T18:00:00.000Z",
       done: false,
       inProgress: true,

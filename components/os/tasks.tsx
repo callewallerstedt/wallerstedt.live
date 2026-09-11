@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import {
   ArchiveIcon,
   CheckIcon,
+  Loader2Icon,
   MusicIcon,
   PencilIcon,
   PlusIcon,
@@ -23,11 +24,7 @@ import {
 import dynamic from "next/dynamic";
 
 import { TikTokIcon } from "@/components/os/tiktok-icon";
-import {
-  CaptionTipsField,
-  GenerateCaptionButton,
-  VideoCaptionBox,
-} from "@/components/os/tiktok-caption";
+import { CaptionTipsField, VideoCaptionBox } from "@/components/os/tiktok-caption";
 import { LinkedNotes } from "@/components/os/linked-notes";
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
@@ -52,7 +49,7 @@ import { cn } from "@/lib/utils";
 import { zIndex } from "@/lib/z-index";
 
 type Patch = Partial<
-  Pick<TaskRow, "title" | "notes" | "song" | "done" | "inProgress" | "area" | "priority" | "dueDate">
+  Pick<TaskRow, "title" | "notes" | "song" | "done" | "inProgress" | "status" | "area" | "priority" | "dueDate">
 > & {
   archived?: boolean;
 };
@@ -172,9 +169,7 @@ export function TaskList({
   const [failure, setFailure] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [captionPrompt, setCaptionPrompt] = useState("");
-  const [captions, setCaptions] = useState<Record<string, string>>({});
-  const [captionBusyId, setCaptionBusyId] = useState<string | null>(null);
-  const [captionErrors, setCaptionErrors] = useState<Record<string, string>>({});
+  const [captionPendingId, setCaptionPendingId] = useState<string | null>(null);
   const captionTipsDirtyRef = useRef(false);
   const isVideoList = list === "video";
 
@@ -246,66 +241,6 @@ export function TaskList({
     })();
   }
 
-  function generateCaption(task: TaskRow) {
-    setOpenId(task.id);
-    setCaptionBusyId(task.id);
-    setCaptionErrors((current) => {
-      const next = { ...current };
-      delete next[task.id];
-      return next;
-    });
-    if (localOnly) {
-      setCaptions((current) => ({
-        ...current,
-        [task.id]: localCaptionPreview({
-          title: task.title,
-          song: task.song,
-          notes: task.notes,
-        }),
-      }));
-      setCaptionBusyId(null);
-      return;
-    }
-    if (task.id.startsWith("pending-")) {
-      setCaptionErrors((current) => ({
-        ...current,
-        [task.id]: "Save the idea first, then generate a caption.",
-      }));
-      setCaptionBusyId(null);
-      return;
-    }
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/os/${encodeURIComponent(accessKey)}/tiktok/caption`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              taskId: task.id,
-              prompt: captionPrompt.slice(0, CAPTION_PROMPT_MAX),
-            }),
-          },
-        );
-        const body = (await response.json().catch(() => null)) as
-          | { ok?: boolean; caption?: string; message?: string }
-          | null;
-        if (!response.ok || !body?.ok || !body.caption) {
-          throw new Error(body?.message || "Could not generate a caption.");
-        }
-        setCaptions((current) => ({ ...current, [task.id]: body.caption! }));
-      } catch (problem) {
-        setCaptionErrors((current) => ({
-          ...current,
-          [task.id]:
-            problem instanceof Error ? problem.message : "Could not generate a caption.",
-        }));
-      } finally {
-        setCaptionBusyId((current) => (current === task.id ? null : current));
-      }
-    })();
-  }
-
   function applyLocalPatch(id: string, next: Patch) {
     setServerTasks((current) =>
       current.map((task) => {
@@ -331,6 +266,7 @@ export function TaskList({
             .reduce((min, row) => Math.min(min, row.sortOrder), 0);
           sortOrder = firstOpen - 1;
         }
+        const enteringPractice = inProgress && !isInProgress(task) && task.list === "video";
         return {
           ...task,
           ...rest,
@@ -339,6 +275,16 @@ export function TaskList({
           status: done ? "done" : inProgress ? "in_progress" : "open",
           sortOrder,
           completedAt: done ? new Date().toISOString() : rest.done === false || rest.inProgress ? null : task.completedAt,
+          ...(enteringPractice && localOnly
+            ? {
+                caption: localCaptionPreview({
+                  title: rest.title ?? task.title,
+                  song: rest.song ?? task.song,
+                  notes: rest.notes ?? task.notes,
+                }),
+                captionError: "",
+              }
+            : {}),
           ...(archived == null
             ? {}
             : { archivedAt: archived ? new Date().toISOString() : null }),
@@ -453,6 +399,7 @@ export function TaskList({
       notes: "",
       list,
       song: "",
+      caption: "",
       done: false,
       priority: "normal",
       area: "company",
@@ -516,10 +463,17 @@ export function TaskList({
 
   function patch(id: string, next: Patch) {
     setFailure("");
+    const current = serverTasks.find((task) => task.id === id);
+    const enteringPractice =
+      list === "video" &&
+      current != null &&
+      !isInProgress(current) &&
+      (next.inProgress === true || next.status === "in_progress");
     applyLocalPatch(id, next);
     if (localOnly) return;
     if (id.startsWith("pending-")) return;
     pendingWriteIdsRef.current.add(id);
+    if (enteringPractice) setCaptionPendingId(id);
     void (async () => {
       try {
         const body = await send(endpoint(accessKey, id), {
@@ -532,6 +486,8 @@ export function TaskList({
         }
       } catch (problem) {
         setFailure(problem instanceof Error ? problem.message : "Could not save.");
+      } finally {
+        setCaptionPendingId((pending) => (pending === id ? null : pending));
       }
     })();
   }
@@ -730,10 +686,9 @@ export function TaskList({
           current.map((row) => (row.id === task.id ? { ...row, tiktokSearchedAt: searchedAt } : row)),
         );
       },
-      caption: captions[task.id] ?? "",
-      captionBusy: captionBusyId === task.id,
-      captionError: captionErrors[task.id] ?? "",
-      onGenerateCaption: () => generateCaption(task),
+      caption: task.caption ?? "",
+      captionBusy: captionPendingId === task.id,
+      captionError: task.captionError ?? "",
       onToggleExpanded: () =>
         setOpenId((current) => (current === task.id ? null : task.id)),
       task,
@@ -1076,7 +1031,6 @@ function TaskItem({
   onPatch,
   onDelete,
   onTikTokSearched,
-  onGenerateCaption,
   onToggleExpanded,
 }: {
   accessKey: string;
@@ -1100,7 +1054,6 @@ function TaskItem({
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
   onTikTokSearched?: (searchedAt: string) => void;
-  onGenerateCaption?: () => void;
   onToggleExpanded: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -1250,11 +1203,14 @@ function TaskItem({
               searched={Boolean(task.tiktokSearchedAt)}
               taskId={UUID_RE.test(task.id) ? task.id : undefined}
             />
-            <GenerateCaptionButton
-              busy={captionBusy}
-              onClick={() => onGenerateCaption?.()}
-              title={task.title}
-            />
+            {captionBusy ? (
+              <span
+                aria-label="Generating caption"
+                className="flex size-7 shrink-0 items-center justify-center text-brand"
+              >
+                <Loader2Icon className="size-3.5 animate-spin" />
+              </span>
+            ) : null}
           </>
         ) : null}
 
@@ -1363,12 +1319,7 @@ function TaskItem({
             {formatDate(task.createdAt.slice(0, 10))}
           </p>
           {showSong ? (
-            <VideoCaptionBox
-              busy={captionBusy}
-              caption={caption}
-              error={captionError}
-              onGenerate={() => onGenerateCaption?.()}
-            />
+            <VideoCaptionBox busy={captionBusy} caption={caption} error={captionError} />
           ) : null}
         </div>
       ) : null}
@@ -1466,12 +1417,7 @@ function TaskItem({
             </Button>
           </div>
           {showSong ? (
-            <VideoCaptionBox
-              busy={captionBusy}
-              caption={caption}
-              error={captionError}
-              onGenerate={() => onGenerateCaption?.()}
-            />
+            <VideoCaptionBox busy={captionBusy} caption={caption} error={captionError} />
           ) : null}
         </div>
       ) : null}

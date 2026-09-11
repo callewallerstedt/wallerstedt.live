@@ -8,6 +8,8 @@ import {
   generateTikTokCaption,
   localCaptionPreview,
   normalizeCaption,
+  captionForStatusChange,
+  safePracticingCaption,
   TIKTOK_CAPTION_MODEL,
 } from "./tiktok-caption";
 
@@ -110,6 +112,62 @@ test("generateTikTokCaption pads a short model caption to 3 hashtags", async () 
     result.caption,
     "Midnight Hours - Wallerstedt #piano #coversong #tiktokpiano",
   );
+});
+
+test("captionForStatusChange runs only when a video idea enters practicing", async () => {
+  const generate = async () => "River Flows In You - Yiruma #piano #coversong #tiktokpiano";
+  const idea = { title: "Night drive", song: "River Flows In You", notes: "Yiruma" };
+
+  const created = await captionForStatusChange(
+    { list: "video", previousStatus: "open", nextStatus: "in_progress", idea, customPrompt: "lowercase" },
+    generate,
+  );
+  assert.equal(created?.caption, "River Flows In You - Yiruma #piano #coversong #tiktokpiano");
+  assert.equal(created?.captionError, "");
+
+  assert.equal(
+    await captionForStatusChange(
+      { list: "video", previousStatus: "in_progress", nextStatus: "in_progress", idea, customPrompt: "" },
+      generate,
+    ),
+    null,
+  );
+  assert.equal(
+    await captionForStatusChange(
+      { list: "task", previousStatus: "open", nextStatus: "in_progress", idea, customPrompt: "" },
+      generate,
+    ),
+    null,
+  );
+
+  const failed = await captionForStatusChange(
+    { list: "video", previousStatus: "open", nextStatus: "in_progress", idea, customPrompt: "" },
+    async () => {
+      throw new AccountingError("OpenAI is not configured.", 503, "caption_openai_not_configured");
+    },
+  );
+  assert.equal(failed?.caption, "");
+  assert.match(failed?.captionError ?? "", /OpenAI is not configured/);
+});
+
+test("safePracticingCaption stores a generated line and swallows failures", async () => {
+  const ok = await safePracticingCaption(
+    { title: "Night drive", song: "River Flows In You", notes: "Yiruma" },
+    "",
+    async () => "River Flows In You - Yiruma #piano #coversong #tiktokpiano",
+  );
+  assert.equal(ok.caption, "River Flows In You - Yiruma #piano #coversong #tiktokpiano");
+  assert.equal(ok.captionError, "");
+
+  const failed = await safePracticingCaption(
+    { title: "x", song: "", notes: "" },
+    "",
+    async () => {
+      throw new AccountingError("Could not generate a caption. Try again in a moment.", 502, "caption_generation_failed");
+    },
+  );
+  assert.equal(failed.caption, "");
+  assert.match(failed.captionError, /Could not generate a caption/);
 });
 
 test("generateTikTokCaption rejects an empty model reply", async () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compareTaskRows, nextVideoCheckPatch, taskListWhere } from "./task-meta";
+import { compareTaskRows, enteredVideoPracticing, nextVideoCheckPatch, taskListWhere } from "./task-meta";
 import type { TaskRow } from "./types";
 
 function row(partial: Partial<TaskRow> & Pick<TaskRow, "id" | "sortOrder">): TaskRow {
@@ -10,6 +10,7 @@ function row(partial: Partial<TaskRow> & Pick<TaskRow, "id" | "sortOrder">): Tas
     notes: "",
     list: "video",
     song: "",
+    caption: "",
     done: false,
     priority: "normal",
     area: "music",
@@ -77,4 +78,13 @@ test("the video-idea check cycles open → practicing → done → open", () => 
   const done = nextVideoCheckPatch({ ...open, ...practicing });
   assert.deepEqual(done, { done: true, inProgress: false });
   assert.deepEqual(nextVideoCheckPatch({ ...open, ...done }), { done: false, inProgress: false });
+});
+
+test("auto-caption runs only when a video idea first enters practicing", () => {
+  assert.equal(enteredVideoPracticing("video", "open", "in_progress"), true);
+  assert.equal(enteredVideoPracticing("video", "done", "in_progress"), true);
+  assert.equal(enteredVideoPracticing("video", "in_progress", "in_progress"), false);
+  assert.equal(enteredVideoPracticing("video", "open", "done"), false);
+  assert.equal(enteredVideoPracticing("video", "open", undefined), false);
+  assert.equal(enteredVideoPracticing("task", "open", "in_progress"), false);
 });

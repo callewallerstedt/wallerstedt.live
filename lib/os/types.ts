@@ -134,6 +134,10 @@ export type TaskRow = {
   list: TaskList;
   /** Track a video idea is built around; drives the song search menu. */
   song: string;
+  /** TikTok caption generated when the idea enters practicing. */
+  caption?: string;
+  /** Present after a failed auto-generate; not a durable column. */
+  captionError?: string;
   done: boolean;
   /** Video ideas only: first tap on the check — practicing, pinned to the top. */
   inProgress?: boolean;
