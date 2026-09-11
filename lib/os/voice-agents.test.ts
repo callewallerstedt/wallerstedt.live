@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agentWebhookPayload, listVoiceAgents, namedVoiceAgent, normalizeVoiceAgent, replyVoiceAgent, resolveVoiceAgent, voiceAgentLabel } from "./voice-agents";
+import { agentWebhookPayload, listVoiceAgents, namedVoiceAgent, normalizeVoiceAgent, replyVoiceAgent, resolveVoiceAgent, VOICE_AGENT_IDS, VOICE_AGENT_SLUGS, voiceAgentChatUrl, voiceAgentLabel } from "./voice-agents";
 
 test("voice agents resolve aliases, prefer JSON, and fall back only for missing Elon", (t) => {
   const keys = ["VOICE_AGENT_WEBHOOKS", "BOSS_VOICE_WEBHOOK_URL", "BOSS_VOICE_WEBHOOK_TOKEN"];
@@ -44,4 +44,25 @@ test("normalization and webhook payload use canonical slugs", () => {
   assert.equal(namedVoiceAgent("wallerstedt-dash"), undefined);
   assert.equal(voiceAgentLabel("bjorn"), "Björn");
   assert.equal(voiceAgentLabel("max"), "Max");
+});
+
+test("every voice agent has a Grok Bot id and chat URLs stay optional", (t) => {
+  for (const agent of VOICE_AGENT_SLUGS) {
+    assert.match(VOICE_AGENT_IDS[agent], /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  }
+  assert.equal(voiceAgentChatUrl("jensen"), undefined);
+  const keys = ["NEXT_PUBLIC_VOICE_AGENT_CHAT_URLS", "NEXT_PUBLIC_GROK_BOT_AGENT_URL_TEMPLATE"];
+  const original = keys.map((key) => process.env[key]);
+  t.after(() => keys.forEach((key, index) => {
+    if (original[index] === undefined) delete process.env[key];
+    else process.env[key] = original[index];
+  }));
+  process.env.NEXT_PUBLIC_VOICE_AGENT_CHAT_URLS = JSON.stringify({
+    jensen: "https://example.com/bots/jensen",
+  });
+  assert.equal(voiceAgentChatUrl("jensen"), "https://example.com/bots/jensen");
+  assert.equal(voiceAgentChatUrl("elon"), undefined);
+  delete process.env.NEXT_PUBLIC_VOICE_AGENT_CHAT_URLS;
+  process.env.NEXT_PUBLIC_GROK_BOT_AGENT_URL_TEMPLATE = "sand://agent/{id}";
+  assert.equal(voiceAgentChatUrl("jensen"), `sand://agent/${VOICE_AGENT_IDS.jensen}`);
 });

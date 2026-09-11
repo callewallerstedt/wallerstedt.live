@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, X } from "lucide-react";
 import { VoiceOrb } from "@/components/os/voice-orb";
-import { namedVoiceAgent, voiceAgentLabel, type VoiceAgentSlug } from "@/lib/os/voice-agents";
+import { namedVoiceAgent, voiceAgentChatUrl, voiceAgentLabel, VOICE_AGENT_IDS, type VoiceAgentSlug } from "@/lib/os/voice-agents";
 import { speechTranscript } from "@/lib/os/voice-transcript";
 import { elonResponse, nextVoiceAction } from "@/lib/os/voice-readout";
 import { zIndex } from "@/lib/z-index";
@@ -14,6 +14,8 @@ type Entry = {
   agent?: VoiceAgentSlug;
   text: string;
   images?: string[];
+  /** User-facing message body forwarded to the agent (no webhook secrets). */
+  outbound?: string;
   at: number;
 };
 type Json = Record<string, unknown>;
@@ -41,6 +43,8 @@ function insertCompletedUser(previous: Entry[], next: Entry, startedAt: number |
   const list = index === -1 ? [...without, next] : [...without.slice(0, index), next, ...without.slice(index)];
   return list.slice(-200);
 }
+
+const PREVIEW_OUTBOUND = "Hey Jensen — check this week's books and ping back if anything looks off.";
 
 const PREVIEW_AGENTS: { agent: VoiceAgentSlug; text: string }[] = [
   { agent: "elon", text: "Got it — running that now." },
@@ -81,6 +85,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const [inboxError, setInboxError] = useState("");
   const [spotlight, setSpotlight] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
+  const [expandedToolId, setExpandedToolId] = useState<string | null>(null);
   const previewHeard = useRef(false);
   const previewVoiceFrames = useRef(0);
   const base = `/api/os/${encodeURIComponent(accessKey)}/voice`;
@@ -118,7 +123,14 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     save();
   }
 
-  function update(id: string, role: Entry["role"], text: string, append = false, at = Date.now()) {
+  function update(
+    id: string,
+    role: Entry["role"],
+    text: string,
+    append = false,
+    at = Date.now(),
+    extras?: { agent?: VoiceAgentSlug; outbound?: string },
+  ) {
     setEntries((previous) => {
       const existing = previous.find((entry) => entry.id === id);
       // Empty assistant rows reserve a slot once Live starts responding.
@@ -126,9 +138,14 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       if (!existing) {
         // Do not reserve empty user bubbles at speech-start — they steal order from mid-speech inbox replies.
         if (role === "user" && !text.trim()) return previous;
-        return insertEntry(previous, { id, role, text, at });
+        return insertEntry(previous, { id, role, text, at, ...extras });
       }
-      return previous.map((entry) => entry.id === id ? { ...entry, text: append ? entry.text + text : text } : entry);
+      return previous.map((entry) => entry.id === id ? {
+        ...entry,
+        text: append ? entry.text + text : text,
+        ...(extras?.agent !== undefined ? { agent: extras.agent } : {}),
+        ...(extras?.outbound !== undefined ? { outbound: extras.outbound } : {}),
+      } : entry);
     });
   }
   useEffect(() => { dialog.current?.showModal(); }, []);
@@ -140,7 +157,15 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       setEntries([
         { id: "preview-user", role: "user", text: "Hey Live — ping the crew", at: 1 },
         { id: "preview-live", role: "assistant", text: "On it. Routing to the specialists.", at: 2 },
-        ...PREVIEW_AGENTS.map(({ agent, text }, index) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text, at: 3 + index })),
+        {
+          id: "preview-tool-jensen",
+          role: "tool",
+          agent: "jensen",
+          text: "Sent to Jensen",
+          outbound: PREVIEW_OUTBOUND,
+          at: 3,
+        },
+        ...PREVIEW_AGENTS.map(({ agent, text }, index) => ({ id: `preview-${agent}`, role: "agent" as const, agent, text, at: 4 + index })),
       ]);
     }, 900);
     return () => clearTimeout(timer);
@@ -263,11 +288,16 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         const agent = name === "send_to_boss" ? "elon" : string(args.agent).trim().toLowerCase();
         if (!agent) throw new Error("Agent name was empty.");
         label = voiceAgentLabel(agent);
-        update(callId, "tool", `${label} · Sending…`);
-        if (!string(args.message).trim()) throw new Error(`${label} message was empty.`);
+        const outbound = string(args.message).trim();
+        const slug = namedVoiceAgent(agent);
+        update(callId, "tool", `${label} · Sending…`, false, Date.now(), {
+          ...(slug ? { agent: slug } : {}),
+          ...(outbound ? { outbound } : {}),
+        });
+        if (!outbound) throw new Error(`${label} message was empty.`);
         result = await jsonResponse(await fetch(`${base}/agent`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agent, message: args.message }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]),
+          body: JSON.stringify({ agent, message: outbound }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]),
         }));
         if (result.ok !== true) throw new Error(`${label} did not confirm delivery.`);
         const recipient = string(result.agent) || agent;
@@ -275,8 +305,11 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         label = voiceAgentLabel(lastRouted.current);
         if (!disposed) {
           const chip = `Sent to ${label}`;
-          update(callId, "tool", chip);
-          persist({ id: callId, role: "tool", text: chip }, true);
+          update(callId, "tool", chip, false, Date.now(), {
+            agent: lastRouted.current,
+            outbound,
+          });
+          persist({ id: callId, role: "tool", text: chip, agent: lastRouted.current }, true);
         }
       } catch (cause) {
         result = { ok: false, message: cause instanceof Error ? cause.message : `${label} could not be reached.` };
@@ -460,7 +493,11 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const orbMode = !hasTranscript ? "idle" : spotlight ? "spotlight" : "docked";
   const latestInbound = [...visibleEntries].reverse().find((entry) => entry.role === "assistant" || entry.role === "agent");
 
-  return <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); onClose(); }} aria-label="GPT-Live"
+  return <dialog ref={dialog} onCancel={(event) => {
+      event.preventDefault();
+      if (expandedToolId) { setExpandedToolId(null); return; }
+      onClose();
+    }} aria-label="GPT-Live"
     className="os-live-dialog fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 bg-background p-0 text-foreground shadow-none outline-none backdrop:bg-black/70"
     style={{ zIndex: zIndex.overlay }}>
     <div className="os-live-shell relative flex h-full flex-col">
@@ -514,7 +551,45 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
               }}
             />
             <div className={`os-live-transcript h-full overflow-y-auto overscroll-contain ${hasTranscript ? "os-live-transcript--docked os-enter" : ""}`} role="log" aria-label="Live transcript">
-              {visibleEntries.map((entry) => entry.role === "tool" ? <div key={entry.id} className="os-live-tool-chip">{entry.text}</div> :
+              {visibleEntries.map((entry) => entry.role === "tool" ? (() => {
+                  const outbound = entry.outbound?.trim() ?? "";
+                  const agent = entry.agent ?? namedVoiceAgent(entry.text.replace(/^Sent to\s+/i, "")) ?? "elon";
+                  const label = voiceAgentLabel(agent);
+                  const chatUrl = voiceAgentChatUrl(agent);
+                  const expanded = expandedToolId === entry.id;
+                  if (!outbound && !chatUrl) {
+                    return <div key={entry.id} className="os-live-tool-chip">{entry.text}</div>;
+                  }
+                  return (
+                    <div key={entry.id} className="os-live-tool-block">
+                      <button
+                        type="button"
+                        className={`os-live-tool-chip os-live-tool-chip--tappable${expanded ? " os-live-tool-chip--open" : ""}`}
+                        aria-expanded={chatUrl ? undefined : expanded}
+                        aria-label={chatUrl
+                          ? `${entry.text}. Open ${label} in Grok Bot`
+                          : `${entry.text}. ${expanded ? "Hide" : "Show"} message sent to ${label}`}
+                        data-agent={agent}
+                        data-agent-id={VOICE_AGENT_IDS[agent]}
+                        onClick={() => {
+                          if (chatUrl) {
+                            window.open(chatUrl, "_blank", "noopener,noreferrer");
+                            return;
+                          }
+                          setExpandedToolId((current) => current === entry.id ? null : entry.id);
+                        }}
+                      >
+                        {entry.text}
+                      </button>
+                      {expanded && outbound ? (
+                        <div className="os-live-tool-detail" role="region" aria-label={`Message sent to ${label}`}>
+                          <p className="os-live-tool-detail-label">Message</p>
+                          <p className="os-live-tool-detail-body">{outbound}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })() :
                 entry.role === "agent" ? <article key={entry.id} className="os-live-bubble-agent" data-agent={entry.agent}>
                   <p className="os-live-bubble-agent-label">{voiceAgentLabel(entry.agent ?? "elon")}</p>
                   <p className="whitespace-pre-wrap break-words">{entry.text}</p>
