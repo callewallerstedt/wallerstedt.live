@@ -36,6 +36,21 @@ test("normalizeCaption omits a dangling artist dash", () => {
   );
 });
 
+test("normalizeCaption pads fewer than 3 hashtags with piano-cover defaults", () => {
+  assert.equal(
+    normalizeCaption("River Flows In You - Yiruma"),
+    "River Flows In You - Yiruma #piano #coversong #tiktokpiano",
+  );
+  assert.equal(
+    normalizeCaption("Midnight Hours #piano"),
+    "Midnight Hours #piano #coversong #tiktokpiano",
+  );
+  assert.equal(
+    normalizeCaption("Soft Rain #piano #coversong"),
+    "Soft Rain #piano #coversong #tiktokpiano",
+  );
+});
+
 test("caption user prompt includes song fields and custom tips", () => {
   const prompt = captionUserPrompt(
     {
@@ -83,6 +98,18 @@ test("generateTikTokCaption normalizes the model line and reports gpt-5.6-luna",
     "River Flows In You - Yiruma #piano #coversong #tiktokpiano #relaxing",
   );
   assert.equal(result.model, "gpt-5.6-luna");
+});
+
+test("generateTikTokCaption pads a short model caption to 3 hashtags", async () => {
+  const result = await generateTikTokCaption(
+    { title: "Night drive", song: "Midnight Hours", notes: "" },
+    "",
+    async () => "Midnight Hours - Wallerstedt #piano",
+  );
+  assert.equal(
+    result.caption,
+    "Midnight Hours - Wallerstedt #piano #coversong #tiktokpiano",
+  );
 });
 
 test("generateTikTokCaption rejects an empty model reply", async () => {

@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
 import {
+  CAPTION_PROMPT_MAX,
   CAPTION_PROMPT_STORAGE_KEY,
   localCaptionPreview,
 } from "@/lib/os/tiktok-caption";
@@ -174,15 +175,24 @@ export function TaskList({
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [captionBusyId, setCaptionBusyId] = useState<string | null>(null);
   const [captionErrors, setCaptionErrors] = useState<Record<string, string>>({});
+  const captionTipsDirtyRef = useRef(false);
   const isVideoList = list === "video";
 
   useEffect(() => {
     if (!isVideoList) return;
+    captionTipsDirtyRef.current = false;
     if (localOnly) {
       try {
-        setCaptionPrompt(localStorage.getItem(CAPTION_PROMPT_STORAGE_KEY) ?? "");
+        if (!captionTipsDirtyRef.current) {
+          setCaptionPrompt(
+            (localStorage.getItem(CAPTION_PROMPT_STORAGE_KEY) ?? "").slice(
+              0,
+              CAPTION_PROMPT_MAX,
+            ),
+          );
+        }
       } catch {
-        setCaptionPrompt("");
+        if (!captionTipsDirtyRef.current) setCaptionPrompt("");
       }
       return;
     }
@@ -194,8 +204,9 @@ export function TaskList({
         const body = (await response.json().catch(() => null)) as
           | { ok?: boolean; prompt?: string }
           | null;
+        if (captionTipsDirtyRef.current) return;
         if (response.ok && body?.ok && typeof body.prompt === "string") {
-          setCaptionPrompt(body.prompt);
+          setCaptionPrompt(body.prompt.slice(0, CAPTION_PROMPT_MAX));
         }
       } catch {
         // Keep the empty field; generating still works without saved tips.
@@ -204,9 +215,10 @@ export function TaskList({
   }, [accessKey, isVideoList, localOnly]);
 
   function persistCaptionPrompt(value: string) {
+    const prompt = value.slice(0, CAPTION_PROMPT_MAX);
     if (localOnly) {
       try {
-        localStorage.setItem(CAPTION_PROMPT_STORAGE_KEY, value);
+        localStorage.setItem(CAPTION_PROMPT_STORAGE_KEY, prompt);
       } catch {
         // Private mode can block localStorage; keep the in-memory value.
       }
@@ -219,7 +231,7 @@ export function TaskList({
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: value }),
+            body: JSON.stringify({ prompt }),
           },
         );
         const body = (await response.json().catch(() => null)) as
@@ -269,7 +281,10 @@ export function TaskList({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ taskId: task.id, prompt: captionPrompt }),
+            body: JSON.stringify({
+              taskId: task.id,
+              prompt: captionPrompt.slice(0, CAPTION_PROMPT_MAX),
+            }),
           },
         );
         const body = (await response.json().catch(() => null)) as
@@ -768,7 +783,10 @@ export function TaskList({
         <CaptionTipsField
           disabled={Boolean(error)}
           onBlur={() => persistCaptionPrompt(captionPrompt)}
-          onChange={setCaptionPrompt}
+          onChange={(value) => {
+            captionTipsDirtyRef.current = true;
+            setCaptionPrompt(value.slice(0, CAPTION_PROMPT_MAX));
+          }}
           value={captionPrompt}
         />
       ) : null}

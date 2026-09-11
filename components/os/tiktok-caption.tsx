@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckIcon, CopyIcon, Loader2Icon, SparklesIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CAPTION_PROMPT_MAX } from "@/lib/os/tiktok-caption";
 import { cn } from "@/lib/utils";
 
 export function CaptionTipsField({
@@ -27,8 +28,9 @@ export function CaptionTipsField({
         aria-label="Caption tips"
         className="mt-1 min-h-16 w-full rounded-lg bg-background px-2.5 py-2 text-sm text-foreground ring-1 ring-foreground/15"
         disabled={disabled}
+        maxLength={CAPTION_PROMPT_MAX}
         onBlur={onBlur}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(event.target.value.slice(0, CAPTION_PROMPT_MAX))}
         placeholder="e.g. Keep hashtags lowercase. Prefer #piano #coversong. No emojis."
         rows={2}
         value={value}

@@ -6,6 +6,9 @@ export const TIKTOK_CAPTION_MODEL = "gpt-5.6-luna";
 export const CAPTION_PROMPT_MAX = 4000;
 export const CAPTION_PROMPT_ID = "singleton";
 export const CAPTION_PROMPT_STORAGE_KEY = "wallerstedt.os.tiktok-caption-prompt";
+export const DEFAULT_CAPTION_TAGS = ["#piano", "#coversong", "#tiktokpiano"] as const;
+export const MIN_CAPTION_TAGS = 3;
+export const MAX_CAPTION_TAGS = 4;
 
 export type CaptionIdea = {
   title: string;
@@ -49,9 +52,22 @@ export function captionUserPrompt(
   ].join("\n");
 }
 
+function padCaptionTags(tags: string[]) {
+  const padded = tags.slice(0, MAX_CAPTION_TAGS);
+  const seen = new Set(padded.map((tag) => tag.toLowerCase()));
+  for (const fallback of DEFAULT_CAPTION_TAGS) {
+    if (padded.length >= MIN_CAPTION_TAGS) break;
+    if (seen.has(fallback.toLowerCase())) continue;
+    padded.push(fallback);
+    seen.add(fallback.toLowerCase());
+  }
+  return padded.slice(0, MAX_CAPTION_TAGS);
+}
+
 /**
  * Collapse model output into `{song} - {artist} #tag #tag #tag`.
  * Drops wrapping quotes, extra lines, and a 5th+ hashtag.
+ * Pads to at least 3 piano-cover hashtags when the model returns too few.
  */
 export function normalizeCaption(raw: string) {
   let text = raw.trim();
@@ -70,11 +86,12 @@ export function normalizeCaption(raw: string) {
   const tagsPart = hashIndex >= 0 ? text.slice(hashIndex) : "";
   head = head.replace(/\s*[-–—]\s*$/u, "").trim();
 
-  const tags = [...tagsPart.matchAll(/#([^\s#]+)/gu)]
-    .map((match) => match[1].replace(/[^\p{L}\p{N}_]+/gu, ""))
-    .filter(Boolean)
-    .slice(0, 4)
-    .map((tag) => `#${tag}`);
+  const tags = padCaptionTags(
+    [...tagsPart.matchAll(/#([^\s#]+)/gu)]
+      .map((match) => match[1].replace(/[^\p{L}\p{N}_]+/gu, ""))
+      .filter(Boolean)
+      .map((tag) => `#${tag}`),
+  );
 
   if (!head && !tags.length) return "";
   return [head, tags.join(" ")].filter(Boolean).join(" ");
