@@ -75,6 +75,16 @@ const fs = require('node:fs');
     assert.equal(await page.evaluate(()=>window.micTrack.enabled),false);
     await page.getByRole('button',{name:'Unmute microphone',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.micTrack.enabled),true,'unmuting during playback must work');
+    await emit({type:'input_audio_buffer.speech_started',item_id:'u3'});
+    const inboxAt = await page.evaluate(()=>Date.now());
+    await page.evaluate((timestamp)=>window.inbox=[{id:'mid-speech',timestamp,message:'Books look fine',agent:'jensen',images:[]}],inboxAt);
+    await page.getByText('Books look fine',{exact:true}).waitFor();
+    await emit({type:'conversation.item.input_audio_transcription.completed',item_id:'u3',transcript:'Tack Jensen'});
+    assert.deepEqual(
+      await page.locator('article > p:last-child').allTextContents(),
+      ['Hej där','Hej!','你好','你好！','Books look fine','Tack Jensen'],
+      'inbox reply that arrives mid-utterance stays above the completed user turn',
+    );
     await page.evaluate(()=>window.inbox=[{id:'reply',timestamp:Date.now(),message:'Task complete',agent:'elon',images:[]}]);
     await page.getByText('Task complete',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>window.sent.filter(e=>e.type==='response.create').length),0,'readout must wait while assistant plays');
@@ -87,6 +97,6 @@ const fs = require('node:fs');
     await page.evaluate(()=>window.micTrack.dispatchEvent(new Event('ended')));
     await page.getByRole('alert').filter({hasText:'Microphone disconnected'}).waitFor();
     assert.deepEqual(errors,[]);
-    console.log('PASS: transcript event ordering, duplex input, interruptions, multilingual text, manual mute, readout scheduling, stale playback events, microphone loss; no browser errors.');
+    console.log('PASS: transcript event ordering, duplex input, interruptions, multilingual text, mid-speech inbox order, manual mute, readout scheduling, stale playback events, microphone loss; no browser errors.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

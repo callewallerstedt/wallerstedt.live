@@ -27,6 +27,21 @@ function insertEntry(previous: Entry[], next: Entry): Entry[] {
   return list.slice(-200);
 }
 
+/** Insert a finished user turn by completion time, keeping it above Live replies for the same utterance. */
+function insertCompletedUser(previous: Entry[], next: Entry, startedAt: number | undefined): Entry[] {
+  const without = previous.filter((entry) => entry.id !== next.id);
+  let index = without.findIndex((entry) => entry.at > next.at);
+  if (startedAt != null) {
+    // Late transcription must still sit before the Live assistant that already started for this turn.
+    const assistantIdx = without.findIndex(
+      (entry) => entry.role === "assistant" && entry.at >= startedAt && entry.at <= next.at,
+    );
+    if (assistantIdx !== -1 && (index === -1 || assistantIdx < index)) index = assistantIdx;
+  }
+  const list = index === -1 ? [...without, next] : [...without.slice(0, index), next, ...without.slice(index)];
+  return list.slice(-200);
+}
+
 const PREVIEW_AGENTS: { agent: VoiceAgentSlug; text: string }[] = [
   { agent: "elon", text: "Got it — running that now." },
   { agent: "bjorn", text: "I can take the coding side." },
@@ -73,9 +88,13 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   function update(id: string, role: Entry["role"], text: string, append = false, at = Date.now()) {
     setEntries((previous) => {
       const existing = previous.find((entry) => entry.id === id);
-      // Empty entries reserve conversation order before transcription finishes.
+      // Empty assistant rows reserve a slot once Live starts responding.
       if (existing && !text) return previous;
-      if (!existing) return insertEntry(previous, { id, role, text, at });
+      if (!existing) {
+        // Do not reserve empty user bubbles at speech-start — they steal order from mid-speech inbox replies.
+        if (role === "user" && !text.trim()) return previous;
+        return insertEntry(previous, { id, role, text, at });
+      }
       return previous.map((entry) => entry.id === id ? { ...entry, text: append ? entry.text + text : text } : entry);
     });
   }
@@ -207,12 +226,11 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         else {
           pendingInput.current.add(id);
           if (!speechAt.current.has(id)) speechAt.current.set(id, Date.now());
-          update(id, "user", "", false, speechAt.current.get(id));
         }
       }
       if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && mutedRef.current) ignoredInput.current.add(id);
-      if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && !ignoredInput.current.has(id)) {
-        update(id, "user", "", false, speechAt.current.get(id) ?? Date.now());
+      if (id && /^conversation\.item\.(created|added)$/.test(type) && item.role === "user" && !ignoredInput.current.has(id) && !speechAt.current.has(id)) {
+        speechAt.current.set(id, Date.now());
       }
       if (id && type === "response.output_item.added" && item.role === "assistant") update(id, "assistant", "");
       if (type === "response.created") { responding = true; activeResponseId = string(record(data.response).id); }
@@ -236,9 +254,13 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
       if (id && type === "conversation.item.input_audio_transcription.completed") {
         pendingInput.current.delete(id);
         const text = speechTranscript(string(data.transcript));
-        const at = speechAt.current.get(id) ?? Date.now();
-        if (!ignoredInput.current.has(id) && text) update(id, "user", text, false, at);
+        const startedAt = speechAt.current.get(id);
         speechAt.current.delete(id);
+        if (!ignoredInput.current.has(id) && text) {
+          // Sort by completion time so inbox/agent replies that arrived mid-utterance stay above.
+          const completedAt = Date.now();
+          setEntries((previous) => insertCompletedUser(previous, { id, role: "user", text, at: completedAt }, startedAt));
+        }
         ignoredInput.current.delete(id);
         flush();
         // VAD owns user responses; flush only resumes queued readouts/tools.
