@@ -14,8 +14,12 @@ const fs = require('node:fs');
       window.micTrack = stream.getAudioTracks()[0];
       window.sent = [];
       window.inbox = [];
-      window.fetch = async (url) => {
+      window.fetch = async (url, init) => {
         if (url.includes('/session')) return Response.json({value:'test'});
+        if (url.includes('/history')) {
+          if (init?.method === 'POST') return Response.json({ok:true,id:'hist'});
+          return Response.json({items:[]});
+        }
         if (url.includes('/inbox')) return Response.json({items:window.inbox});
         if (url.includes('/agent')) return Response.json({ok:true,agent:'elon'});
         return new Response('sdp');

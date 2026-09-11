@@ -9,4 +9,6 @@ The browser regression covers late user transcription, speaking during playback,
 
 Deploy the `20260911120000_voice_inbox` migration before the updated inbox routes. Replies expire after one hour and are stored by a hash of the owner key.
 
+Deploy the `20260911140000_voice_transcript_history` migration for GPT-Live chat persistence. Transcript turns are owner-session only under `/api/os/<key>/voice/history`, keyed by a hash of the owner key, and retained for about 30 days (UI still shows the last 200).
+
 Realtime interruption behavior follows the [official OpenAI conversation guide](https://developers.openai.com/api/docs/guides/realtime-conversations). WebRTC handles interruption and truncation with VAD enabled. Keep the input track enabled except when the owner explicitly mutes it.

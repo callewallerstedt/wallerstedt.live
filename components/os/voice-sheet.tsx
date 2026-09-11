@@ -72,6 +72,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const ignoredInput = useRef(new Set<string>());
   const speechAt = useRef(new Map<string, number>());
   const lastRouted = useRef<VoiceAgentSlug>("elon");
+  const persistTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [entries, setEntries] = useState<Entry[]>([]);
   const [status, setStatus] = useState("Connecting");
   const [error, setError] = useState("");
@@ -84,6 +85,38 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
   const previewVoiceFrames = useRef(0);
   const base = `/api/os/${encodeURIComponent(accessKey)}/voice`;
   const orbReady = preview ? previewReady : status === "Live" || status === "Reconnecting";
+
+  function persist(entry: Pick<Entry, "id" | "role" | "text"> & Partial<Pick<Entry, "images" | "agent" | "at">>, immediate = false) {
+    if (preview) return;
+    const text = entry.text.trim();
+    const images = (entry.images ?? []).filter((url) => url.startsWith("https://"));
+    if (!text && !images.length) return;
+    const at = entry.at ?? Date.now();
+    const existing = persistTimers.current.get(entry.id);
+    if (existing) clearTimeout(existing);
+    const save = () => {
+      persistTimers.current.delete(entry.id);
+      void fetch(`${base}/history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: entry.id,
+          role: entry.role,
+          message: text,
+          images,
+          agent: entry.agent,
+          occurredAt: at,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    // Assistant streams in deltas; debounce so we store the final wording once.
+    if (!immediate && entry.role === "assistant") {
+      persistTimers.current.set(entry.id, setTimeout(save, 900));
+      return;
+    }
+    save();
+  }
 
   function update(id: string, role: Entry["role"], text: string, append = false, at = Date.now()) {
     setEntries((previous) => {
@@ -112,6 +145,44 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
     }, 900);
     return () => clearTimeout(timer);
   }, [preview]);
+  useEffect(() => {
+    if (preview) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const data = await jsonResponse(await fetch(`${base}/history`, {
+          cache: "no-store",
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+        }));
+        if (controller.signal.aborted) return;
+        const loaded: Entry[] = [];
+        for (const value of Array.isArray(data.items) ? data.items : []) {
+          const item = record(value);
+          const id = string(item.clientId) || string(item.id);
+          const role = string(item.role);
+          const timestamp = item.timestamp;
+          if (!id || typeof timestamp !== "number") continue;
+          if (role !== "user" && role !== "assistant" && role !== "agent" && role !== "tool") continue;
+          const text = (string(item.message) || string(item.text)).trim();
+          const images = (Array.isArray(item.images) ? item.images : []).filter((url): url is string => typeof url === "string" && url.startsWith("https://"));
+          if (!text && !images.length) continue;
+          const agent = role === "agent" || role === "tool" ? namedVoiceAgent(string(item.agent)) : undefined;
+          loaded.push({ id, role, agent, text, images, at: timestamp });
+        }
+        if (!loaded.length) return;
+        setEntries((previous) => {
+          let next = previous;
+          for (const entry of loaded) next = insertEntry(next, entry);
+          return next;
+        });
+      } catch { /* History is best-effort; Live still works without it. */ }
+    })();
+    return () => {
+      controller.abort();
+      for (const timer of persistTimers.current.values()) clearTimeout(timer);
+      persistTimers.current.clear();
+    };
+  }, [base, preview]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [entries]);
 
   useEffect(() => {
@@ -202,10 +273,18 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
         const recipient = string(result.agent) || agent;
         lastRouted.current = namedVoiceAgent(recipient) ?? "elon";
         label = voiceAgentLabel(lastRouted.current);
-        if (!disposed) update(callId, "tool", `Sent to ${label}`);
+        if (!disposed) {
+          const chip = `Sent to ${label}`;
+          update(callId, "tool", chip);
+          persist({ id: callId, role: "tool", text: chip }, true);
+        }
       } catch (cause) {
         result = { ok: false, message: cause instanceof Error ? cause.message : `${label} could not be reached.` };
-        if (!disposed) update(callId, "tool", `${label} · ${string(result.message)}`);
+        if (!disposed) {
+          const chip = `${label} · ${string(result.message)}`;
+          update(callId, "tool", chip);
+          persist({ id: callId, role: "tool", text: chip }, true);
+        }
       }
       pendingTools--;
       send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(result) } });
@@ -260,15 +339,20 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
           // Sort by completion time so inbox/agent replies that arrived mid-utterance stay above.
           const completedAt = Date.now();
           setEntries((previous) => insertCompletedUser(previous, { id, role: "user", text, at: completedAt }, startedAt));
+          persist({ id, role: "user", text, at: completedAt }, true);
         }
         ignoredInput.current.delete(id);
         flush();
         // VAD owns user responses; flush only resumes queued readouts/tools.
       } else if (id && /response\.(output_audio_transcript|audio_transcript|output_text|text)\.(delta|done)$/.test(type)) {
-        update(id, "assistant", string(data.transcript) || string(data.text) || string(data.delta), type.endsWith("delta"));
+        {
+          const next = string(data.transcript) || string(data.text) || string(data.delta);
+          update(id, "assistant", next, type.endsWith("delta"));
+          if (next.trim()) persist({ id, role: "assistant", text: next }, !type.endsWith("delta"));
+        }
       } else if (id && /^conversation\.item\.(created|added|done)$/.test(type) && item.role === "assistant" && Array.isArray(item.content)) {
         const text = item.content.map((part) => { const content = record(part); return string(content.transcript) || string(content.text); }).join("");
-        if (text.trim()) update(id, "assistant", text);
+        if (text.trim()) { update(id, "assistant", text); persist({ id, role: "assistant", text }, true); }
       }
       if (type === "conversation.item.input_audio_transcription.failed" && id) {
         pendingInput.current.delete(id);
@@ -359,6 +443,7 @@ export default function VoiceSheet({ accessKey, microphone, onClose, preview = f
           if (!text && !images.length) continue;
           const agent = namedVoiceAgent(string(item.agent), string(item.source)) ?? lastRouted.current;
           setEntries((previous) => insertEntry(previous, { id: `agent-${id}`, role: "agent", agent, text, images, at: timestamp }));
+          persist({ id: `agent-${id}`, role: "agent", agent, text, images, at: timestamp }, true);
           pendingReplies.current.push({ id, text, images });
         }
         flushReplies.current();

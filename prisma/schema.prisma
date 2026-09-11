@@ -439,6 +439,27 @@ model CompanyVoiceReply {
   @@index([createdAt])
 }
 
+/**
+ * Durable GPT-Live transcript turns. Survives refresh and later visits;
+ * keyed by ownerHash (sha256 of access key) and the client entry id.
+ */
+model CompanyVoiceTranscript {
+  id         String   @id @default(uuid()) @db.Uuid
+  ownerHash  String
+  clientId   String
+  role       String
+  message    String
+  images     String[]
+  agent      String?
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([ownerHash, clientId])
+  @@index([ownerHash, occurredAt])
+  @@index([createdAt])
+}
+
 /** Single-row lock so the 20:00 Berlin record nudge fires once per day. */
 model CompanyRecordNudge {
   id          String   @id
