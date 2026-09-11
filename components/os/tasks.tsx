@@ -23,12 +23,21 @@ import {
 import dynamic from "next/dynamic";
 
 import { TikTokIcon } from "@/components/os/tiktok-icon";
+import {
+  CaptionTipsField,
+  GenerateCaptionButton,
+  VideoCaptionBox,
+} from "@/components/os/tiktok-caption";
 import { LinkedNotes } from "@/components/os/linked-notes";
 import { Panel, Pill, Row } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/os/format";
 import { routeHref } from "@/lib/os/href";
+import {
+  CAPTION_PROMPT_STORAGE_KEY,
+  localCaptionPreview,
+} from "@/lib/os/tiktok-caption";
 import {
   isInProgress,
   nextVideoCheckPatch,
@@ -161,6 +170,126 @@ export function TaskList({
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const [failure, setFailure] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [captionPrompt, setCaptionPrompt] = useState("");
+  const [captions, setCaptions] = useState<Record<string, string>>({});
+  const [captionBusyId, setCaptionBusyId] = useState<string | null>(null);
+  const [captionErrors, setCaptionErrors] = useState<Record<string, string>>({});
+  const isVideoList = list === "video";
+
+  useEffect(() => {
+    if (!isVideoList) return;
+    if (localOnly) {
+      try {
+        setCaptionPrompt(localStorage.getItem(CAPTION_PROMPT_STORAGE_KEY) ?? "");
+      } catch {
+        setCaptionPrompt("");
+      }
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/os/${encodeURIComponent(accessKey)}/tiktok/caption-prompt`,
+        );
+        const body = (await response.json().catch(() => null)) as
+          | { ok?: boolean; prompt?: string }
+          | null;
+        if (response.ok && body?.ok && typeof body.prompt === "string") {
+          setCaptionPrompt(body.prompt);
+        }
+      } catch {
+        // Keep the empty field; generating still works without saved tips.
+      }
+    })();
+  }, [accessKey, isVideoList, localOnly]);
+
+  function persistCaptionPrompt(value: string) {
+    if (localOnly) {
+      try {
+        localStorage.setItem(CAPTION_PROMPT_STORAGE_KEY, value);
+      } catch {
+        // Private mode can block localStorage; keep the in-memory value.
+      }
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/os/${encodeURIComponent(accessKey)}/tiktok/caption-prompt`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: value }),
+          },
+        );
+        const body = (await response.json().catch(() => null)) as
+          | { ok?: boolean; message?: string }
+          | null;
+        if (!response.ok || !body?.ok) {
+          throw new Error(body?.message || "Could not save caption tips.");
+        }
+      } catch (problem) {
+        setFailure(problem instanceof Error ? problem.message : "Could not save caption tips.");
+      }
+    })();
+  }
+
+  function generateCaption(task: TaskRow) {
+    setOpenId(task.id);
+    setCaptionBusyId(task.id);
+    setCaptionErrors((current) => {
+      const next = { ...current };
+      delete next[task.id];
+      return next;
+    });
+    if (localOnly) {
+      setCaptions((current) => ({
+        ...current,
+        [task.id]: localCaptionPreview({
+          title: task.title,
+          song: task.song,
+          notes: task.notes,
+        }),
+      }));
+      setCaptionBusyId(null);
+      return;
+    }
+    if (task.id.startsWith("pending-")) {
+      setCaptionErrors((current) => ({
+        ...current,
+        [task.id]: "Save the idea first, then generate a caption.",
+      }));
+      setCaptionBusyId(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/os/${encodeURIComponent(accessKey)}/tiktok/caption`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ taskId: task.id, prompt: captionPrompt }),
+          },
+        );
+        const body = (await response.json().catch(() => null)) as
+          | { ok?: boolean; caption?: string; message?: string }
+          | null;
+        if (!response.ok || !body?.ok || !body.caption) {
+          throw new Error(body?.message || "Could not generate a caption.");
+        }
+        setCaptions((current) => ({ ...current, [task.id]: body.caption! }));
+      } catch (problem) {
+        setCaptionErrors((current) => ({
+          ...current,
+          [task.id]:
+            problem instanceof Error ? problem.message : "Could not generate a caption.",
+        }));
+      } finally {
+        setCaptionBusyId((current) => (current === task.id ? null : current));
+      }
+    })();
+  }
 
   function applyLocalPatch(id: string, next: Patch) {
     setServerTasks((current) =>
@@ -586,6 +715,10 @@ export function TaskList({
           current.map((row) => (row.id === task.id ? { ...row, tiktokSearchedAt: searchedAt } : row)),
         );
       },
+      caption: captions[task.id] ?? "",
+      captionBusy: captionBusyId === task.id,
+      captionError: captionErrors[task.id] ?? "",
+      onGenerateCaption: () => generateCaption(task),
       onToggleExpanded: () =>
         setOpenId((current) => (current === task.id ? null : task.id)),
       task,
@@ -630,6 +763,15 @@ export function TaskList({
           <PlusIcon className="size-5" />
         </Button>
       </form>
+
+      {isVideoList ? (
+        <CaptionTipsField
+          disabled={Boolean(error)}
+          onBlur={() => persistCaptionPrompt(captionPrompt)}
+          onChange={setCaptionPrompt}
+          value={captionPrompt}
+        />
+      ) : null}
 
       {error ? (
         <p className="border-t border-border px-3 py-3 text-xs text-destructive">{error}</p>
@@ -906,6 +1048,9 @@ function TaskItem({
   localOnly,
   rank,
   showSong,
+  caption,
+  captionBusy,
+  captionError,
   registerRow,
   onArchive,
   onCelebrate,
@@ -913,6 +1058,7 @@ function TaskItem({
   onPatch,
   onDelete,
   onTikTokSearched,
+  onGenerateCaption,
   onToggleExpanded,
 }: {
   accessKey: string;
@@ -926,6 +1072,9 @@ function TaskItem({
   localOnly: boolean;
   rank?: number;
   showSong: boolean;
+  caption: string;
+  captionBusy: boolean;
+  captionError: string;
   registerRow: (element: HTMLElement | null) => void;
   onArchive: () => void;
   onCelebrate: () => void;
@@ -933,6 +1082,7 @@ function TaskItem({
   onPatch: (patch: Patch) => void;
   onDelete: () => void;
   onTikTokSearched?: (searchedAt: string) => void;
+  onGenerateCaption?: () => void;
   onToggleExpanded: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -1073,14 +1223,21 @@ function TaskItem({
         )}
 
         {showSong ? (
-          <SongSearchMenu
-            accessKey={accessKey}
-            localOnly={localOnly}
-            onSearched={onTikTokSearched}
-            query={task.song || task.title}
-            searched={Boolean(task.tiktokSearchedAt)}
-            taskId={UUID_RE.test(task.id) ? task.id : undefined}
-          />
+          <>
+            <SongSearchMenu
+              accessKey={accessKey}
+              localOnly={localOnly}
+              onSearched={onTikTokSearched}
+              query={task.song || task.title}
+              searched={Boolean(task.tiktokSearchedAt)}
+              taskId={UUID_RE.test(task.id) ? task.id : undefined}
+            />
+            <GenerateCaptionButton
+              busy={captionBusy}
+              onClick={() => onGenerateCaption?.()}
+              title={task.title}
+            />
+          </>
         ) : null}
 
         <button
@@ -1187,6 +1344,14 @@ function TaskItem({
             {" · added "}
             {formatDate(task.createdAt.slice(0, 10))}
           </p>
+          {showSong ? (
+            <VideoCaptionBox
+              busy={captionBusy}
+              caption={caption}
+              error={captionError}
+              onGenerate={() => onGenerateCaption?.()}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1282,6 +1447,14 @@ function TaskItem({
               Delete
             </Button>
           </div>
+          {showSong ? (
+            <VideoCaptionBox
+              busy={captionBusy}
+              caption={caption}
+              error={captionError}
+              onGenerate={() => onGenerateCaption?.()}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

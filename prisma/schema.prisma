@@ -389,6 +389,17 @@ model CompanyTask {
   @@index([updatedAt])
 }
 
+/**
+ * Shared caption-writing tips for TikTok video ideas.
+ * Single-row setting (id = "singleton"); included in every generated caption.
+ */
+model CompanyTikTokCaptionPrompt {
+  id        String   @id
+  prompt    String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /** Latest Treg piano-cover search for a video idea. One row per CompanyTask. */
 model CompanyTikTokSearch {
   id        String      @id @default(uuid()) @db.Uuid
