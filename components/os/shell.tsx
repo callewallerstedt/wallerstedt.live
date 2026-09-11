@@ -8,7 +8,7 @@ import type { CompanyField } from "@/components/os/company-menu";
 import { VoiceLive } from "@/components/os/voice-live";
 import { OsPrefetch } from "@/components/os/prefetch";
 import { OsHeader, OsSidebar, OsTabBar } from "@/components/os/sidebar";
-import { osPageFromPathname } from "@/lib/os/route";
+import { isOsLivePathname, osPageFromPathname } from "@/lib/os/route";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_KEY = "calle-os-sidebar-collapsed";
@@ -26,7 +26,7 @@ export function OsShell({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
-  const live = pathname === `/bolag/${encodeURIComponent(accessKey)}/live`;
+  const live = isOsLivePathname(pathname, accessKey);
   const vault = osPageFromPathname(pathname) === "vault";
 
   // The sidebar state is a per-device preference, so it lives in the browser.

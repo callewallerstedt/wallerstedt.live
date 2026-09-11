@@ -73,6 +73,14 @@ const nextConfig: NextConfig = {
         headers: privateHeaders,
       },
       {
+        source: "/:key/live",
+        headers: privateHeaders,
+      },
+      {
+        source: "/live/:key",
+        headers: privateHeaders,
+      },
+      {
         source: "/accounting-sw.js",
         headers: [
           { key: "Content-Type", value: "application/javascript; charset=utf-8" },

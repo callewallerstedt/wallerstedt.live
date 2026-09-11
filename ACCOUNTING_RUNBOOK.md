@@ -42,8 +42,12 @@ Up to 4 accounts can be connected. App passwords are stored AES-256-GCM encrypte
 
 The agent-first workspace is available at `/agent/<ACCOUNTING_ACCESS_KEY>`. When
 `agent.wallerstedt.live` is attached to the same Vercel project, the shorter
-`https://agent.wallerstedt.live/<ACCOUNTING_ACCESS_KEY>` URL is rewritten to it.
-Set `ACCOUNTING_AGENT_HOST` if the production hostname differs.
+`https://agent.wallerstedt.live/<ACCOUNTING_ACCESS_KEY>` URL is rewritten to it,
+and `https://agent.wallerstedt.live/<ACCOUNTING_ACCESS_KEY>/live` (also
+`/live/<ACCOUNTING_ACCESS_KEY>`) is rewritten to Bolag GPT-Live at
+`/bolag/<ACCOUNTING_ACCESS_KEY>/live`. `/agent/`, `/api/`, and the main-site
+`/bolag/<key>/live` path are left unchanged. Set `ACCOUNTING_AGENT_HOST` if the
+production hostname differs.
 
 The versioned JSON API lives under:
 

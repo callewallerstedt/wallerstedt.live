@@ -29,13 +29,19 @@ Elon (formerly Boss / Grok Bot) can POST `{ "text": "Reply", "imageUrls": ["http
 
 User bubbles use completed transcripts only; empty entries, punctuation, and short non-Latin noise fragments are hidden. Echo cancellation and noise suppression are requested. While Live audio plays, microphone transmission pauses to prevent speaker echo and self-interruption (wait for Live to finish before speaking). Muting suppresses incoming transcription and clears buffered input; iOS may still display its microphone indicator while the connection owns the track. Closing Live releases it.
 
-For iPhone Action Button → Shortcuts → **Open URL**, use:
+For iPhone Action Button → Shortcuts → **Open URL**, use the existing agent host (no extra DNS):
+
+```text
+https://agent.wallerstedt.live/<key>/live
+```
+
+The same page is also at the main-site path:
 
 ```text
 https://wallerstedt.live/bolag/<key>/live
 ```
 
-Replace `<key>` with your Bolag access key. This route opens the sheet, requests the microphone and connects automatically, without loading overview data or dashboard prefetches. It uses the normal owner session; if signed out, sign in on that same URL and Live continues automatically. Safari and the Home Screen app may have separate sessions. If iOS blocks automatic microphone access, close the sheet and tap the mic to retry; if playback is blocked, use **Tap to hear Live**. The Live footer also contains the direct URL.
+Replace `<key>` with your Bolag access key. On `agent.wallerstedt.live`, `/<key>/live` (and `/live/<key>`) is rewritten to `/bolag/<key>/live`. `/<key>` and `/vault/<key>` still open the agent workspace. This route opens the sheet, requests the microphone and connects automatically, without loading overview data or dashboard prefetches. It uses the normal owner session; if signed out, sign in on that same URL and Live continues automatically. Safari and the Home Screen app may have separate sessions. If iOS blocks automatic microphone access, close the sheet and tap the mic to retry; if playback is blocked, use **Tap to hear Live**. The Live footer also contains the direct URL.
 
 ### Refreshing the streaming numbers
 

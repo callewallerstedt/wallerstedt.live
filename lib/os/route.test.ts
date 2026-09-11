@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { osPath } from "./paths";
+import { osLivePath, osLiveShortcutUrl, osPath } from "./paths";
 import {
   configuredOsAccessKey,
+  isOsLivePathname,
   isOsPageSlug,
   osLegacyTarget,
   osPageFromPathname,
@@ -65,6 +66,20 @@ test("osPath keeps the access key in the path like /vault/<key>", () => {
   assert.equal(osPath(key, "tasks"), `/bolag/${key}/tasks`);
   assert.equal(osPath(key, "vault"), `/bolag/${key}/vault`);
   assert.equal(osPath(key, "tiktok"), `/bolag/${key}/tiktok`);
+  assert.equal(osLivePath(key), `/bolag/${key}/live`);
+  assert.equal(osLiveShortcutUrl(key), `https://agent.wallerstedt.live/${key}/live`);
+});
+
+test("GPT-Live autoStart paths include the Bolag route and agent-host shorts", () => {
+  assert.equal(isOsLivePathname(`/bolag/${key}/live`, key), true);
+  assert.equal(isOsLivePathname(`/bolag/${key}/live/`, key), true);
+  assert.equal(isOsLivePathname(`/os/${key}/live`, key), true);
+  assert.equal(isOsLivePathname(`/${key}/live`, key), true);
+  assert.equal(isOsLivePathname(`/live/${key}`, key), true);
+  assert.equal(isOsLivePathname(`/bolag/${key}`, key), false);
+  assert.equal(isOsLivePathname(`/bolag/${key}/money`, key), false);
+  assert.equal(isOsLivePathname(`/${key}`, key), false);
+  assert.equal(isOsLivePathname(`/bolag/other-key/live`, key), false);
 });
 
 test("retired tabs redirect into the tab that absorbed them", () => {

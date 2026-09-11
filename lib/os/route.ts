@@ -44,6 +44,23 @@ export function osPageFromPathname(pathname: string): OsPageSlug {
 }
 
 /**
+ * GPT-Live deep links: the canonical Bolag route, plus the short agent-host
+ * URLs rewritten onto it (`/<key>/live` and `/live/<key>`).
+ */
+export function isOsLivePathname(pathname: string, accessKey: string): boolean {
+  const key = encodeURIComponent(accessKey);
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length === 2 && parts[1] === "live" && parts[0] === key) return true;
+  if (parts.length === 2 && parts[0] === "live" && parts[1] === key) return true;
+  return (
+    parts.length === 3 &&
+    parts[2] === "live" &&
+    (parts[0] === "bolag" || parts[0] === "os") &&
+    parts[1] === key
+  );
+}
+
+/**
  * A retired slug maps to the tab that absorbed it, so old bookmarks land on the
  * page that now holds that content instead of a 404.
  */

@@ -6,6 +6,7 @@ import { CheckIcon, CopyIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useAccent, useOsTheme } from "@/components/os/providers";
 import { Panel, Row } from "@/components/os/ui";
 import { accentMeta, accents, type Accent } from "@/lib/accent";
+import { osLiveShortcutUrl } from "@/lib/os/paths";
 import { cn } from "@/lib/utils";
 
 const ACCENT_SWATCHES: Record<Accent, [string, string]> = {
@@ -81,7 +82,7 @@ export function AppearanceSettings() {
 
 export function LiveShortcut({ accessKey }: { accessKey: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `https://wallerstedt.live/bolag/${encodeURIComponent(accessKey)}/live`;
+  const url = osLiveShortcutUrl(accessKey);
 
   async function copy() {
     try {

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { agentHostRewritePath } from "@/lib/os/agent-host";
+
 function requestHostname(request: NextRequest) {
   return (request.headers.get("x-forwarded-host") || request.headers.get("host") || "")
     .split(",", 1)[0]
@@ -14,18 +16,11 @@ export function proxy(request: NextRequest) {
     .toLocaleLowerCase("en");
   if (requestHostname(request) !== configuredHost) return NextResponse.next();
 
-  const { pathname } = request.nextUrl;
-  if (pathname.startsWith("/agent/") || pathname.startsWith("/api/")) {
-    return NextResponse.next();
-  }
-
-  const vaultMatch = /^\/vault\/([^/]+)\/?$/.exec(pathname);
-  const directMatch = /^\/([^/]+)\/?$/.exec(pathname);
-  const accessKey = vaultMatch?.[1] || directMatch?.[1];
-  if (!accessKey) return NextResponse.next();
+  const destination = agentHostRewritePath(request.nextUrl.pathname);
+  if (!destination) return NextResponse.next();
 
   const target = request.nextUrl.clone();
-  target.pathname = `/agent/${accessKey}`;
+  target.pathname = destination;
   return NextResponse.rewrite(target);
 }
 
