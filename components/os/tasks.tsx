@@ -42,6 +42,7 @@ import {
   spotifySearchUrl,
   TASK_AREA_LABELS,
   TASK_AREAS,
+  tiktokWallerstedtSearchUrl,
   youtubePianoTutorialUrl,
 } from "@/lib/os/task-meta";
 import type { ActionItem, TaskArea, TaskList as TaskListName, TaskRow } from "@/lib/os/types";
@@ -862,7 +863,7 @@ export function TaskList({
 
 /**
  * Action menu on a video idea: Spotify for the track, YouTube for a piano
- * tutorial, or an in-app TikTok piano-cover search.
+ * tutorial, an in-app TikTok piano-cover search, or open TikTok for our own take.
  */
 function SongSearchMenu({
   accessKey,
@@ -986,6 +987,17 @@ function SongSearchMenu({
                 />
                 {searched ? "TikTok · searched" : "TikTok"}
               </button>
+              <a
+                className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                href={tiktokWallerstedtSearchUrl(query)}
+                onClick={(event) => event.stopPropagation()}
+                rel="noreferrer"
+                role="menuitem"
+                target="_blank"
+              >
+                <TikTokIcon className="size-3.5 text-muted-foreground" />
+                My TikTok
+              </a>
             </div>,
             document.querySelector(".os-root") ?? document.body,
           )

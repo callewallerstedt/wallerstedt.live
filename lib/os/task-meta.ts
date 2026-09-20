@@ -49,6 +49,17 @@ export function tiktokPianoSearchUrl(query: string, now = Date.now()) {
   return `https://www.tiktok.com/search/video?q=${q}&t=${now}`;
 }
 
+/** Find our own take of the clip's song on TikTok. */
+export function tiktokWallerstedtSearchQuery(query: string) {
+  return `${query.trim()} wallerstedt`;
+}
+
+/** Opens TikTok video search for `{song} wallerstedt`. */
+export function tiktokWallerstedtSearchUrl(query: string, now = Date.now()) {
+  const q = encodeURIComponent(tiktokWallerstedtSearchQuery(query));
+  return `https://www.tiktok.com/search/video?q=${q}&t=${now}`;
+}
+
 export const TASK_WORK_STATUSES = ["open", "in_progress", "done"] as const;
 
 export function isTaskWorkStatus(value: unknown): value is TaskWorkStatus {
