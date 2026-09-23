@@ -480,3 +480,119 @@ model CompanyRecordNudge {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+/**
+ * Personal finance (the Privat tab). Bank data comes from Enable Banking
+ * (PSD2); the tables are created by the migration and, idempotently, by
+ * lib/finance/schema.ts at runtime.
+ */
+model FinanceBankSession {
+  id           String    @id
+  aspspName    String
+  aspspCountry String
+  /** active | expired | revoked */
+  status       String    @default("active")
+  validUntil   DateTime?
+  lastError    String    @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+}
+
+/** Single-use OAuth state for the bank redirect. */
+model FinanceAuthState {
+  id           String   @id
+  aspspName    String
+  aspspCountry String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+model FinanceAccount {
+  /** Enable Banking account uid. */
+  id           String    @id
+  sessionId    String    @default("")
+  aspspName    String    @default("")
+  iban         String    @default("")
+  bankName     String    @default("")
+  displayName  String    @default("")
+  product      String    @default("")
+  currency     String    @default("SEK")
+  balanceCents BigInt?
+  balanceType  String    @default("")
+  balanceAt    DateTime?
+  hidden       Boolean   @default(false)
+  active       Boolean   @default(true)
+  lastSyncedAt DateTime?
+  lastError    String    @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+}
+
+model FinanceTransaction {
+  id             String   @id
+  accountId      String
+  bookingDate    DateTime @db.Date
+  /** Signed: negative is money out. */
+  amountCents    Int
+  currency       String   @default("SEK")
+  /** BOOK | PDNG */
+  status         String   @default("BOOK")
+  counterparty   String   @default("")
+  description    String   @default("")
+  /** Normalised merchant key used for rules and grouping. */
+  merchant       String   @default("")
+  category       String   @default("other")
+  /** auto | rule | manual */
+  categorySource String   @default("auto")
+  isTransfer     Boolean  @default(false)
+  note           String   @default("")
+  raw            Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([bookingDate])
+  @@index([accountId, bookingDate])
+  @@index([category, bookingDate])
+  @@index([merchant])
+}
+
+model FinanceBudget {
+  category     String   @id
+  monthlyCents Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+}
+
+/** "Always put this merchant in that category." */
+model FinanceCategoryRule {
+  merchant  String   @id
+  category  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+/** Manually tracked holdings, e.g. Avanza ISK, crypto, a car loan (negative). */
+model FinanceAsset {
+  id         String   @id
+  name       String
+  /** investment | savings | crypto | property | vehicle | debt | other */
+  kind       String   @default("investment")
+  valueCents BigInt   @default(0)
+  note       String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+}
+
+/** One row per day: bank total and manual assets, for the net worth curve. */
+model FinanceSnapshot {
+  day         DateTime @id @db.Date
+  bankCents   BigInt
+  assetsCents BigInt
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model FinanceMeta {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt
+}

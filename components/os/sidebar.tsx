@@ -7,6 +7,7 @@ import {
   LayoutDashboardIcon,
   ListChecksIcon,
   MusicIcon,
+  PiggyBankIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   Settings2Icon,
@@ -34,6 +35,7 @@ export const OS_PAGES = [
   { slug: "tasks" as const, label: "Tasks", short: "Tasks", icon: ListChecksIcon },
   { slug: "vault" as const, label: "Bokföring", short: "Books", icon: LandmarkIcon },
   { slug: "money" as const, label: "Money", short: "Money", icon: WalletIcon },
+  { slug: "finance" as const, label: "Privat", short: "Privat", icon: PiggyBankIcon },
   { slug: "music" as const, label: "Music", short: "Music", icon: MusicIcon },
   { slug: "settings" as const, label: "Settings", short: "Settings", icon: Settings2Icon },
 ];

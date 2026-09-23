@@ -10,7 +10,8 @@ import { AccountingError } from "./errors";
 import { assertSameOrigin } from "./http";
 
 export const ACCOUNTING_SESSION_COOKIE = "__Host-accounting_session";
-const SESSION_LIFETIME_SECONDS = 7 * 24 * 60 * 60;
+/** Each signed-in device stays remembered for half a year (revocable in Settings). */
+const SESSION_LIFETIME_SECONDS = 180 * 24 * 60 * 60;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LOCK_MS = 20 * 60 * 1000;
 const MAX_LOGIN_FAILURES = 5;

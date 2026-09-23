@@ -13,6 +13,7 @@ A collapsible sidebar on desktop and a fixed tab bar on phones. Video work lives
 | **Tasks** | The owner's own to-do list plus everything the ledger and repos flag, and the dates ahead (sidebar + Overview button; not a phone tab) |
 | **Bokföring** | The full vault app, embedded in the dashboard shell |
 | **Money** | Ledger, expense breakdown, repeating costs, income by description, tax, missing receipts, and the personal trading book kept clearly apart |
+| **Privat** | Personal finance: live bank balances (Handelsbanken via Open Banking), spending by category, monthly budgets, savings tips, an AI money coach, net worth with Avanza holdings |
 | **Music** | The full streaming analytics: every song's daily history, a scrubbable chart with a drag-to-set range, growth and momentum, milestones, DistroKid payouts and the release calendar |
 | **Settings** | Theme, accent, company details, data sources and sign-out |
 
@@ -246,6 +247,40 @@ one piano-category Treg search each. Body options:
 - `{ "handle" }` / `{ "accountId" }` — process that one watched account
 - `{ "scanId" }` — process the next burst if the background chain stalled
 
+
+## Personal finance (`/bolag/<key>/finance`, the **Privat** tab)
+
+Private money, kept apart from the company books. Same owner password as the rest of Bolag; a signed-in device stays remembered for 180 days.
+
+- **Bank data** comes from [Enable Banking](https://enablebanking.com) (PSD2, read-only), using a *restricted* production app: it can read only the accounts linked in the Enable Banking control panel, which is free. Handelsbanken is the default bank; **Wealth → Add bank** lists every Swedish bank Enable Banking supports (Avanza included if they offer it).
+- **Consent** lasts up to 180 days. The tab warns 14 days before it ends; **Reconnect** runs BankID again. The bank redirects to `https://wallerstedt.live/finance/callback`, which has to match the redirect URL registered in Enable Banking.
+- **Sync** runs from a Vercel cron at 04, 10, 15 and 20 UTC (`/api/finance/sync`, `CRON_SECRET`); PSD2 allows four unattended reads per account a day. Opening the tab on data older than 45 minutes syncs again with the owner "present", which does not count against that limit. The first sync pulls up to two years (falling back to 89 days if the bank refuses).
+- **Categories** are set automatically from Swedish merchant names (`lib/finance/categories.ts`). Changing one in **Activity** with "always use this" saves a rule for that merchant and re-sorts its past rows. Transfers between your own accounts are paired and left out of spending.
+- **Budgets** are per category per month, with pace markers, a per-day allowance and one-tap suggestions from your averages. **Save more** ranks concrete tips by yearly effect; the **AI money coach** (`gpt-6-sol`, override with `FINANCE_AI_MODEL`) reads a numbers-only brief and answers questions.
+- **Avanza / other holdings**: Avanza has no official API for private customers, so holdings are tracked under **Wealth → Holdings** and count towards net worth. Update them by hand or through the agent API.
+
+Env (server only): `ENABLE_BANKING_APP_ID`, `ENABLE_BANKING_PRIVATE_KEY` (raw PEM or base64), optional `FINANCE_AI_MODEL`. The tables are created on first use; `npm run prisma:deploy` applies the same idempotent migration.
+
+### Finance agent API (Grokbot)
+
+Same bearer as the task API (`ACCOUNTING_AGENT_API_TOKEN`); the discovery document at `GET $BASE` lists every finance endpoint.
+
+```bash
+BASE=https://wallerstedt.live/api/os/$ACCOUNTING_ACCESS_KEY/agent/v1
+AUTH="Authorization: Bearer $ACCOUNTING_AGENT_API_TOKEN"
+
+curl -H "$AUTH" "$BASE/finance"                         # full summary for this month
+curl -H "$AUTH" "$BASE/finance/coach"                   # plain-text brief of the month
+curl -H "$AUTH" "$BASE/finance/transactions?month=2026-09&category=fastfood"
+curl -X PUT -H "$AUTH" -H "Content-Type: application/json" "$BASE/finance/budgets" \
+  -d '{"budgets": {"fastfood": 1000, "car": 2500, "hobbies": 1500}}'
+curl -X PATCH -H "$AUTH" -H "Content-Type: application/json" "$BASE/finance/assets/<id>" \
+  -d '{"valueSek": 91200}'
+curl -X POST -H "$AUTH" -H "Content-Type: application/json" "$BASE/finance/coach" \
+  -d '{"question": "Can I afford a 15 000 kr keyboard this month?"}'
+```
+
+Amounts ending in `Cents` are öre; ones ending in `Sek` are whole kronor.
 
 ## Bookkeeping web push (iPhone Home Screen)
 

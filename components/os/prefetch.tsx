@@ -32,6 +32,7 @@ export function OsPrefetch({ accessKey }: { accessKey: string }) {
       void import("@/components/os/tiktok-page");
       void import("@/components/os/money-page");
       void import("@/components/os/music-page");
+      void import("@/components/os/finance/finance-page");
       void import("@/components/os/settings-page");
       void import("@/components/os/vault");
     });

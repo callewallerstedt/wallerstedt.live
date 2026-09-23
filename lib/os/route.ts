@@ -7,6 +7,7 @@ export const OS_PAGE_SLUGS = [
   "tasks",
   "vault",
   "money",
+  "finance",
   "music",
   "settings",
 ] as const;

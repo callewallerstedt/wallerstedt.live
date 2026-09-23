@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: Params) {
     const base = `/api/os/${encodeURIComponent(accessKey)}/agent/v1`;
     return privateJson({
       ok: true,
-      name: "Wallerstedt company OS agent API",
+      name: "Wallerstedt company OS agent API (tasks, TikTok, personal finance)",
       version: 1,
       authentication: {
         bearer: "Authorization: Bearer <ACCOUNTING_AGENT_API_TOKEN>",
@@ -38,6 +38,20 @@ export async function GET(request: Request, { params }: Params) {
           remove: `DELETE ${base}/tiktok/watch/{id|handle}`,
           scan: `POST ${base}/tiktok/watch/scan  {} | { "handle" } | { "accountId" } | { "scanId" }`,
           scans: `GET ${base}/tiktok/watch/scans`,
+        },
+        finance: {
+          summary: `GET ${base}/finance?month=YYYY-MM  — balances, net worth, month stats, categories vs budgets, 12-month history, top places, repeating payments, insights and savings tips`,
+          brief: `GET ${base}/finance/coach?month=YYYY-MM  — the same month as a short plain-text brief (best for reading aloud / reasoning)`,
+          coach: `POST ${base}/finance/coach  { "month"?: "YYYY-MM", "question"?: "Can I afford a 15 000 kr keyboard?" }  — AI money coach (GPT-6 Sol)`,
+          transactions: `GET ${base}/finance/transactions?month=YYYY-MM|from=YYYY-MM-DD&to=YYYY-MM-DD&category=<id>&account=<id>&q=<text>&limit=100&offset=0`,
+          recategorize: `PATCH ${base}/finance/transactions/{id}  { "category": "fastfood", "applyToMerchant": true, "note"?: "..." }`,
+          budgets: `GET ${base}/finance/budgets  ·  PUT ${base}/finance/budgets  { "budgets": { "fastfood": 1000, "car": 2500, "hobbies": null } }  (kr per month; null or 0 removes)`,
+          categories: `GET ${base}/finance/categories`,
+          sync: `POST ${base}/finance/sync  { "force"?: true }  — pull fresh data from the bank (counts as one of the bank's 4 unattended reads per day)`,
+          connection: `GET ${base}/finance/connect  — bank consent status and days left`,
+          assets: `GET|POST ${base}/finance/assets  { "name": "Avanza ISK", "kind": "investment", "valueSek": 84500 }  ·  PATCH|DELETE ${base}/finance/assets/{id}  { "valueSek": 91200 }`,
+          accounts: `PATCH ${base}/finance/accounts/{id}  { "displayName"?: "Lönekonto", "hidden"?: false }`,
+          rules: `GET ${base}/finance/rules  ·  DELETE ${base}/finance/rules?merchant=<key>`,
         },
       },
       fields: {
@@ -110,6 +124,8 @@ export async function GET(request: Request, { params }: Params) {
         idempotency:
           "POST /tasks returns the existing open task when its title already matches, so a retry never duplicates a row. POST /tiktok/watch returns the current list when the handle is already watched.",
         scope: "Tasks and TikTok watches are separate from bokföring. Writing one never touches the ledger.",
+        finance:
+          "Personal (private) money only, never the company books. All amounts are öre (cents) in *Cents fields and whole kronor in *Sek fields. Spending excludes own transfers and money moved to savings. Categories: groceries, fastfood, restaurants, car, transport, housing, subscriptions, shopping, hobbies, entertainment, health, travel, swish, cash, fees, other (spending); savings, transfer (neutral); income. Bank data refreshes 4 times a day automatically.",
         ordering:
           "Each list is ordered independently. Video ideas that are in_progress (practicing) sit above other open rows, most recently started first. Other open rows keep the owner's sort. GET /tasks?status=open includes in_progress. GET /tasks?list=video returns only active video ideas — not Past/archived ones. PATCH /tasks reorders regular open rows only; practicing rows stay pinned.",
         caption:

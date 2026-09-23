@@ -14,6 +14,11 @@ async function OsPageBody({ accessKey, page }: { accessKey: string; page: OsPage
     const { OsVault } = await import("@/components/os/vault");
     return <OsVault accessKey={accessKey} />;
   }
+  if (page === "finance") {
+    // The Privat tab loads its own data client-side so it can refresh live.
+    const { FinancePage } = await import("@/components/os/finance/finance-page");
+    return <FinancePage accessKey={accessKey} />;
+  }
   const snapshot = await loadOsPage(accessKey, page);
   if (!snapshot) return null;
   const todayYmd = berlinYmd() ?? new Date().toISOString().slice(0, 10);
