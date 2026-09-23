@@ -27,7 +27,8 @@ export const FINANCE_CALLBACK_PATH = "/finance/callback";
 /** PSD2 caps consents at 180 days; the bank may cap it lower. */
 const MAX_CONSENT_DAYS = 180;
 const FIRST_SYNC_DAYS = 730;
-const FALLBACK_SYNC_DAYS = 89;
+/** Banks cap history differently (Handelsbanken ~13 months after BankID, 90 days otherwise). */
+const HISTORY_LADDER_DAYS = [730, 395, 180, 89];
 const RESYNC_OVERLAP_DAYS = 14;
 
 let schemaReady: Promise<void> | null = null;
@@ -274,7 +275,11 @@ export type SyncResult = {
 
 const MIN_SYNC_GAP_MS = 5 * 60_000;
 
-export async function syncFinance({ psu, force = false }: { psu?: PsuContext; force?: boolean } = {}): Promise<SyncResult> {
+export async function syncFinance({
+  psu,
+  force = false,
+  history = false,
+}: { psu?: PsuContext; force?: boolean; history?: boolean } = {}): Promise<SyncResult> {
   const client = await db();
   const at = new Date().toISOString();
   if (!enableBankingConfigured()) {
@@ -332,17 +337,23 @@ export async function syncFinance({ psu, force = false }: { psu?: PsuContext; fo
         orderBy: { bookingDate: "desc" },
         select: { bookingDate: true },
       });
-      let dateFrom = latest
-        ? addDaysYmd(ymd(latest.bookingDate), -RESYNC_OVERLAP_DAYS)
-        : addDaysYmd(today, -FIRST_SYNC_DAYS);
-      let raw: EbTransaction[];
-      try {
-        raw = await getTransactions(account.id, dateFrom, psu);
-      } catch (error) {
-        if (!(error instanceof EnableBankingError) || error.sessionExpired || error.rateLimited) throw error;
-        // Banks often refuse history older than 90 days outside a fresh BankID login.
-        dateFrom = addDaysYmd(today, -FALLBACK_SYNC_DAYS);
-        raw = await getTransactions(account.id, dateFrom, psu);
+      // Right after BankID the bank allows a longer look back, so walk down
+      // from two years; otherwise only fetch what is new (with an overlap).
+      const ladder =
+        history || !latest
+          ? HISTORY_LADDER_DAYS.map((days) => addDaysYmd(today, -days))
+          : [addDaysYmd(ymd(latest.bookingDate), -RESYNC_OVERLAP_DAYS)];
+      let dateFrom = ladder[0]!;
+      let raw: EbTransaction[] = [];
+      for (let step = 0; step < ladder.length; step += 1) {
+        dateFrom = ladder[step]!;
+        try {
+          raw = await getTransactions(account.id, dateFrom, psu);
+          break;
+        } catch (error) {
+          const last = step === ladder.length - 1;
+          if (last || !(error instanceof EnableBankingError) || error.sessionExpired || error.rateLimited) throw error;
+        }
       }
       const mapped = mapTransactions(account.id, raw);
 
@@ -362,11 +373,16 @@ export async function syncFinance({ psu, force = false }: { psu?: PsuContext; fo
 
       // The bank is the truth for the window it just returned: rows there that
       // it no longer lists are replaced, keeping the owner's category and note.
+      const coveredFrom = mapped.reduce((min, row) => (row.bookingDate < min ? row.bookingDate : min), "9999-12-31");
       const stale = mapped.length
         ? await client.financeTransaction.findMany({
             where: {
               accountId: account.id,
-              bookingDate: { gte: dateFromYmd(dateFrom) },
+              // Only the days the bank actually covered: it may return less
+              // history than asked for, and imported rows before that stay.
+              bookingDate: {
+                gte: dateFromYmd(coveredFrom > dateFrom ? coveredFrom : dateFrom),
+              },
               id: { notIn: mapped.map((row) => row.id) },
             },
           })
@@ -457,6 +473,27 @@ export async function syncFinance({ psu, force = false }: { psu?: PsuContext; fo
   return result;
 }
 
+/** Re-run the built-in rules over rows nobody has sorted by hand. */
+export async function recategorizeAuto() {
+  const client = await db();
+  const rows = await client.financeTransaction.findMany({
+    where: { categorySource: "auto", isTransfer: false },
+    select: { id: true, counterparty: true, description: true, amountCents: true, category: true },
+  });
+  const changes = new Map<string, string[]>();
+  for (const row of rows) {
+    const next = categorize({ text: `${row.counterparty} ${row.description}`, amountCents: row.amountCents });
+    if (next !== row.category) changes.set(next, [...(changes.get(next) ?? []), row.id]);
+  }
+  for (const [category, ids] of changes) {
+    await client.financeTransaction.updateMany({
+      where: { id: { in: ids } },
+      data: { category, isTransfer: category === "transfer" },
+    });
+  }
+  return [...changes.values()].reduce((sum, ids) => sum + ids.length, 0);
+}
+
 /** Pair opposite-signed equal amounts across own accounts and call them transfers. */
 async function markTransfers() {
   const client = await db();
@@ -490,6 +527,92 @@ async function writeSnapshot() {
     create: { day, bankCents, assetsCents },
     update: { bankCents, assetsCents },
   });
+}
+
+/* ------------------------------------------------------------------------ */
+/* Importing bank exports                                                     */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Fill in history the bank API will not return, from Handelsbanken's Excel
+ * export. Only days before the API's own first transaction are imported, so
+ * nothing is counted twice; importing the same file again changes nothing.
+ */
+export async function importStatement(input: {
+  accountNumber: string;
+  accountName?: string;
+  rows: Array<{ date: string; text: string; amountCents: number }>;
+}) {
+  const client = await db();
+  const digits = input.accountNumber.replace(/\D/g, "");
+  if (digits.length < 6) throw new AccountingError("The file has no account number.", 400, "finance_import_invalid");
+  const accounts = await client.financeAccount.findMany({ where: { active: true } });
+  const account = accounts.find((row) => row.iban.replace(/\D/g, "").endsWith(digits));
+  if (!account) {
+    throw new AccountingError(
+      `No connected account ends in ${digits}. Link that account in Enable Banking and reconnect first.`,
+      404,
+      "finance_import_no_account",
+    );
+  }
+  if (input.accountName && !account.displayName) {
+    await client.financeAccount.update({ where: { id: account.id }, data: { displayName: input.accountName.slice(0, 80) } });
+  }
+
+  const firstFromBank = await client.financeTransaction.findFirst({
+    where: { accountId: account.id, NOT: { id: { startsWith: `${account.id}:x` } } },
+    orderBy: { bookingDate: "asc" },
+    select: { bookingDate: true },
+  });
+  const cutoff = firstFromBank ? ymd(firstFromBank.bookingDate) : null;
+  const rules = new Map((await client.financeCategoryRule.findMany()).map((rule) => [rule.merchant, rule.category]));
+
+  const occurrences = new Map<string, number>();
+  const data = [];
+  let skippedOverlap = 0;
+  for (const row of input.rows) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date) || !Number.isFinite(row.amountCents)) continue;
+    if (cutoff && row.date >= cutoff) {
+      skippedOverlap += 1;
+      continue;
+    }
+    const text = row.text.trim().slice(0, 500);
+    const base = `${account.id}|${row.date}|${row.amountCents}|${text}`;
+    const count = (occurrences.get(base) ?? 0) + 1;
+    occurrences.set(base, count);
+    const merchant = normalizeMerchant(text);
+    const ruled = merchant ? rules.get(merchant) : undefined;
+    const category = ruled ?? categorize({ text, amountCents: row.amountCents });
+    data.push({
+      id: `${account.id}:x${createHash("sha256").update(`${base}|${count}`).digest("base64url").slice(0, 32)}`,
+      accountId: account.id,
+      bookingDate: dateFromYmd(row.date),
+      amountCents: Math.round(row.amountCents),
+      currency: account.currency || "SEK",
+      status: "BOOK",
+      counterparty: "",
+      description: text,
+      merchant,
+      category,
+      categorySource: ruled ? "rule" : "auto",
+      isTransfer: category === "transfer",
+    });
+  }
+  let imported = 0;
+  for (let index = 0; index < data.length; index += 500) {
+    const result = await client.financeTransaction.createMany({ data: data.slice(index, index + 500), skipDuplicates: true });
+    imported += result.count;
+  }
+  await recategorizeAuto();
+  await markTransfers();
+  return {
+    account: account.displayName || input.accountName || account.bankName,
+    imported,
+    alreadyThere: data.length - imported,
+    skippedOverlap,
+    from: data.length ? data.map((row) => ymd(row.bookingDate)).sort()[0]! : null,
+    to: data.length ? data.map((row) => ymd(row.bookingDate)).sort().at(-1)! : null,
+  };
 }
 
 /* ------------------------------------------------------------------------ */

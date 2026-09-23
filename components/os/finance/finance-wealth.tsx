@@ -106,7 +106,7 @@ export function FinanceWealth({
       ) : null}
 
       <SectionLabel>Bank accounts</SectionLabel>
-      <Panel>
+      <Panel footer={<ImportHistory api={api} onDone={onChanged} />}>
         {summary.accounts.length ? (
           summary.accounts.map((account) => (
             <AccountRow key={account.id} account={account} api={api} onChanged={onChanged} onError={setError} />
@@ -491,5 +491,73 @@ function Rules({ api, run }: { api: FinanceApi; run: (action: () => Promise<unkn
         </p>
       )}
     </details>
+  );
+}
+
+/**
+ * The bank API only reaches back about 90 days outside a fresh BankID login.
+ * Handelsbanken's own Excel export goes back years; this fills the gap.
+ */
+function ImportHistory({ api, onDone }: { api: FinanceApi; onDone: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [messages, setMessages] = useState<string[]>([]);
+
+  async function importFiles(files: FileList | null) {
+    if (!files?.length) return;
+    setBusy(true);
+    setMessages([]);
+    const { default: readXlsxFile } = await import("read-excel-file/browser");
+    const { parseHandelsbankenStatement } = await import("@/lib/finance/import");
+    const results: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        const sheets = await readXlsxFile(file);
+        const parsed = parseHandelsbankenStatement(sheets[0]!.data as unknown[][]);
+        const result = await api.send<{ account: string; imported: number; alreadyThere: number; skippedOverlap: number; from: string | null; to: string | null }>(
+          "POST",
+          "/import",
+          { accountNumber: parsed.accountNumber, accountName: parsed.accountName, rows: parsed.rows.map(({ date, text, amountCents }) => ({ date, text, amountCents })) },
+        );
+        results.push(
+          `${result.account}: ${result.imported} added${result.from ? ` (${result.from} → ${result.to})` : ""}${
+            result.alreadyThere ? `, ${result.alreadyThere} already there` : ""
+          }${result.skippedOverlap ? `, ${result.skippedOverlap} newer ones already come from the bank` : ""}.`,
+        );
+      } catch (caught) {
+        results.push(`${file.name}: ${caught instanceof Error ? caught.message : "could not import"}`);
+      }
+    }
+    setMessages(results);
+    setBusy(false);
+    await onDone();
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p>
+        Need older history? In Handelsbanken online go to the account → <b>Exportera</b> (Excel), then import it here.
+        Only days before the bank connection&apos;s history are added, so nothing is counted twice.
+      </p>
+      <label className={cn("inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-lg bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground ring-1 ring-foreground/15 hover:bg-muted", busy && "pointer-events-none opacity-60")}>
+        {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : <PlusIcon className="size-3.5" />}
+        {busy ? "Importing…" : "Import Excel export"}
+        <input
+          accept=".xlsx"
+          className="sr-only"
+          disabled={busy}
+          multiple
+          onChange={(event) => {
+            void importFiles(event.target.files);
+            event.target.value = "";
+          }}
+          type="file"
+        />
+      </label>
+      {messages.map((message) => (
+        <p key={message} className="text-foreground">
+          {message}
+        </p>
+      ))}
+    </div>
   );
 }

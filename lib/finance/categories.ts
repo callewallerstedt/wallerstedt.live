@@ -27,6 +27,7 @@ export const FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: "entertainment", label: "Fun & going out", emoji: "🎉", color: "oklch(0.76 0.15 90)" },
   { id: "health", label: "Health & gym", emoji: "💪", color: "oklch(0.7 0.13 170)" },
   { id: "travel", label: "Travel", emoji: "✈️", color: "oklch(0.68 0.13 235)" },
+  { id: "snus", label: "Snus & tobacco", emoji: "🟤", color: "oklch(0.55 0.08 50)" },
   { id: "swish", label: "Swish to people", emoji: "📲", color: "oklch(0.64 0.08 260)" },
   { id: "cash", label: "Cash", emoji: "💵", color: "oklch(0.6 0.05 140)" },
   { id: "fees", label: "Fees, tax & insurance", emoji: "🧾", color: "oklch(0.55 0.06 60)" },
@@ -94,34 +95,51 @@ type Rule = { category: string; pattern: RegExp };
 const RULES: Rule[] = [
   // Money moving between own things is not spending.
   { category: "savings", pattern: words(["AVANZA", "NORDNET", "LYSA", "SAVR", "PENSIONSSPAR", "ISK", "FONDKÖP", "AKTIEKÖP", "SPARKONTO", "SPARANDE", "BITCOIN", "COINBASE", "SAFELLO", "BINANCE", "KRAKEN"]) },
-  { category: "transfer", pattern: words(["ÖVERFÖRING", "OVERFORING", "ÖVERF", "EGET KONTO", "EGEN ÖVERF", "INTERN ÖVERF", "MELLAN EGNA", "TRANSFER"]) },
+  { category: "transfer", pattern: words(["REVOLUT", "ÖVERFÖRING", "OVERFORING", "ÖVERF", "EGET KONTO", "EGEN ÖVERF", "INTERN ÖVERF", "MELLAN EGNA", "TRANSFER"]) },
   { category: "cash", pattern: words(["UTTAG", "BANKOMAT", "ATM", "KONTANTUTTAG", "CASH"]) },
 
   // Food.
-  { category: "fastfood", pattern: words(["MCDONALDS", "MCDONALD'S", "MC DONALDS", "MAX BURGERS", "MAX HAMBURGARE", "MAX", "BURGER KING", "SUBWAY", "KFC", "SIBYLLA", "PIZZA HUT", "DOMINOS", "DOMINO'S", "FOODORA", "WOLT", "UBER EATS", "UBEREATS", "JUST EAT", "ONLINEPIZZA", "PIZZERIA", "PIZZA", "KEBAB", "SUSHI", "THAI", "FALAFEL", "BASTARD BURGERS", "PHILS BURGER", "FRASSES", "O'LEARYS", "7-ELEVEN", "7 ELEVEN", "PRESSBYRÅN", "PRESSBYRAN", "GRILL", "GATUKÖK", "STARBUCKS", "DUNKIN", "TACO BAR", "POKE"]) },
-  { category: "groceries", pattern: words(["ICA", "COOP", "WILLYS", "HEMKÖP", "HEMKOP", "LIDL", "CITY GROSS", "NETTO", "MATHEM", "MATSMART", "TEMPO", "MATHALLEN", "SYSTEMBOLAGET", "LINAS MATKASSE", "HELLOFRESH", "GODIS", "CANDY"]) },
-  { category: "restaurants", pattern: words(["RESTAURANG", "RESTAURANT", "BISTRO", "CAFE", "CAFÉ", "KAFÉ", "KONDITORI", "BAGERI", "ESPRESSO HOUSE", "WAYNES", "WAYNE'S", "BRASSERIE", "TRATTORIA", "KROG", "PUB", "STEAKHOUSE", "JOE & THE JUICE", "JOE AND THE JUICE"]) },
+  { category: "fastfood", pattern: words(["MCDONALDS", "MCDONALD'S", "MC DONALDS", "MAX BURGERS", "MAXBURGERS", "MAX HAMBURGARE", "MAX", "BURGER KING", "SUBWAY", "KFC", "SIBYLLA", "PIZZA HUT", "DOMINOS", "DOMINO'S", "FOODORA", "WOLT", "UBER EATS", "UBEREATS", "JUST EAT", "ONLINEPIZZA", "PIZZERIA", "PIZZA", "KEBAB", "SUSHI", "THAI", "FALAFEL", "CHOPCHOP", "BASTARD BURGERS", "PHILS BURGER", "FRASSES", "O'LEARYS", "7-ELEVEN", "7 ELEVEN", "PRESSBYRÅN", "PRESSBYRAN", "GRILL", "GATUKÖK", "STARBUCKS", "DUNKIN", "TACO BAR", "POKE"]) },
+  { category: "groceries", pattern: words(["ICA", "COOP", "WILLYS", "HEMKÖP", "HEMKOP", "LIDL", "CITY GROSS", "NETTO", "REWE", "EDEKA", "ALDI", "KAUFLAND", "PENNY", "GLOBUS", "COOP KONSUM", "MATHEM", "MATSMART", "TEMPO", "MATHALLEN", "SYSTEMBOLAGET", "LINAS MATKASSE", "HELLOFRESH", "GODIS", "CANDY"]) },
+  { category: "restaurants", pattern: words(["RESTAURANG", "RESTAURANT", "BISTRO", "CAFE", "CAFÉ", "KAFÉ", "KONDITORI", "BAGERI", "ESPRESSO HOUSE", "ESPRHO", "WAYNES", "WAYNE'S", "BRASSERIE", "TRATTORIA", "KROG", "PUB", "STEAKHOUSE", "MASALA KITCHEN", "KONDITOREI", "JOE & THE JUICE", "JOE AND THE JUICE"]) },
 
   // Car: fuel, charging, parking, service, tolls.
-  { category: "car", pattern: words(["CIRCLE K", "OKQ8", "PREEM", "ST1", "SHELL", "INGO", "QSTAR", "BENSIN", "DIESEL", "TESLA", "SUPERCHARGER", "IONITY", "CLEVER", "EASYPARK", "EASY PARK", "PARKERING", "APCOA", "AIMO", "Q-PARK", "QPARK", "PARKSTER", "BILTVÄTT", "DÄCK", "MECONOMEN", "BILIA", "BESIKTNING", "OPUS", "BILPROVNING", "TRÄNGSELSKATT", "VÄGTULL", "BROAVGIFT", "BILFÖRSÄKRING", "FORDONSSKATT"]) },
-  { category: "transport", pattern: words(["SL", "VÄSTTRAFIK", "VASTTRAFIK", "SKÅNETRAFIKEN", "SJ", "MTR", "FLYGBUSSARNA", "ARLANDA EXPRESS", "UBER", "BOLT", "TAXI", "VOI", "LIME", "TIER", "HALLANDSTRAFIKEN", "ÖRESUNDSTÅG"]) },
+  { category: "car", pattern: words(["MEKONOMEN", "SKRUVAT", "BILFARG", "BESIKTA", "BILGLAS", "BILTEMA", "AGROLA", "PARKINGS", "EPARK", "FREETRAILER", "CIRCLE K", "OKQ8", "PREEM", "ST1", "SHELL", "INGO", "QSTAR", "BENSIN", "DIESEL", "TESLA", "SUPERCHARGER", "IONITY", "CLEVER", "EASYPARK", "EASY PARK", "PARKERING", "APCOA", "AIMO", "Q-PARK", "QPARK", "PARKSTER", "BILTVÄTT", "DÄCK", "MECONOMEN", "BILIA", "BESIKTNING", "OPUS", "BILPROVNING", "TRÄNGSELSKATT", "VÄGTULL", "BROAVGIFT", "BILFÖRSÄKRING", "FORDONSSKATT"]) },
+  { category: "transport", pattern: words(["SL", "VÄSTTRAFIK", "VASTTRAFIK", "SKÅNETRAFIKEN", "SJ", "MTR", "FLYGBUSSARNA", "ARLANDA EXPRESS", "UBER", "BOLT", "TAXI", "VOI", "LIME", "TIER", "RYDE", "HALLANDSTRAFIKEN", "ÖRESUNDSTÅG"]) },
 
   // Recurring digital services.
-  { category: "subscriptions", pattern: words(["SPOTIFY", "NETFLIX", "HBO", "DISNEY", "VIAPLAY", "TV4", "YOUTUBE", "APPLE.COM", "APPLE COM", "ITUNES", "ICLOUD", "GOOGLE", "OPENAI", "CHATGPT", "ANTHROPIC", "CLAUDE", "MIDJOURNEY", "ADOBE", "MICROSOFT", "DROPBOX", "NOTION", "GITHUB", "VERCEL", "CANVA", "STORYTEL", "BOOKBEAT", "NEXTORY", "AUDIBLE", "PATREON", "TWITCH", "DISCORD", "NINTENDO", "XBOX", "PLAYSTATION", "STEAM", "AMAZON PRIME", "PRIME VIDEO", "XAI", "X.AI", "GROK", "SUPERGROK", "CAPCUT", "DISTROKID", "SPLICE", "TELIA", "TELE2", "HALLON", "COMVIQ", "VIMLA"]) },
+  { category: "subscriptions", pattern: words(["SPACEX", "STARLINK", "SPOTIFY", "ELEVENLABS", "CURSOR", "SUNO", "NETFLIX", "HBO", "DISNEY", "VIAPLAY", "TV4", "YOUTUBE", "APPLE.COM", "APPLE COM", "ITUNES", "ICLOUD", "GOOGLE", "OPENAI", "CHATGPT", "ANTHROPIC", "CLAUDE", "MIDJOURNEY", "ADOBE", "MICROSOFT", "DROPBOX", "NOTION", "GITHUB", "VERCEL", "CANVA", "STORYTEL", "BOOKBEAT", "NEXTORY", "AUDIBLE", "PATREON", "TWITCH", "DISCORD", "NINTENDO", "XBOX", "PLAYSTATION", "STEAM", "AMAZON PRIME", "PRIME VIDEO", "XAI", "X.AI", "GROK", "SUPERGROK", "CAPCUT", "DISTROKID", "SPLICE", "TELIA", "TELE2", "HALLON", "COMVIQ", "VIMLA"]) },
 
   // Home.
   { category: "housing", pattern: words(["HYRA", "HYRESAVI", "BRF", "VATTENFALL", "ELLEVIO", "E.ON", "FORTUM", "TIBBER", "GREENELY", "ELHANDEL", "BREDBAND", "BAHNHOF", "BREDBAND2", "OWNIT", "COM HEM", "TELENOR", "IKEA", "BAUHAUS", "JULA", "BYGGMAX", "HORNBACH", "CLAS OHLSON", "RUSTA", "ÖOB"]) },
 
-  { category: "health", pattern: words(["APOTEK", "APOTEKET", "KRONANS", "APOTEA", "HJÄRTAT", "SATS", "FRISKIS", "NORDIC WELLNESS", "FITNESS24SEVEN", "ACTIC", "GYM", "TANDLÄKARE", "FOLKTANDVÅRDEN", "VÅRDCENTRAL", "KRY", "MIN DOKTOR", "SYNSAM", "SPECSAVERS", "FRISÖR", "BARBER"]) },
+  { category: "health", pattern: words(["APOTEK", "APOTEKET", "KRONANS", "APOTEA", "HJÄRTAT", "SATS", "FRISKIS", "NORDIC WELLNESS", "NORDICWELL", "FITNESS24SEVEN", "ACTIC", "GYM", "TANDLÄKARE", "FOLKTANDVÅRDEN", "VÅRDCENTRAL", "KRY", "MIN DOKTOR", "SYNSAM", "SPECSAVERS", "FRISÖR", "BARBER"]) },
   { category: "hobbies", pattern: words(["THOMANN", "MUSIKÖRAT", "4SOUND", "SWEETWATER", "ROLAND", "YAMAHA", "NATIVE INSTRUMENTS", "PLUGIN BOUTIQUE", "WAVES", "ABLETON", "IMAGE-LINE", "STEINBERG", "SPITFIRE", "ARTURIA", "KORG", "PIANO", "WEBHALLEN", "INET", "DUSTIN", "KJELL", "CYBERPHOTO", "SCANDINAVIAN PHOTO", "STADIUM", "XXL", "INTERSPORT", "DECATHLON"]) },
-  { category: "entertainment", pattern: words(["SF BIO", "FILMSTADEN", "BIO", "TICKETMASTER", "TICKSTER", "LIVE NATION", "EVENTIM", "KONSERT", "NATTKLUBB", "BOWLING", "LISEBERG", "GRÖNA LUND", "PADEL", "MATCHI", "SVENSKA SPEL", "ATG", "UNIBET", "BET365"]) },
-  { category: "travel", pattern: words(["SAS", "NORWEGIAN", "RYANAIR", "WIZZ", "EASYJET", "LUFTHANSA", "KLM", "FINNAIR", "AIRBNB", "BOOKING.COM", "HOTELS.COM", "EXPEDIA", "HOTEL", "HOTELL", "SCANDIC", "STRAWBERRY", "CLARION", "QUALITY HOTEL", "ELITE HOTEL", "HOSTEL", "STENA LINE", "VIKING LINE", "TALLINK", "DUTY FREE"]) },
-  { category: "shopping", pattern: words(["AMAZON", "AMZN", "ZALANDO", "H&M", "H & M", "LINDEX", "KAPPAHL", "DRESSMANN", "JACK & JONES", "WEEKDAY", "ARKET", "NIKE", "ADIDAS", "JD SPORTS", "FOOTWAY", "BOOZT", "ELLOS", "CDON", "TEMU", "SHEIN", "ALIEXPRESS", "ELGIGANTEN", "MEDIAMARKT", "MEDIA MARKT", "NETONNET", "KOMPLETT", "APPLE STORE", "ÅHLÉNS", "AHLENS", "KICKS", "LYKO", "BLOCKET", "TRADERA", "VINTED", "SELLPY", "PLANTAGEN", "NORMAL", "FLYING TIGER", "LAGERHAUS", "ADLIBRIS", "BOKUS", "KLARNA", "QLIRO"]) },
-  { category: "fees", pattern: words(["SKATTEVERKET", "CSN", "FÖRSÄKRING", "IF SKADEFÖRSÄKRING", "TRYGG-HANSA", "TRYGG HANSA", "FOLKSAM", "LÄNSFÖRSÄKRINGAR", "GJENSIDIGE", "AVGIFT", "ÅRSAVGIFT", "KORTAVGIFT", "RÄNTA", "INKASSO", "KRONOFOGDEN", "PÅMINNELSEAVGIFT"]) },
+  { category: "entertainment", pattern: words(["CINESTAR", "NORDISK FILM", "UNIVERSEUM", "SF BIO", "FILMSTADEN", "BIO", "TICKETMASTER", "TICKSTER", "LIVE NATION", "EVENTIM", "KONSERT", "NATTKLUBB", "BOWLING", "LISEBERG", "GRÖNA LUND", "PADEL", "MATCHI", "SVENSKA SPEL", "ATG", "UNIBET", "BET365"]) },
+  { category: "travel", pattern: words(["SAS", "NORWEGIAN", "RYANAIR", "WIZZ", "EASYJET", "LUFTHANSA", "KLM", "FINNAIR", "AIRBNB", "BOOKING.COM", "HOTELS.COM", "EXPEDIA", "HOTEL", "HOTELL", "SCANDIC", "STRAWBERRY", "CLARION", "QUALITY HOTEL", "ELITE HOTEL", "HOSTEL", "TT-LINE", "SCANDLINES", "FINNLINES", "STENA LINE", "VIKING LINE", "TALLINK", "DUTY FREE"]) },
+  { category: "shopping", pattern: words(["AMAZON", "AMZN", "AMAZONMKTPLC", "DEICHMANN", "C&A", "MODEHAUS", "HOEFFNER", "MOUNTAINSPORTS", "ALIBABA", "MYRINS", "PRIMARK", "DOLLARSTORE", "ERIKSHJALPEN", "ERIKSHJÄLPEN", "TEDI", "ACTION", "ROSSMANN", "DM-DROGERIE", "ZALANDO", "H&M", "H & M", "LINDEX", "KAPPAHL", "DRESSMANN", "JACK & JONES", "WEEKDAY", "ARKET", "NIKE", "ADIDAS", "JD SPORTS", "FOOTWAY", "BOOZT", "ELLOS", "CDON", "TEMU", "SHEIN", "ALIEXPRESS", "ELGIGANTEN", "MEDIAMARKT", "MEDIA MARKT", "NETONNET", "KOMPLETT", "APPLE STORE", "ÅHLÉNS", "AHLENS", "KICKS", "LYKO", "BLOCKET", "TRADERA", "VINTED", "SELLPY", "PLANTAGEN", "NORMAL", "FLYING TIGER", "LAGERHAUS", "ADLIBRIS", "BOKUS", "KLARNA", "QLIRO"]) },
+  { category: "fees", pattern: words(["CENTRALA STUDI", "CENTRALA STUDIESTÖDSNÄMNDEN", "BOLAGSVERKET", "RIVERTY", "COLLECTIA", "SKATTEVERKET", "CSN", "FÖRSÄKRING", "IF SKADEFÖRSÄKRING", "TRYGG-HANSA", "TRYGG HANSA", "FOLKSAM", "LÄNSFÖRSÄKRINGAR", "GJENSIDIGE", "AVGIFT", "ÅRSAVGIFT", "KORTAVGIFT", "RÄNTA", "INKASSO", "KRONOFOGDEN", "PÅMINNELSEAVGIFT"]) },
+  { category: "snus", pattern: words(["SNUSLANDET", "SNUSBOLAGET", "SNUS", "NICOLEAF", "HAYPP", "TOBAK", "TOBAKSHANDEL"]) },
   { category: "swish", pattern: words(["SWISH"]) },
 ];
 
-const INCOME_PATTERN = words(["LÖN", "LÖNEUTBETALNING", "SALARY", "ARVODE", "UTDELNING", "FÖRSÄKRINGSKASSAN", "CSN", "SKATTEÅTERBÄRING", "ÅTERBÄRING", "DISTROKID", "WALLERSTEDT PRODUCTIONS", "RÄNTA", "INSÄTTNING"]);
+/**
+ * Handelsbanken cuts card text at 14 characters ("ERDALTASPIZZER",
+ * "GRAPPAS GOLFK-"), so these word stems match anywhere in the text.
+ */
+const STEMS: Rule[] = [
+  { category: "fastfood", pattern: /PIZZ|KEBAB|BURGER|GATUK[OÖ]K|GRILL|FALAFEL|SUSHI/u },
+  { category: "restaurants", pattern: /B[AÄ]CKEREI|BAGERI|KONDITOR|RESTAUR|CAF[EÉ]|BISTRO|KITCHEN/u },
+  { category: "car", pattern: /TANKST|PARKH|PARKER|PARKING|BENSIN|LADDST/u },
+  { category: "hobbies", pattern: /GOLF|PADEL|MUSIK|GUITAR|PIANO/u },
+  { category: "travel", pattern: /TOURIS|HOTEL|HOSTEL|AIRPORT|FLYG|FERRY|F[AÄ]RJA/u },
+  { category: "groceries", pattern: /MARKT|SUPERMARK|LIVS|BORDERSHOP/u },
+  { category: "car", pattern: /_CIR|CIRCLE K|BILGLAS|DÄCK/u },
+  { category: "restaurants", pattern: /DINER|S\.M\.A\.K/u },
+  { category: "travel", pattern: /IDREFJ|IDRE |STIFTELSEN IDR|HOLIDA|VIATOR/u },
+];
+
+const INCOME_PATTERN = words(["STUDIESTÖD", "STUDIEMEDEL", "LÖN", "LÖNEUTBETALNING", "SALARY", "ARVODE", "UTDELNING", "FÖRSÄKRINGSKASSAN", "CSN", "SKATTEÅTERBÄRING", "ÅTERBÄRING", "DISTROKID", "WALLERSTEDT PRODUCTIONS", "RÄNTA", "INSÄTTNING"]);
 const INCOMING_TRANSFER = words(["ÖVERFÖRING", "OVERFORING", "EGET KONTO", "MELLAN EGNA", "TRANSFER"]);
 const INCOMING_SAVINGS = words(["AVANZA", "NORDNET"]);
 
@@ -145,6 +163,9 @@ export function categorize({ text, amountCents }: CategorizeInput): string {
     return "income";
   }
   for (const rule of RULES) {
+    if (rule.pattern.test(upper)) return rule.category;
+  }
+  for (const rule of STEMS) {
     if (rule.pattern.test(upper)) return rule.category;
   }
   return "other";

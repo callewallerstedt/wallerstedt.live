@@ -39,7 +39,8 @@ export async function GET(request: Request) {
       const result = await completeBankConnection({ code, state, psu });
       message = `${result.aspspName} connected with ${result.accounts} account${result.accounts === 1 ? "" : "s"}.`;
       try {
-        await syncFinance({ psu, force: true });
+        // Fresh BankID: the one moment the bank hands out long history.
+        await syncFinance({ psu, force: true, history: true });
       } catch {
         // The dashboard retries; the connection itself worked.
       }
