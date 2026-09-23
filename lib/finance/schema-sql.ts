@@ -103,4 +103,13 @@ export const FINANCE_SCHEMA_SQL = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "FinanceMeta_pkey" PRIMARY KEY ("key")
   )`,
+  `CREATE TABLE IF NOT EXISTS "FinanceCustomCategory" (
+    "id" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "emoji" TEXT NOT NULL DEFAULT '',
+    "kind" TEXT NOT NULL DEFAULT 'spending',
+    "color" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FinanceCustomCategory_pkey" PRIMARY KEY ("id")
+  )`,
 ];

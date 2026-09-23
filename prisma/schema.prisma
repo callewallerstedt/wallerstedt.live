@@ -596,3 +596,13 @@ model FinanceMeta {
   value     Json
   updatedAt DateTime @default(now()) @updatedAt
 }
+
+/** Categories the owner made. kind: spending | neutral | income. */
+model FinanceCustomCategory {
+  id        String   @id
+  label     String
+  emoji     String   @default("")
+  kind      String   @default("spending")
+  color     String?
+  createdAt DateTime @default(now())
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { CATEGORY_BY_ID, FINANCE_CATEGORIES } from "@/lib/finance/categories";
+import { CATEGORY_BY_ID, spendingCategories } from "@/lib/finance/categories";
 import type { FinanceSummary, FinanceTransactionView } from "@/lib/finance/store";
 import { formatSekTile } from "@/lib/os/format";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,7 @@ export function financeApi(accessKey: string) {
   };
 }
 
-export const SPENDING_CATEGORIES = FINANCE_CATEGORIES.filter((category) => !category.income && !category.neutral);
+export { spendingCategories };
 
 export function categoryMeta(id: string) {
   return CATEGORY_BY_ID.get(id) ?? { id, label: id, emoji: "❔", color: "oklch(0.6 0.02 260)" };

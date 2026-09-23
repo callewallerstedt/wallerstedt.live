@@ -12,6 +12,8 @@ export type FinanceCategory = {
   /** Not spending: moving money between own accounts or into investments. */
   neutral?: boolean;
   color: string;
+  /** Made by the owner rather than built in. */
+  custom?: boolean;
 };
 
 export const FINANCE_CATEGORIES: FinanceCategory[] = [
@@ -33,6 +35,8 @@ export const FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: "fees", label: "Fees, tax & insurance", emoji: "🧾", color: "oklch(0.55 0.06 60)" },
   { id: "other", label: "Other", emoji: "❔", color: "oklch(0.6 0.02 260)" },
   { id: "savings", label: "Savings & investing", emoji: "📈", neutral: true, color: "oklch(0.7 0.14 145)" },
+  { id: "loan", label: "Loans (family)", emoji: "🤝", neutral: true, color: "oklch(0.7 0.1 60)" },
+  { id: "company", label: "Företagsutlägg (owed back)", emoji: "🏢", neutral: true, color: "oklch(0.68 0.12 200)" },
   { id: "excluded", label: "Excluded / one-off", emoji: "🚫", neutral: true, color: "oklch(0.5 0.01 260)" },
   { id: "transfer", label: "Own transfers", emoji: "🔄", neutral: true, color: "oklch(0.55 0.02 260)" },
   { id: "income", label: "Income", emoji: "💰", income: true, color: "oklch(0.72 0.17 150)" },
@@ -40,9 +44,55 @@ export const FINANCE_CATEGORIES: FinanceCategory[] = [
 
 export const CATEGORY_BY_ID = new Map(FINANCE_CATEGORIES.map((category) => [category.id, category]));
 
-export const SPENDING_CATEGORY_IDS = FINANCE_CATEGORIES.filter(
-  (category) => !category.income && !category.neutral,
-).map((category) => category.id);
+const CUSTOM_PALETTE = [
+  "oklch(0.72 0.14 20)", "oklch(0.72 0.14 80)", "oklch(0.72 0.14 140)", "oklch(0.72 0.14 200)",
+  "oklch(0.72 0.14 260)", "oklch(0.72 0.14 320)", "oklch(0.64 0.12 110)", "oklch(0.64 0.12 290)",
+];
+
+export type CustomCategoryInput = { id: string; label: string; emoji: string; kind: string; color?: string | null };
+
+/**
+ * Owner-made categories live in the database. The server registers them per
+ * request and the browser from each summary, so every lookup sees them.
+ */
+export function registerCustomCategories(list: CustomCategoryInput[]) {
+  for (let index = FINANCE_CATEGORIES.length - 1; index >= 0; index -= 1) {
+    if (FINANCE_CATEGORIES[index]!.custom) {
+      CATEGORY_BY_ID.delete(FINANCE_CATEGORIES[index]!.id);
+      FINANCE_CATEGORIES.splice(index, 1);
+    }
+  }
+  // Custom spending categories sit just before "Other".
+  const otherIndex = FINANCE_CATEGORIES.findIndex((category) => category.id === "other");
+  list.forEach((item, index) => {
+    const category: FinanceCategory = {
+      id: item.id,
+      label: item.label,
+      emoji: item.emoji || "🏷️",
+      color: item.color || CUSTOM_PALETTE[index % CUSTOM_PALETTE.length]!,
+      neutral: item.kind === "neutral",
+      income: item.kind === "income",
+      custom: true,
+    };
+    FINANCE_CATEGORIES.splice(otherIndex + index, 0, category);
+    CATEGORY_BY_ID.set(category.id, category);
+  });
+}
+
+export function spendingCategories() {
+  return FINANCE_CATEGORIES.filter((category) => !category.income && !category.neutral);
+}
+
+export function customCategoryId(label: string) {
+  const slug = label
+    .toLocaleLowerCase("sv-SE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 30);
+  return `c-${slug || "category"}`;
+}
 
 export function isCategoryId(value: string) {
   return CATEGORY_BY_ID.has(value);
@@ -119,6 +169,7 @@ const RULES: Rule[] = [
   { category: "travel", pattern: words(["SAS", "NORWEGIAN", "RYANAIR", "WIZZ", "EASYJET", "LUFTHANSA", "KLM", "FINNAIR", "AIRBNB", "BOOKING.COM", "HOTELS.COM", "EXPEDIA", "HOTEL", "HOTELL", "SCANDIC", "STRAWBERRY", "CLARION", "QUALITY HOTEL", "ELITE HOTEL", "HOSTEL", "TT-LINE", "SCANDLINES", "FINNLINES", "STENA LINE", "VIKING LINE", "TALLINK", "DUTY FREE"]) },
   { category: "shopping", pattern: words(["AMAZON", "AMZN", "AMAZONMKTPLC", "DEICHMANN", "C&A", "MODEHAUS", "HOEFFNER", "MOUNTAINSPORTS", "ALIBABA", "MYRINS", "PRIMARK", "DOLLARSTORE", "ERIKSHJALPEN", "ERIKSHJÄLPEN", "TEDI", "ACTION", "ROSSMANN", "DM-DROGERIE", "ZALANDO", "H&M", "H & M", "LINDEX", "KAPPAHL", "DRESSMANN", "JACK & JONES", "WEEKDAY", "ARKET", "NIKE", "ADIDAS", "JD SPORTS", "FOOTWAY", "BOOZT", "ELLOS", "CDON", "TEMU", "SHEIN", "ALIEXPRESS", "ELGIGANTEN", "MEDIAMARKT", "MEDIA MARKT", "NETONNET", "KOMPLETT", "APPLE STORE", "ÅHLÉNS", "AHLENS", "KICKS", "LYKO", "BLOCKET", "TRADERA", "VINTED", "SELLPY", "PLANTAGEN", "NORMAL", "FLYING TIGER", "LAGERHAUS", "ADLIBRIS", "BOKUS", "KLARNA", "QLIRO"]) },
   { category: "fees", pattern: words(["CENTRALA STUDI", "CENTRALA STUDIESTÖDSNÄMNDEN", "BOLAGSVERKET", "RIVERTY", "COLLECTIA", "SKATTEVERKET", "CSN", "FÖRSÄKRING", "IF SKADEFÖRSÄKRING", "TRYGG-HANSA", "TRYGG HANSA", "FOLKSAM", "LÄNSFÖRSÄKRINGAR", "GJENSIDIGE", "AVGIFT", "ÅRSAVGIFT", "KORTAVGIFT", "RÄNTA", "INKASSO", "KRONOFOGDEN", "PÅMINNELSEAVGIFT"]) },
+  { category: "loan", pattern: words(["LÅN", "LAN FRAN", "LÅN FRÅN", "LOAN", "ÅTERBETALNING LÅN"]) },
   { category: "snus", pattern: words(["SNUSLANDET", "SNUSBOLAGET", "SNUS", "NICOLEAF", "HAYPP", "TOBAK", "TOBAKSHANDEL"]) },
   { category: "swish", pattern: words(["SWISH"]) },
 ];
@@ -152,6 +203,7 @@ export type CategorizeInput = {
 export function categorize({ text, amountCents }: CategorizeInput): string {
   const upper = text.toLocaleUpperCase("sv-SE");
   if (amountCents > 0) {
+    if (words(["LÅN", "LÅN FRÅN", "LOAN"]).test(upper)) return "loan";
     if (INCOMING_TRANSFER.test(upper)) return "transfer";
     if (INCOMING_SAVINGS.test(upper)) return "savings";
     if (INCOME_PATTERN.test(upper)) return "income";

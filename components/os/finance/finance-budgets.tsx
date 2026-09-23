@@ -1,19 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckIcon, Loader2Icon, PencilIcon, XIcon } from "lucide-react";
+import { CheckCircle2Icon, CheckIcon, CircleDashedIcon, Loader2Icon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 
 import { BudgetBar, MiniBars } from "@/components/os/finance/finance-charts";
 import {
   categoryMeta,
   CategoryDot,
   kr,
-  SPENDING_CATEGORIES,
+  spendingCategories,
   type FinanceApi,
   type FinanceSummary,
 } from "@/components/os/finance/shared";
 import { Panel, SectionLabel } from "@/components/os/ui";
 import { Button } from "@/components/ui/button";
+import { FINANCE_CATEGORIES } from "@/lib/finance/categories";
 import { cn } from "@/lib/utils";
 
 export function FinanceBudgets({
@@ -36,10 +37,10 @@ export function FinanceBudgets({
   const byId = useMemo(() => new Map(summary.categories.map((row) => [row.id, row])), [summary.categories]);
   const trendFor = (id: string) => summary.history.slice(-6).map((month) => month.byCategory[id] ?? 0);
 
-  const budgeted = SPENDING_CATEGORIES.filter((category) => byId.get(category.id)?.budgetCents != null).map(
+  const budgeted = spendingCategories().filter((category) => byId.get(category.id)?.budgetCents != null).map(
     (category) => byId.get(category.id)!,
   );
-  const unbudgeted = SPENDING_CATEGORIES.filter((category) => byId.get(category.id)?.budgetCents == null)
+  const unbudgeted = spendingCategories().filter((category) => byId.get(category.id)?.budgetCents == null)
     .map((category) => byId.get(category.id) ?? { id: category.id, spentCents: 0, avgCents: null, budgetCents: null, count: 0 })
     .sort((a, b) => (b.avgCents ?? b.spentCents) - (a.avgCents ?? a.spentCents));
   const visibleUnbudgeted = showAll ? unbudgeted : unbudgeted.filter((row) => row.spentCents > 0 || (row.avgCents ?? 0) > 0);
@@ -149,6 +150,8 @@ export function FinanceBudgets({
           </Button>
         </div>
       ) : null}
+
+      <FixedCosts summary={summary} api={api} onChanged={onChanged} />
 
       <SectionLabel>Your budgets</SectionLabel>
       <Panel footer={pace != null ? "The thin line marks where you'd be if you spent evenly through the month." : undefined}>
@@ -266,5 +269,149 @@ function Stat({
       </p>
       {hint ? <p className="text-[0.7rem] text-muted-foreground">{hint}</p> : null}
     </div>
+  );
+}
+
+type FixedDraft = { id?: string; name: string; amount: string; category: string; match: string; day: string };
+
+const emptyFixed: FixedDraft = { name: "", amount: "", category: "car", match: "", day: "" };
+
+/** Standing monthly costs (car, rent, phone) and whether each has gone out this month. */
+function FixedCosts({
+  summary,
+  api,
+  onChanged,
+}: {
+  summary: FinanceSummary;
+  api: FinanceApi;
+  onChanged: () => Promise<unknown>;
+}) {
+  const { fixed, month } = summary;
+  const [editing, setEditing] = useState<FixedDraft | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputClass = "h-9 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+
+  async function save(list: typeof fixed.costs, draft?: FixedDraft | null, removeId?: string) {
+    setBusy(true);
+    setError(null);
+    const rows = list
+      .filter((row) => row.id !== removeId && row.id !== draft?.id)
+      .map(({ id, name, amountCents, category, match, day }) => ({ id, name, amountSek: amountCents / 100, category, match, day }));
+    if (draft) {
+      rows.push({
+        id: draft.id ?? "",
+        name: draft.name,
+        amountSek: Number(draft.amount.replace(/\s/g, "").replace(",", ".")) || 0,
+        category: draft.category,
+        match: draft.match || draft.name,
+        day: Number(draft.day) || null,
+      });
+    }
+    try {
+      await api.send("PUT", "/fixed", { fixedCosts: rows.map((row) => ({ ...row, id: row.id || undefined })) });
+      setEditing(null);
+      await onChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel
+      title="Fixed monthly costs"
+      action={
+        <Button onClick={() => setEditing(editing ? null : { ...emptyFixed })} size="xs" variant="outline">
+          <PlusIcon /> Add
+        </Button>
+      }
+      footer={
+        fixed.costs.length
+          ? `${kr(fixed.totalCents)} a month is already spoken for${
+              fixed.leftAfterFixedCents != null && fixed.leftAfterFixedCents > 0 ? ` · about ${kr(fixed.leftAfterFixedCents)} left of a normal month's income` : ""
+            }. "Text in the bank line" sorts matching payments automatically.`
+          : "Add what leaves every month, e.g. the car to Wallerstedt L, rent or phone, and see each month whether it has been paid."
+      }
+    >
+      {editing ? (
+        <form
+          className="grid grid-cols-2 gap-2 border-b border-border px-3 pb-3 sm:grid-cols-[1.2fr_0.8fr_1fr_1.2fr_0.5fr_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save(fixed.costs, editing);
+          }}
+        >
+          <input autoFocus className={inputClass} placeholder="Name, e.g. Bil" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
+          <input className={inputClass} inputMode="decimal" placeholder="kr / month" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: event.target.value })} />
+          <select className={inputClass} value={editing.category} onChange={(event) => setEditing({ ...editing, category: event.target.value })}>
+            {FINANCE_CATEGORIES.filter((category) => !category.income).map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.emoji} {category.label}
+              </option>
+            ))}
+          </select>
+          <input className={inputClass} placeholder="Text in the bank line, e.g. Wallerstedt L" value={editing.match} onChange={(event) => setEditing({ ...editing, match: event.target.value })} />
+          <input className={inputClass} inputMode="numeric" placeholder="Day" value={editing.day} onChange={(event) => setEditing({ ...editing, day: event.target.value })} />
+          <Button disabled={busy || !editing.name.trim() || !editing.amount.trim()} size="lg" type="submit" variant="brand">
+            {busy ? <Loader2Icon className="animate-spin" /> : "Save"}
+          </Button>
+        </form>
+      ) : null}
+      {error ? <p className="px-3 py-2 text-xs text-destructive">{error}</p> : null}
+      {fixed.costs.map((cost) => (
+        <div key={cost.id} className="flex items-center gap-3 border-t border-border px-3 py-2 first:border-t-0">
+          <CategoryDot id={cost.category} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{cost.name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              <span className={cn("sm:hidden", cost.paid && "text-positive")}>{cost.paid ? "✓ Paid · " : month.isCurrent ? "Not yet · " : "Not found · "}</span>
+              {categoryMeta(cost.category).label}
+              {cost.match ? ` · “${cost.match}”` : ""}
+              {cost.day ? ` · around the ${cost.day}th` : ""}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[0.7rem] font-semibold sm:inline-flex",
+              cost.paid ? "bg-positive/15 text-positive" : "bg-muted text-muted-foreground",
+            )}
+            title={cost.paidOn ? `Paid ${cost.paidOn}` : undefined}
+          >
+            {cost.paid ? <CheckCircle2Icon className="size-3" /> : <CircleDashedIcon className="size-3" />}
+            {cost.paid ? "Paid" : month.isCurrent ? "Not yet" : "Not found"}
+          </span>
+          <p className="shrink-0 text-right text-sm font-semibold tabular-nums">{kr(cost.amountCents)}</p>
+          <Button
+            aria-label="Edit"
+            onClick={() =>
+              setEditing({
+                id: cost.id,
+                name: cost.name,
+                amount: String(cost.amountCents / 100),
+                category: cost.category,
+                match: cost.match,
+                day: cost.day ? String(cost.day) : "",
+              })
+            }
+            size="icon-sm"
+            variant="ghost"
+          >
+            <PencilIcon />
+          </Button>
+          <Button
+            aria-label="Remove"
+            onClick={() => {
+              if (window.confirm(`Remove ${cost.name}?`)) void save(fixed.costs, null, cost.id);
+            }}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <Trash2Icon />
+          </Button>
+        </div>
+      ))}
+    </Panel>
   );
 }

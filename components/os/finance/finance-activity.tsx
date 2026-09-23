@@ -41,6 +41,7 @@ export function FinanceActivity({
   const [allTime, setAllTime] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   const accounts = useMemo(() => new Map(summary.accounts.map((row) => [row.id, row])), [summary.accounts]);
 
@@ -53,7 +54,9 @@ export function FinanceActivity({
       if (account) params.set("account", account);
       return api.get<{ total: number; transactions: FinanceTransactionView[] }>(`/transactions?${params}`);
     },
-    [account, allTime, api, category, month, query],
+    // `reload` refetches after bulk changes such as the AI sort.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [account, allTime, api, category, month, query, reload],
   );
 
   useEffect(() => {
@@ -171,6 +174,13 @@ export function FinanceActivity({
           {total} transactions · in <b className="text-positive">{kr(listedIn)}</b> · out <b className="text-foreground">{kr(-listedOut)}</b>
           {rows.length < total ? " (shown so far)" : ""}
         </span>
+        <SortOtherButton
+          api={api}
+          onDone={async () => {
+            setReload((value) => value + 1);
+            await onChanged();
+          }}
+        />
         <label className="flex items-center gap-1.5">
           <input checked={allTime} onChange={(event) => setAllTime(event.target.checked)} type="checkbox" />
           Search all time
@@ -200,6 +210,15 @@ export function FinanceActivity({
                   open={open === row.id}
                   onToggle={() => setOpen((current) => (current === row.id ? null : row.id))}
                   onUpdate={(patch) => update(row, patch)}
+                  onCreateCategory={async (input) => {
+                    const result = await api.send<{ category: { id: string; label: string; emoji: string; kind: string } }>(
+                      "POST",
+                      "/categories",
+                      input,
+                    );
+                    await onChanged();
+                    return result.category.id;
+                  }}
                 />
               ))}
             </div>
@@ -231,6 +250,7 @@ function TransactionRow({
   open,
   onToggle,
   onUpdate,
+  onCreateCategory,
 }: {
   row: FinanceTransactionView;
   accountName: string;
@@ -238,7 +258,10 @@ function TransactionRow({
   open: boolean;
   onToggle: () => void;
   onUpdate: (patch: { category?: string; note?: string; applyToMerchant?: boolean }) => Promise<number>;
+  onCreateCategory: (input: { label: string; emoji: string; kind: string }) => Promise<string>;
 }) {
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState({ label: "", emoji: "", kind: "spending" });
   const [applyAll, setApplyAll] = useState(true);
   const [note, setNote] = useState(row.note);
   const [busy, setBusy] = useState(false);
@@ -304,7 +327,60 @@ function TransactionRow({
                 {item.emoji} {item.label}
               </button>
             ))}
+            <button
+              className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-brand ring-1 ring-brand/40"
+              onClick={() => setCreating((value) => !value)}
+              type="button"
+            >
+              + New category
+            </button>
           </div>
+          {creating ? (
+            <form
+              className="flex flex-wrap gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!draft.label.trim()) return;
+                setBusy(true);
+                void onCreateCategory(draft)
+                  .then((id) => {
+                    setCreating(false);
+                    setDraft({ label: "", emoji: "", kind: "spending" });
+                    return choose(id);
+                  })
+                  .catch((caught) => setDone(caught instanceof Error ? caught.message : "Could not create it."))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <input
+                className="h-8 w-12 rounded-lg border border-input bg-background px-2 text-center text-sm"
+                maxLength={8}
+                placeholder="🏷️"
+                value={draft.emoji}
+                onChange={(event) => setDraft({ ...draft, emoji: event.target.value })}
+              />
+              <input
+                autoFocus
+                className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm"
+                maxLength={40}
+                placeholder="Name, e.g. Presenter"
+                value={draft.label}
+                onChange={(event) => setDraft({ ...draft, label: event.target.value })}
+              />
+              <select
+                className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+                value={draft.kind}
+                onChange={(event) => setDraft({ ...draft, kind: event.target.value })}
+              >
+                <option value="spending">Counts as spending</option>
+                <option value="neutral">Not spending (excluded)</option>
+                <option value="income">Income</option>
+              </select>
+              <Button disabled={busy || !draft.label.trim()} size="sm" type="submit" variant="brand">
+                Create
+              </Button>
+            </form>
+          ) : null}
           {row.merchant ? (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input checked={applyAll} onChange={(event) => setApplyAll(event.target.checked)} type="checkbox" />
@@ -336,5 +412,34 @@ function TransactionRow({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function SortOtherButton({ api, onDone }: { api: FinanceApi; onDone: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  return (
+    <span className="flex items-center gap-2">
+      <Button
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setResult(null);
+          void api
+            .send<{ merchants: number; transactions: number }>("POST", "/sort-other")
+            .then((data) => {
+              setResult(data.transactions ? `Sorted ${data.transactions} transactions (${data.merchants} places)` : "Nothing left to sort");
+              return onDone();
+            })
+            .catch((caught) => setResult(caught instanceof Error ? caught.message : "Could not sort."))
+            .finally(() => setBusy(false));
+        }}
+        size="xs"
+        variant="outline"
+      >
+        {busy ? <Loader2Icon className="animate-spin" /> : "✨"} Sort “Other” with AI
+      </Button>
+      {result ? <span>{result}</span> : null}
+    </span>
   );
 }

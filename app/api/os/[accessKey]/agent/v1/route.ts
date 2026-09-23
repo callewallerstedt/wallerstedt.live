@@ -51,6 +51,11 @@ export async function GET(request: Request, { params }: Params) {
           connection: `GET ${base}/finance/connect  — bank consent status and days left`,
           assets: `GET|POST ${base}/finance/assets  { "name": "Avanza ISK", "kind": "investment", "valueSek": 84500 }  ·  PATCH|DELETE ${base}/finance/assets/{id}  { "valueSek": 91200 }`,
           accounts: `PATCH ${base}/finance/accounts/{id}  { "displayName"?: "Lönekonto", "hidden"?: false }`,
+          assistant: `POST ${base}/finance/assistant  { "message": "Lägg alla Elgiganten som företagsutlägg" }  — AI that can recategorise, create categories, set budgets and fixed costs; returns { text, actions }`,
+          sortOther: `POST ${base}/finance/sort-other  — AI sorts every merchant still in "other" and saves rules`,
+          fixedCosts: `GET ${base}/finance/fixed  ·  PUT ${base}/finance/fixed  { "fixedCosts": [{ "name": "Bil", "amountSek": 3600, "category": "car", "match": "WALLERSTEDT L", "day": 25 }] }`,
+          customCategories: `POST ${base}/finance/categories  { "label": "Presenter", "emoji": "🎁", "kind": "spending|neutral|income" }  ·  PATCH { id, ... }  ·  DELETE ?id=c-presenter`,
+          import: `POST ${base}/finance/import  { "accountNumber": "577252151", "rows": [{ "date": "YYYY-MM-DD", "text": "...", "amountCents": -9700 }] }`,
           rules: `GET ${base}/finance/rules  ·  DELETE ${base}/finance/rules?merchant=<key>`,
         },
       },
@@ -125,7 +130,7 @@ export async function GET(request: Request, { params }: Params) {
           "POST /tasks returns the existing open task when its title already matches, so a retry never duplicates a row. POST /tiktok/watch returns the current list when the handle is already watched.",
         scope: "Tasks and TikTok watches are separate from bokföring. Writing one never touches the ledger.",
         finance:
-          "Personal (private) money only, never the company books. All amounts are öre (cents) in *Cents fields and whole kronor in *Sek fields. Spending excludes own transfers and money moved to savings. Categories: groceries, fastfood, restaurants, car, transport, housing, subscriptions, shopping, hobbies, entertainment, health, travel, swish, cash, fees, other (spending); savings, transfer, excluded (neutral: never counted as spending; use excluded for one-offs like a big tax payment); income. Bank data refreshes 4 times a day automatically.",
+          "Personal (private) money only, never the company books. All amounts are öre (cents) in *Cents fields and whole kronor in *Sek fields. Spending excludes own transfers and money moved to savings. Categories: groceries, fastfood, restaurants, car, transport, housing, subscriptions, shopping, hobbies, entertainment, health, travel, swish, cash, fees, other (spending); savings, transfer, excluded, company, loan (neutral: never counted as spending. excluded = one-offs like a big tax payment; company = Företagsutlägg paid privately and owed back by the company; loan = borrowed from/paid back to family) plus any custom c-* categories; income. Summary totals include companyOwesYouCents and youOweCents. Bank data refreshes 4 times a day automatically.",
         ordering:
           "Each list is ordered independently. Video ideas that are in_progress (practicing) sit above other open rows, most recently started first. Other open rows keep the owner's sort. GET /tasks?status=open includes in_progress. GET /tasks?list=video returns only active video ideas — not Past/archived ones. PATCH /tasks reorders regular open rows only; practicing rows stay pinned.",
         caption:

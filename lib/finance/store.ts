@@ -4,7 +4,15 @@ import { getAccountingDb } from "@/lib/accounting/db";
 import { AccountingError } from "@/lib/accounting/errors";
 import { berlinYmd } from "@/lib/os/format";
 
-import { CATEGORY_BY_ID, categorize, findTransferPairs, isCategoryId, normalizeMerchant } from "./categories";
+import {
+  CATEGORY_BY_ID,
+  categorize,
+  customCategoryId,
+  findTransferPairs,
+  isCategoryId,
+  normalizeMerchant,
+  registerCustomCategories,
+} from "./categories";
 import {
   amountToCents,
   createSession,
@@ -51,7 +59,139 @@ export function ensureFinanceSchema() {
 
 async function db() {
   await ensureFinanceSchema();
-  return getAccountingDb();
+  const client = getAccountingDb();
+  registerCustomCategories(await client.financeCustomCategory.findMany({ orderBy: { createdAt: "asc" } }));
+  return client;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Fixed costs                                                                */
+/* ------------------------------------------------------------------------ */
+
+export type FixedCost = {
+  id: string;
+  name: string;
+  amountCents: number;
+  category: string;
+  /** Text in the bank line that identifies the payment, e.g. "WALLERSTEDT L". */
+  match: string;
+  /** Usual day of the month it leaves, if known. */
+  day: number | null;
+};
+
+export async function listFixedCosts(): Promise<FixedCost[]> {
+  const client = await db();
+  const meta = await client.financeMeta.findUnique({ where: { key: "fixedCosts" } });
+  if (!meta) {
+    // Tailored start: the car leaves every month to Wallerstedt L.
+    return [{ id: "car-wallerstedt-l", name: "Bil (Wallerstedt L)", amountCents: 360_000, category: "car", match: "WALLERSTEDT L", day: null }];
+  }
+  return Array.isArray(meta.value) ? (meta.value as FixedCost[]) : [];
+}
+
+export async function saveFixedCosts(input: Array<Partial<FixedCost> & { name: string; amountCents: number }>) {
+  const client = await db();
+  const list: FixedCost[] = input.slice(0, 60).map((row) => {
+    const category = row.category && isCategoryId(row.category) ? row.category : "housing";
+    return {
+      id: row.id || randomUUID(),
+      name: row.name.trim().slice(0, 60),
+      amountCents: Math.round(Math.abs(row.amountCents)),
+      category,
+      match: (row.match ?? "").trim().slice(0, 60),
+      day: row.day && row.day >= 1 && row.day <= 31 ? Math.round(row.day) : null,
+    };
+  });
+  await client.financeMeta.upsert({
+    where: { key: "fixedCosts" },
+    create: { key: "fixedCosts", value: list },
+    update: { value: list },
+  });
+  await applyFixedCosts();
+  return list;
+}
+
+/** Put every automatic bank line that matches a fixed cost in that cost's category. */
+export async function applyFixedCosts() {
+  const client = await db();
+  const list = await listFixedCosts();
+  let changed = 0;
+  for (const cost of list) {
+    if (cost.match.length < 3) continue;
+    const result = await client.financeTransaction.updateMany({
+      where: {
+        categorySource: "auto",
+        amountCents: { lt: 0 },
+        OR: [
+          { description: { contains: cost.match, mode: "insensitive" } },
+          { counterparty: { contains: cost.match, mode: "insensitive" } },
+        ],
+      },
+      data: { category: cost.category, categorySource: "rule", isTransfer: cost.category === "transfer" },
+    });
+    changed += result.count;
+  }
+  return changed;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Custom categories                                                          */
+/* ------------------------------------------------------------------------ */
+
+export async function listCustomCategories() {
+  const client = await db();
+  return client.financeCustomCategory.findMany({ orderBy: { createdAt: "asc" } });
+}
+
+export async function createCustomCategory(input: { label: string; emoji?: string; kind?: string }) {
+  const client = await db();
+  const label = input.label.trim().slice(0, 40);
+  if (!label) throw new AccountingError("Give the category a name.", 400, "finance_category_invalid");
+  const kind = input.kind === "neutral" || input.kind === "income" ? input.kind : "spending";
+  let id = customCategoryId(label);
+  for (let n = 2; CATEGORY_BY_ID.has(id); n += 1) id = `${customCategoryId(label)}-${n}`;
+  const row = await client.financeCustomCategory.create({
+    data: { id, label, emoji: (input.emoji ?? "").trim().slice(0, 8) || "🏷️", kind },
+  });
+  await db();
+  return row;
+}
+
+export async function updateCustomCategory(id: string, input: { label?: string; emoji?: string; kind?: string }) {
+  const client = await db();
+  const row = await client.financeCustomCategory
+    .update({
+      where: { id },
+      data: {
+        ...(input.label?.trim() ? { label: input.label.trim().slice(0, 40) } : {}),
+        ...(input.emoji?.trim() ? { emoji: input.emoji.trim().slice(0, 8) } : {}),
+        ...(input.kind === "spending" || input.kind === "neutral" || input.kind === "income" ? { kind: input.kind } : {}),
+      },
+    })
+    .catch(() => null);
+  if (!row) throw new AccountingError("Category not found.", 404, "not_found");
+  return row;
+}
+
+/** Remove a custom category; its transactions, rules and budget go back to automatic. */
+export async function deleteCustomCategory(id: string) {
+  const client = await db();
+  if (!id.startsWith("c-")) throw new AccountingError("Built-in categories cannot be removed.", 400, "finance_category_builtin");
+  await client.financeCustomCategory.deleteMany({ where: { id } });
+  await client.financeBudget.deleteMany({ where: { category: id } });
+  await client.financeCategoryRule.deleteMany({ where: { category: id } });
+  await db();
+  const rows = await client.financeTransaction.findMany({
+    where: { category: id },
+    select: { id: true, counterparty: true, description: true, amountCents: true },
+  });
+  for (const row of rows) {
+    const category = categorize({ text: `${row.counterparty} ${row.description}`, amountCents: row.amountCents });
+    await client.financeTransaction.update({
+      where: { id: row.id },
+      data: { category, categorySource: "auto", isTransfer: category === "transfer" },
+    });
+  }
 }
 
 function ymd(date: Date) {
@@ -454,6 +594,7 @@ export async function syncFinance({
     }
   }
 
+  await applyFixedCosts();
   await markTransfers();
   await writeSnapshot();
 
@@ -604,6 +745,7 @@ export async function importStatement(input: {
     imported += result.count;
   }
   await recategorizeAuto();
+  await applyFixedCosts();
   await markTransfers();
   return {
     account: account.displayName || input.accountName || account.bankName,
@@ -651,6 +793,39 @@ export async function setTransactionCategory(input: {
     applied = result.count;
   }
   return { transaction: serializeTransaction(updated), appliedToOthers: applied };
+}
+
+/** Every automatic or rule-sorted purchase at this merchant goes to the category, now and later. */
+export async function setMerchantCategory(merchant: string, category: string) {
+  const client = await db();
+  if (!isCategoryId(category)) throw new AccountingError(`Unknown category ${category}.`, 400, "invalid_category");
+  await client.financeCategoryRule.upsert({
+    where: { merchant },
+    create: { merchant, category },
+    update: { category },
+  });
+  const result = await client.financeTransaction.updateMany({
+    where: { merchant, categorySource: { not: "manual" } },
+    data: { category, categorySource: "rule", isTransfer: category === "transfer" },
+  });
+  return result.count;
+}
+
+/** The merchants still in "other", busiest first, for AI sorting. */
+export async function otherMerchants(limit = 150) {
+  const client = await db();
+  const rows = await client.financeTransaction.findMany({
+    where: { category: "other", categorySource: { not: "manual" }, merchant: { not: "" } },
+    select: { merchant: true, description: true, counterparty: true, amountCents: true },
+  });
+  const map = new Map<string, { merchant: string; example: string; count: number; cents: number }>();
+  for (const row of rows) {
+    const entry = map.get(row.merchant) ?? { merchant: row.merchant, example: (row.counterparty || row.description).slice(0, 60), count: 0, cents: 0 };
+    entry.count += 1;
+    entry.cents += Math.abs(row.amountCents);
+    map.set(row.merchant, entry);
+  }
+  return [...map.values()].sort((a, b) => b.cents - a.cents).slice(0, limit);
 }
 
 export async function listRules() {
@@ -1230,6 +1405,38 @@ export async function getFinanceSummary(requestedMonth?: string) {
   });
   const suggestedBudgets = suggestBudgets(categories);
   const coachMeta = await client.financeMeta.findUnique({ where: { key: "coach" } });
+  // Company outlays: paid privately, to be paid back. All time, not per month.
+  const company = await client.financeTransaction.aggregate({
+    where: { category: "company" },
+    _sum: { amountCents: true },
+    _count: true,
+  });
+  const loans = await client.financeTransaction.aggregate({
+    where: { category: "loan" },
+    _sum: { amountCents: true },
+    _count: true,
+  });
+  const companyMonth = monthTx.filter((row) => row.category === "company").reduce((sum, row) => sum - row.amountCents, 0);
+  const customCategories = await client.financeCustomCategory.findMany({ orderBy: { createdAt: "asc" } });
+  const fixedList = await listFixedCosts();
+  const fixedCosts = fixedList.map((cost) => {
+    const needle = cost.match.toLocaleUpperCase("sv-SE");
+    const paid = needle.length >= 3
+      ? monthTx.filter(
+          (row) =>
+            row.amountCents < 0 &&
+            `${row.description} ${row.counterparty}`.toLocaleUpperCase("sv-SE").includes(needle),
+        )
+      : [];
+    const paidCents = paid.reduce((sum, row) => sum - row.amountCents, 0);
+    return {
+      ...cost,
+      paidCents,
+      paid: paidCents >= cost.amountCents * 0.9,
+      paidOn: paid.at(-1)?.date ?? null,
+    };
+  });
+  const fixedTotalCents = fixedList.reduce((sum, cost) => sum + cost.amountCents, 0);
 
   return {
     ok: true,
@@ -1239,7 +1446,13 @@ export async function getFinanceSummary(requestedMonth?: string) {
     lastSync: (lastSyncMeta?.value as SyncResult | null) ?? null,
     firstDataMonth,
     averageMonths,
-    totals: { bankCents, assetsCents, netWorthCents: bankCents + assetsCents },
+    totals: {
+      bankCents,
+      assetsCents,
+      companyOwesYouCents: -(company._sum.amountCents ?? 0),
+      youOweCents: Math.max(0, loans._sum.amountCents ?? 0),
+      netWorthCents: bankCents + assetsCents - (company._sum.amountCents ?? 0) - (loans._sum.amountCents ?? 0),
+    },
     accounts,
     assets,
     month: monthStats,
@@ -1261,6 +1474,25 @@ export async function getFinanceSummary(requestedMonth?: string) {
     tips,
     suggestedBudgets,
     coach: (coachMeta?.value as FinanceCoach | null) ?? null,
+    company: {
+      // Positive: the company owes you. Repayments tagged the same way reduce it.
+      owedCents: -(company._sum.amountCents ?? 0),
+      count: company._count,
+      thisMonthCents: companyMonth,
+    },
+    fixed: {
+      costs: fixedCosts,
+      totalCents: fixedTotalCents,
+      paidCents: fixedCosts.reduce((sum, cost) => sum + Math.min(cost.paidCents, cost.amountCents), 0),
+      // What is left of the month's income after every fixed cost.
+      leftAfterFixedCents: (monthStats.avgIncomeCents ?? monthStats.incomeCents) - fixedTotalCents,
+    },
+    loans: {
+      // Positive: money borrowed and not yet paid back.
+      owedCents: loans._sum.amountCents ?? 0,
+      count: loans._count,
+    },
+    customCategories: customCategories.map((row) => ({ id: row.id, label: row.label, emoji: row.emoji, kind: row.kind, color: row.color })),
   };
 }
 

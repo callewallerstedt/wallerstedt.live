@@ -77,9 +77,11 @@ export function FinanceOverview({
   api,
   onSelectMonth,
   onGoTo,
+  onChanged,
 }: {
   summary: FinanceSummary;
   api: FinanceApi;
+  onChanged: () => Promise<unknown>;
   onSelectMonth: (month: string) => void;
   onGoTo: (view: "budgets" | "activity" | "wealth") => void;
 }) {
@@ -105,7 +107,13 @@ export function FinanceOverview({
         <Hero
           label="On your accounts"
           value={kr(summary.totals.bankCents)}
-          hint={`${summary.accounts.filter((account) => !account.hidden).length} accounts${summary.totals.assetsCents ? ` · net worth ${kr(summary.totals.netWorthCents)}` : ""}`}
+          hint={[
+            `${summary.accounts.filter((account) => !account.hidden).length} accounts`,
+            summary.totals.companyOwesYouCents > 0 ? `company owes you ${kr(summary.totals.companyOwesYouCents)}` : "",
+            summary.totals.youOweCents > 0 ? `you owe ${kr(summary.totals.youOweCents)}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
         <Hero
           label={m.isCurrent ? "Spent this month" : `Spent in ${monthLabel(m.month, "short")}`}
@@ -239,7 +247,7 @@ export function FinanceOverview({
           )}
         </Panel>
 
-        <SaveMore summary={summary} api={api} onGoTo={onGoTo} />
+        <SaveMore summary={summary} api={api} onGoTo={onGoTo} onChanged={onChanged} />
       </div>
 
       {hasData ? (
@@ -366,10 +374,12 @@ function SaveMore({
   summary,
   api,
   onGoTo,
+  onChanged,
 }: {
   summary: FinanceSummary;
   api: FinanceApi;
   onGoTo: (view: "budgets") => void;
+  onChanged: () => Promise<unknown>;
 }) {
   const [coach, setCoach] = useState(summary.coach);
   const [asking, setAsking] = useState(false);
@@ -382,12 +392,18 @@ function SaveMore({
     setAsking(true);
     setError(null);
     try {
-      const result = await api.send<{ coach: NonNullable<FinanceSummary["coach"]> }>("POST", "/coach", {
-        month: summary.month.month,
-        ...(withQuestion && question.trim() ? { question } : {}),
-      });
-      if (withQuestion && question.trim()) setAnswer(result.coach.text);
-      else setCoach(result.coach);
+      if (withQuestion && question.trim()) {
+        const result = await api.send<{ text: string; actions: string[] }>("POST", "/assistant", {
+          month: summary.month.month,
+          message: question,
+        });
+        setAnswer(result.actions.length ? `${result.text}\n\n✓ ${result.actions.join(" · ")}` : result.text);
+        setQuestion("");
+        if (result.actions.length) await onChanged();
+      } else {
+        const result = await api.send<{ coach: NonNullable<FinanceSummary["coach"]> }>("POST", "/coach", { month: summary.month.month });
+        setCoach(result.coach);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The coach is unavailable.");
     } finally {
@@ -440,6 +456,7 @@ function SaveMore({
           <div className="flex items-center gap-2">
             <SparklesIcon className="size-4 text-brand" />
             <p className="flex-1 text-sm font-semibold">AI money coach</p>
+            <span className="hidden text-[0.65rem] text-muted-foreground sm:inline">can change categories, budgets & fixed costs</span>
             <Button disabled={asking} onClick={() => void ask(false)} size="xs" variant="outline">
               {asking && !question ? <Loader2Icon className="animate-spin" /> : null}
               {coach ? "Refresh" : "Analyse my month"}
@@ -466,7 +483,7 @@ function SaveMore({
           >
             <input
               className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background/60 px-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-              placeholder="Ask: can I afford a 15 000 kr keyboard?"
+              placeholder="Ask or tell it: “lägg alla Elgiganten som företagsutlägg”"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               maxLength={500}

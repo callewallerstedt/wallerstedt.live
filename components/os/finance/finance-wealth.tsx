@@ -71,6 +71,18 @@ export function FinanceWealth({
         <Tile label="Bank" value={kr(summary.totals.bankCents)} />
         <Tile label="Investments & other" value={kr(summary.totals.assetsCents)} />
       </section>
+      <section className="grid grid-cols-2 gap-2">
+        <Tile
+          label="🏢 Company owes you"
+          value={kr(summary.totals.companyOwesYouCents)}
+          hint={`${summary.company.count} utlägg tagged Företagsutlägg. Tag the repayment the same way and it drops.`}
+        />
+        <Tile
+          label="🤝 You owe (family loans)"
+          value={kr(summary.totals.youOweCents)}
+          hint={`${summary.loans.count} loan transactions. Money in from the loan and repayments out, both tagged Loans.`}
+        />
+      </section>
 
       {error ? <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm ring-1 ring-destructive/30">{error}</p> : null}
 
@@ -127,13 +139,14 @@ export function FinanceWealth({
   );
 }
 
-function Tile({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Tile({ label, value, strong, hint }: { label: string; value: string; strong?: boolean; hint?: string }) {
   return (
     <div className={cn("min-w-0 rounded-xl bg-card px-3 py-2.5 ring-1 ring-foreground/10", strong && "ring-brand/40")}>
       <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
       <p className={cn("mt-0.5 truncate font-semibold tabular-nums tracking-tight", strong ? "text-xl sm:text-2xl" : "text-base sm:text-xl")}>
         {value}
       </p>
+      {hint ? <p className="mt-0.5 text-[0.68rem] leading-snug text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

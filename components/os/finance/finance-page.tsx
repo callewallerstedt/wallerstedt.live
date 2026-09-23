@@ -23,6 +23,7 @@ import {
   type FinanceSummary,
 } from "@/components/os/finance/shared";
 import { PageFrame } from "@/components/os/ui";
+import { registerCustomCategories } from "@/lib/finance/categories";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,7 @@ export function FinancePage({ accessKey }: { accessKey: string }) {
       try {
         const query = targetMonth ? `?month=${targetMonth}` : "";
         const data = await api.get<FinanceSummary>(query);
+        registerCustomCategories(data.customCategories);
         setSummary(data);
         setError(null);
         return data;
@@ -224,7 +226,7 @@ export function FinancePage({ accessKey }: { accessKey: string }) {
         <div className="rounded-xl bg-destructive/10 px-3 py-3 text-sm ring-1 ring-destructive/30">{error}</div>
       ) : summary ? (
         view === "overview" ? (
-          <FinanceOverview summary={summary} api={api} onSelectMonth={changeMonth} onGoTo={changeView} />
+          <FinanceOverview summary={summary} api={api} onSelectMonth={changeMonth} onGoTo={changeView} onChanged={() => load(month)} />
         ) : view === "budgets" ? (
           <FinanceBudgets summary={summary} api={api} onChanged={() => load(month)} />
         ) : view === "activity" ? (
