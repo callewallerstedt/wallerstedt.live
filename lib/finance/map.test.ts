@@ -37,7 +37,12 @@ test("maps Enable Banking rows with signs, ids and merchants", () => {
     },
   ]);
   assert.equal(rows[0]!.amountCents, -12_900);
-  assert.equal(rows[0]!.id, "acc1:ref-1");
+  // Bank refs like "2026-09-09.1" are positions, not identities: ids come from content.
+  assert.match(rows[0]!.id, /^acc1:h/);
+  assert.deepEqual(
+    mapTransactions("acc1", [{ ...rows[0]!.raw, entry_reference: "2026-09-20.7" }]).map((row) => row.id),
+    [rows[0]!.id],
+  );
   assert.equal(rows[0]!.merchant, "MAX BURGERS");
   assert.equal(rows[1]!.amountCents, 2_500_000);
   assert.equal(rows[1]!.counterparty, "WALLERSTEDT PRODUCTIONS AB");

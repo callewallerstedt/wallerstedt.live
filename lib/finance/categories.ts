@@ -32,6 +32,7 @@ export const FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: "fees", label: "Fees, tax & insurance", emoji: "🧾", color: "oklch(0.55 0.06 60)" },
   { id: "other", label: "Other", emoji: "❔", color: "oklch(0.6 0.02 260)" },
   { id: "savings", label: "Savings & investing", emoji: "📈", neutral: true, color: "oklch(0.7 0.14 145)" },
+  { id: "excluded", label: "Excluded / one-off", emoji: "🚫", neutral: true, color: "oklch(0.5 0.01 260)" },
   { id: "transfer", label: "Own transfers", emoji: "🔄", neutral: true, color: "oklch(0.55 0.02 260)" },
   { id: "income", label: "Income", emoji: "💰", income: true, color: "oklch(0.72 0.17 150)" },
 ];

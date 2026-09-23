@@ -4,7 +4,7 @@ import { getAccountingDb } from "@/lib/accounting/db";
 import { AccountingError } from "@/lib/accounting/errors";
 import { berlinYmd } from "@/lib/os/format";
 
-import { categorize, findTransferPairs, isCategoryId, normalizeMerchant } from "./categories";
+import { CATEGORY_BY_ID, categorize, findTransferPairs, isCategoryId, normalizeMerchant } from "./categories";
 import {
   amountToCents,
   createSession,
@@ -240,16 +240,12 @@ export function mapTransactions(accountId: string, rows: EbTransaction[]): Mappe
     const remittance = (row.remittance_information ?? []).filter(Boolean).join(" ").trim();
     const description = (remittance || row.bank_transaction_code?.description || row.note || counterparty || "").slice(0, 500);
     const merchant = normalizeMerchant(counterparty || description) || normalizeMerchant(description);
-    const bankId = row.transaction_id || row.entry_reference;
-    let id: string;
-    if (bankId && status === "BOOK") {
-      id = `${accountId}:${bankId}`;
-    } else {
-      const base = `${accountId}|${status}|${date.slice(0, 10)}|${cents}|${description}|${counterparty}`;
-      const count = (occurrences.get(base) ?? 0) + 1;
-      occurrences.set(base, count);
-      id = `${accountId}:h${createHash("sha256").update(`${base}|${count}`).digest("base64url").slice(0, 32)}`;
-    }
+    // Handelsbanken's entry_reference is "<date>.<n>": a position in the day,
+    // not an identity, so it can move when a new line lands. Key on content.
+    const base = `${accountId}|${status}|${date.slice(0, 10)}|${cents}|${description}|${counterparty}`;
+    const count = (occurrences.get(base) ?? 0) + 1;
+    occurrences.set(base, count);
+    const id = `${accountId}:h${createHash("sha256").update(`${base}|${count}`).digest("base64url").slice(0, 32)}`;
     mapped.push({
       id,
       accountId,
@@ -363,12 +359,47 @@ export async function syncFinance({ psu, force = false }: { psu?: PsuContext; fo
         ).map((row) => row.id),
       );
       const fresh = mapped.filter((row) => !existing.has(row.id));
+
+      // The bank is the truth for the window it just returned: rows there that
+      // it no longer lists are replaced, keeping the owner's category and note.
+      const stale = mapped.length
+        ? await client.financeTransaction.findMany({
+            where: {
+              accountId: account.id,
+              bookingDate: { gte: dateFromYmd(dateFrom) },
+              id: { notIn: mapped.map((row) => row.id) },
+            },
+          })
+        : [];
+      const carried = new Map<string, (typeof stale)[number]>();
+      const used = new Set<string>();
+      for (const row of fresh) {
+        const match = stale.find(
+          (old) =>
+            !used.has(old.id) &&
+            ymd(old.bookingDate) === row.bookingDate &&
+            old.amountCents === row.amountCents &&
+            old.merchant === row.merchant,
+        );
+        if (match) {
+          used.add(match.id);
+          carried.set(row.id, match);
+        }
+      }
+      if (stale.length) {
+        await client.financeTransaction.deleteMany({ where: { id: { in: stale.map((row) => row.id) } } });
+      }
+
       if (fresh.length) {
         const created = await client.financeTransaction.createMany({
           skipDuplicates: true,
           data: fresh.map((row) => {
+            const previous = carried.get(row.id);
             const ruled = row.merchant ? rules.get(row.merchant) : undefined;
-            const category = ruled ?? categorize({ text: `${row.counterparty} ${row.description}`, amountCents: row.amountCents });
+            const kept = previous && previous.categorySource !== "auto";
+            const category = kept
+              ? previous.category
+              : (ruled ?? categorize({ text: `${row.counterparty} ${row.description}`, amountCents: row.amountCents }));
             return {
               id: row.id,
               accountId: row.accountId,
@@ -380,13 +411,14 @@ export async function syncFinance({ psu, force = false }: { psu?: PsuContext; fo
               description: row.description,
               merchant: row.merchant,
               category,
-              categorySource: ruled ? "rule" : "auto",
-              isTransfer: category === "transfer",
+              categorySource: kept ? previous.categorySource : ruled ? "rule" : "auto",
+              isTransfer: kept ? previous.isTransfer : category === "transfer" || Boolean(previous?.isTransfer),
+              note: previous?.note ?? "",
               raw: row.raw as object,
             };
           }),
         });
-        newTransactions += created.count;
+        newTransactions += Math.max(0, created.count - carried.size);
       }
       await client.financeAccount.update({
         where: { id: account.id },
@@ -794,7 +826,7 @@ export async function getFinanceSummary(requestedMonth?: string) {
   const monthKeyOf = (row: FinanceTransactionView) => row.date.slice(0, 7);
   const spendOf = (row: FinanceTransactionView) => {
     const category = row.category;
-    if (row.isTransfer || category === "transfer" || category === "savings" || category === "income") return 0;
+    if (row.isTransfer || category === "income" || CATEGORY_BY_ID.get(category)?.neutral) return 0;
     // Money out is positive spending; a refund in a spending category reduces it.
     return -row.amountCents;
   };
@@ -940,7 +972,7 @@ export async function getFinanceSummary(requestedMonth?: string) {
   const recurringMap = new Map<string, { months: Set<string>; amounts: number[]; last: FinanceTransactionView; category: string }>();
   const entryCount = (merchant: string) => recurringMap.get(merchant)?.amounts.length ?? 0;
   for (const row of tx) {
-    if (row.amountCents >= 0 || row.isTransfer || !row.merchant) continue;
+    if (row.amountCents >= 0 || row.isTransfer || !row.merchant || row.category === "excluded") continue;
     const key = monthKeyOf(row);
     if (!recurringWindow.includes(key) && key !== currentMonth) continue;
     const entry = recurringMap.get(row.merchant) ?? { months: new Set(), amounts: [], last: row, category: row.category };

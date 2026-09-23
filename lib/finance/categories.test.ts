@@ -73,3 +73,9 @@ test("tips are ranked by yearly effect and suggest budgets under the average", (
   ]);
   assert.deepEqual(budgets.map((row) => [row.category, row.suggestedCents]), [["fastfood", 110_000]]);
 });
+
+test("excluded is a neutral category", async () => {
+  const { CATEGORY_BY_ID, isSpendingCategory } = await import("./categories");
+  assert.equal(CATEGORY_BY_ID.get("excluded")?.neutral, true);
+  assert.equal(isSpendingCategory("excluded"), false);
+});
