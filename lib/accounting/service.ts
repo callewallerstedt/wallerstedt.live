@@ -1,6 +1,6 @@
 import { Prisma, type AccountingEntry } from "@prisma/client";
 import { writeReceiptAudit } from "./audit";
-import { calculateAccountBalances, centsToMoney } from "./balances";
+import { calculateAccountBalances, centsToMoney, resultLegCents, vatReportCents } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError, AccountingError } from "./errors";
 import {
@@ -493,7 +493,6 @@ export async function dashboard() {
     ]);
   let income = new Prisma.Decimal(0);
   let expenses = new Prisma.Decimal(0);
-  let vat = new Prisma.Decimal(0);
   let debt = new Prisma.Decimal(0);
   let missingReceiptCount = 0;
   const months = new Map<
@@ -507,25 +506,26 @@ export async function dashboard() {
       expenses: new Prisma.Decimal(0),
     };
     const typeKey = entry.type.toLocaleLowerCase("sv");
+    const leg = new Prisma.Decimal(resultLegCents(entry)).dividedBy(100);
     if (typeKey.includes("inbetal") || typeKey === "income") {
-      income = income.plus(entry.amount);
-      month.income = month.income.plus(entry.amount);
+      income = income.plus(leg);
+      month.income = month.income.plus(leg);
     } else if (typeKey.includes("utbetal") || typeKey === "expense") {
-      expenses = expenses.plus(entry.amount.abs());
-      month.expenses = month.expenses.plus(entry.amount.abs());
+      const cost = leg.abs();
+      expenses = expenses.plus(cost);
+      month.expenses = month.expenses.plus(cost);
       if (entry.receiptRequired && entry._count.documents === 0) missingReceiptCount += 1;
     } else if (typeKey.includes("skuld") || typeKey.includes("debt")) {
       // Signed, not abs: a positive post grows the debt, a negative post (a repayment) shrinks it.
       debt = debt.plus(entry.amount);
     }
-    if (entry.vatAmount) vat = vat.plus(entry.vatAmount);
     months.set(key, month);
   }
   const totals = {
     income: income.toFixed(2),
     expenses: expenses.toFixed(2),
     result: income.minus(expenses).toFixed(2),
-    vat: vat.toFixed(2),
+    vat: centsToMoney(vatReportCents(entries).payableCents),
     // This simplified ledger has no bank reconciliation model yet; expose result explicitly.
     balance: income.minus(expenses).toFixed(2),
   };

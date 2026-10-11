@@ -238,6 +238,75 @@ test("negative Utbetalning amounts count as expenses, like the vault", () => {
   assert.equal(snapshot.expenseMonthCents, 20000);
   assert.equal(snapshot.expenseYtdCents, 20000);
   assert.equal(snapshot.profitYtdCents, 80000);
-  assert.equal(snapshot.vatPayableCents, -4000);
+  // VAT with no moms account is not a journal line, so it is not in the momsrapport.
+  assert.equal(snapshot.vatPayableCents, 0);
   assert.equal(snapshot.softwareCents, 20000);
+});
+
+test("split VAT and omvänd moms hit their own accounts in the result and momsrapport", () => {
+  const snapshot = buildLedgerSnapshot(
+    [
+      {
+        id: "in-1",
+        date: "2026-09-01",
+        description: "Royalty",
+        debitAccount: 1930,
+        creditAccount: 3044,
+        debitName: "Företagskonto",
+        creditName: "Royalty",
+        amount: "1000.00",
+        vatAmount: "0",
+        type: "Inbetalning",
+        receiptRequired: false,
+        documentCount: 0,
+      },
+      {
+        id: "amazon",
+        date: "2026-09-10",
+        description: "Amazon",
+        debitAccount: 5410,
+        creditAccount: 1930,
+        debitName: "Förbrukningsinventarier",
+        creditName: "Företagskonto",
+        amount: "480.10",
+        amountExVat: "465.48",
+        vatAmount: "14.62",
+        vatAccount: 2641,
+        type: "Utbetalning",
+        receiptRequired: true,
+        documentCount: 1,
+      },
+      {
+        id: "omvand",
+        date: "2026-09-10",
+        description: "Omvänd skattskyldighet Render",
+        debitAccount: 2645,
+        creditAccount: 2614,
+        debitName: "Ingående moms (omvänd)",
+        creditName: "Utgående moms (omvänd)",
+        amount: "17.41",
+        vatAmount: "0",
+        type: "Övrigt",
+        receiptRequired: false,
+        documentCount: 0,
+      },
+    ],
+    [
+      { account: 1930, name: "Företagskonto" },
+      { account: 5410, name: "Förbrukningsinventarier" },
+      { account: 2641, name: "Ingående moms" },
+      { account: 2645, name: "Ingående moms (omvänd)" },
+      { account: 2614, name: "Utgående moms (omvänd)" },
+    ],
+    0,
+    "2026-09-10",
+  );
+
+  assert.equal(snapshot.expenseMonthCents, 46548);
+  assert.equal(snapshot.incomeMonthCents, 100000);
+  assert.equal(snapshot.profitYtdCents, 100000 - 46548);
+  assert.equal(snapshot.bankCents, 100000 - 48010);
+  assert.equal(snapshot.vatPayableCents, -1462);
+  assert.equal(snapshot.categories.find((row) => row.account === 5410)?.cents, 46548);
+  assert.equal(snapshot.categories.some((row) => row.account === 2641), false);
 });

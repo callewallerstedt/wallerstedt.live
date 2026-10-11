@@ -206,9 +206,18 @@ export async function accountBalances(accountNumbers: number[]) {
         OR: [
           { debitAccount: { in: accountNumbers } },
           { creditAccount: { in: accountNumbers } },
+          { vatAccount: { in: accountNumbers } },
         ],
       },
-      select: { amount: true, debitAccount: true, creditAccount: true, date: true },
+      select: {
+        amount: true,
+        amountExVat: true,
+        vatAmount: true,
+        vatAccount: true,
+        debitAccount: true,
+        creditAccount: true,
+        date: true,
+      },
     }),
     db.accountingAccount.findMany({
       where: { deletedAt: null, account: { in: accountNumbers } },

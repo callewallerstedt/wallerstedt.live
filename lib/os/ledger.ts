@@ -1,4 +1,11 @@
-import { calculateAccountBalances, calculateSelectedAccountBalances } from "@/lib/accounting/balances";
+import {
+  calculateAccountBalances,
+  calculateSelectedAccountBalances,
+  expandJournalLines,
+  resultLegCents,
+  vatReportCents,
+  type BalanceEntry,
+} from "@/lib/accounting/balances";
 
 import { COMPANY, LEDGER_BALANCE_ACCOUNTS } from "./company";
 import { lastNMonths, moneyToCents, monthEndYmd, monthKey, yearKey } from "./format";
@@ -21,7 +28,9 @@ export type RawLedgerEntry = {
   debitName: string | null;
   creditName: string | null;
   amount: number | string | { toString(): string };
+  amountExVat?: number | string | { toString(): string } | null;
   vatAmount?: number | string | { toString(): string } | null;
+  vatAccount?: number | null;
   type: string | null;
   receiptRequired: boolean;
   documentCount: number;
@@ -92,8 +101,28 @@ function sum(entries: LedgerEntryRow[], pick: (entry: LedgerEntryRow) => number)
   return entries.reduce((total, entry) => total + pick(entry), 0);
 }
 
-function expenseAccount(entry: LedgerEntryRow) {
-  return entry.debitAccount;
+function toBalanceEntry(entry: RawLedgerEntry): BalanceEntry {
+  return {
+    amount: entry.amount,
+    amountExVat: entry.amountExVat,
+    vatAmount: entry.vatAmount,
+    vatAccount: entry.vatAccount,
+    debitAccount: entry.debitAccount,
+    creditAccount: entry.creditAccount,
+    date: entry.date,
+  };
+}
+
+/**
+ * Amount that belongs in the result. A VAT split is booked ex VAT; the VAT
+ * itself sits on 2641/2611 and is not a cost or revenue. Expenses stay positive
+ * even when the stored header amount is negative.
+ */
+function pnlCents(entry: RawLedgerEntry) {
+  const kind = entryKind(entry.type);
+  const posted = toBalanceEntry(entry);
+  const net = resultLegCents(posted);
+  return kind === "expense" ? Math.abs(net) : net;
 }
 
 function classifyExpense(entry: LedgerEntryRow, accountNames: Record<number, string>) {
@@ -145,9 +174,10 @@ function runningAccountByMonth(
     const end = monthEndYmd(key);
     const cutoff = end > nowYmd ? nowYmd : end;
     while (index < dated.length && dated[index]!.date <= cutoff) {
-      const amount = moneyToCents(dated[index]!.entry.amount);
-      if (dated[index]!.entry.debitAccount === account) balance += amount;
-      if (dated[index]!.entry.creditAccount === account) balance -= amount;
+      for (const line of expandJournalLines(toBalanceEntry(dated[index]!.entry))) {
+        if (line.account !== account) continue;
+        balance += line.debitCents - line.creditCents;
+      }
       index += 1;
     }
     result.set(key, balance);
@@ -179,17 +209,19 @@ export function buildLedgerSnapshot(
   const expenseLastMonth = expenses.filter((entry) => inMonth(entry, lastMonth));
   const expenseYtd = expenses.filter((entry) => inYear(entry, year));
 
-  const incomeMonthCents = sum(incomeMonth, (entry) => entry.amountCents);
-  const incomeLastMonthCents = sum(incomeLastMonth, (entry) => entry.amountCents);
-  const incomeYtdCents = sum(incomeYtd, (entry) => entry.amountCents);
-  const expenseMonthCents = sum(expenseMonth, (entry) => entry.amountCents);
-  const expenseLastMonthCents = sum(expenseLastMonth, (entry) => entry.amountCents);
-  const expenseYtdCents = sum(expenseYtd, (entry) => entry.amountCents);
+  const pnlById = new Map(rawEntries.map((entry) => [entry.id, pnlCents(entry)]));
+  const posted = (entry: LedgerEntryRow) => pnlById.get(entry.id) ?? entry.amountCents;
+  const incomeMonthCents = sum(incomeMonth, posted);
+  const incomeLastMonthCents = sum(incomeLastMonth, posted);
+  const incomeYtdCents = sum(incomeYtd, posted);
+  const expenseMonthCents = sum(expenseMonth, posted);
+  const expenseLastMonthCents = sum(expenseLastMonth, posted);
+  const expenseYtdCents = sum(expenseYtd, posted);
   const profitYtdCents = incomeYtdCents - expenseYtdCents;
-  const vatPayableCents =
-    sum(income, (entry) => entry.vatCents) - sum(expenses, (entry) => entry.vatCents);
-  const vatYtdCents =
-    sum(incomeYtd, (entry) => entry.vatCents) - sum(expenseYtd, (entry) => entry.vatCents);
+  const vatPayableCents = vatReportCents(rawEntries.map(toBalanceEntry)).payableCents;
+  const vatYtdCents = vatReportCents(
+    rawEntries.filter((entry) => yearKey(entryDate(entry.date)) === year).map(toBalanceEntry),
+  ).payableCents;
 
   const bankByMonth = runningAccountByMonth(rawEntries, monthKeys, nowYmd, COMPANY.accounts.bank);
   const kfByMonth = runningAccountByMonth(rawEntries, monthKeys, nowYmd, COMPANY.accounts.capitalInsurance);
@@ -197,11 +229,11 @@ export function buildLedgerSnapshot(
   const months: MonthPoint[] = monthKeys.map((key) => {
     const incomeCents = sum(
       income.filter((entry) => inMonth(entry, key)),
-      (entry) => entry.amountCents,
+      posted,
     );
     const expenseCents = sum(
       expenses.filter((entry) => inMonth(entry, key)),
-      (entry) => entry.amountCents,
+      posted,
     );
     return {
       month: key,
@@ -222,37 +254,25 @@ export function buildLedgerSnapshot(
     .filter((entry): entry is typeof entry & { date: string } => Boolean(entry.date))
     .sort((a, b) => a.date.localeCompare(b.date));
   for (const entry of movements) {
-    running += entry.kind === "income" ? entry.amountCents : -entry.amountCents;
+    const delta = entry.kind === "income" ? posted(entry) : -posted(entry);
+    running += delta;
     cumulative.push({
       date: entry.date,
       label: entry.description,
-      deltaCents: entry.kind === "income" ? entry.amountCents : -entry.amountCents,
+      deltaCents: delta,
       totalCents: running,
       kind: entry.kind === "income" ? "income" : "expense",
     });
   }
 
-  const balances = calculateAccountBalances(
-    rawEntries.map((entry) => ({
-      amount: entry.amount,
-      debitAccount: entry.debitAccount,
-      creditAccount: entry.creditAccount,
-      date: entry.date,
-    })),
-  );
-  const selected = calculateSelectedAccountBalances(
-    rawEntries.map((entry) => ({
-      amount: entry.amount,
-      debitAccount: entry.debitAccount,
-      creditAccount: entry.creditAccount,
-      date: entry.date,
-    })),
-    [...LEDGER_BALANCE_ACCOUNTS],
-  );
+  const balanceEntries = rawEntries.map(toBalanceEntry);
+  const balances = calculateAccountBalances(balanceEntries);
+  const selected = calculateSelectedAccountBalances(balanceEntries, [...LEDGER_BALANCE_ACCOUNTS]);
   const selectedMap = new Map(selected.balances.map((row) => [row.account, row]));
-  const usedAccounts = new Set(
-    rawEntries.flatMap((entry) => [entry.debitAccount, entry.creditAccount]).filter((value): value is number => value != null),
-  );
+  const usedAccounts = new Set<number>();
+  for (const entry of balanceEntries) {
+    for (const line of expandJournalLines(entry)) usedAccounts.add(line.account);
+  }
 
   const bankCents = balances.companyAccountCents;
   const kfDepositedCents = balances.capitalInsuranceCents;
@@ -263,19 +283,26 @@ export function buildLedgerSnapshot(
   const ytdExpenses = expenseYtd.slice().sort((a, b) => b.amountCents - a.amountCents);
 
   const categoryMap = new Map<string, CategoryRow>();
-  for (const entry of expenseYtd) {
-    const account = expenseAccount(entry);
-    const key = account != null ? String(account) : "unknown";
-    const current = categoryMap.get(key) ?? {
-      key,
-      label: account != null ? `${account} ${accountNames[account] ?? entry.debitName ?? ""}`.trim() : "Okänt konto",
-      account,
-      cents: 0,
-      count: 0,
-    };
-    current.cents += entry.amountCents;
-    current.count += 1;
-    categoryMap.set(key, current);
+  for (const raw of rawEntries) {
+    if (yearKey(entryDate(raw.date)) !== year) continue;
+    const seen = new Set<number>();
+    for (const line of expandJournalLines(toBalanceEntry(raw))) {
+      if (line.account < 4000 || line.account > 8999) continue;
+      const key = String(line.account);
+      const current = categoryMap.get(key) ?? {
+        key,
+        label: `${line.account} ${accountNames[line.account] ?? ""}`.trim(),
+        account: line.account,
+        cents: 0,
+        count: 0,
+      };
+      current.cents += line.debitCents - line.creditCents;
+      if (!seen.has(line.account)) {
+        current.count += 1;
+        seen.add(line.account);
+      }
+      categoryMap.set(key, current);
+    }
   }
 
   let softwareCents = 0;
@@ -284,10 +311,11 @@ export function buildLedgerSnapshot(
   let accountingCents = 0;
   for (const entry of expenseYtd) {
     const bucket = classifyExpense(entry, accountNames);
-    if (bucket === "software") softwareCents += entry.amountCents;
-    if (bucket === "hardware") hardwareCents += entry.amountCents;
-    if (bucket === "ads") adsCents += entry.amountCents;
-    if (bucket === "accounting") accountingCents += entry.amountCents;
+    const cents = posted(entry);
+    if (bucket === "software") softwareCents += cents;
+    if (bucket === "hardware") hardwareCents += cents;
+    if (bucket === "ads") adsCents += cents;
+    if (bucket === "accounting") accountingCents += cents;
   }
 
   const recurringMap = new Map<string, RecurringRow & { monthSet: Set<string> }>();
@@ -295,19 +323,20 @@ export function buildLedgerSnapshot(
     const key = normalizeRecurringKey(entry.description);
     if (key.length < 4) continue;
     const month = monthKey(entry.date);
+    const cents = posted(entry);
     const current = recurringMap.get(key) ?? {
       label: entry.description,
       months: 0,
-      lastCents: entry.amountCents,
+      lastCents: cents,
       lastDate: entry.date,
       totalCents: 0,
       monthSet: new Set<string>(),
     };
-    current.totalCents += entry.amountCents;
+    current.totalCents += cents;
     if (month) current.monthSet.add(month);
     if (!current.lastDate || (entry.date && entry.date > current.lastDate)) {
       current.lastDate = entry.date;
-      current.lastCents = entry.amountCents;
+      current.lastCents = cents;
       current.label = entry.description;
     }
     recurringMap.set(key, current);
@@ -327,7 +356,7 @@ export function buildLedgerSnapshot(
       count: 0,
       lastDate: entry.date,
     };
-    current.cents += entry.amountCents;
+    current.cents += posted(entry);
     current.count += 1;
     if (!current.lastDate || (entry.date && entry.date > current.lastDate)) current.lastDate = entry.date;
     counterpartyMap.set(name, current);
