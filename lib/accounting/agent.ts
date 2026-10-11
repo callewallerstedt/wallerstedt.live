@@ -12,6 +12,7 @@ import {
   signAgentProposal,
   verifyAgentProposal,
 } from "./agent-token";
+import { expandJournalLines } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingError, redactedErrorDiagnostic } from "./errors";
 import {
@@ -506,7 +507,7 @@ export async function runAccountingAgent(
     },
     sum_posts: {
       description:
-        "Sum and count ledger posts matching the same filters as search_posts, optionally grouped by month, account, type, or counterparty. Use this for totals, averages, and 'how much did I spend on X' questions instead of adding numbers yourself. All nullable filters must be supplied as null when unused.",
+        "Sum and count ledger posts matching the same filters as search_posts, optionally grouped by month, account, type, or counterparty. Use this for totals, averages, and 'how much did I spend on X' questions instead of adding numbers yourself. Grouping by account sums every journal line on its own account (debit minus credit), including a VAT split. All nullable filters must be supplied as null when unused.",
       inputSchema: sumPostsSchema,
       execute: async (toolInput: z.output<typeof sumPostsSchema>) => {
         usedTools.add("sum_posts");
@@ -518,7 +519,9 @@ export async function runAccountingAgent(
           select: {
             date: true,
             amount: true,
+            amountExVat: true,
             vatAmount: true,
+            vatAccount: true,
             type: true,
             debitAccount: true,
             creditAccount: true,
@@ -538,16 +541,26 @@ export async function runAccountingAgent(
         if (toolInput.groupBy) {
           const byKey = new Map<string, { count: number; amount: number }>();
           for (const row of rows) {
+            if (toolInput.groupBy === "account") {
+              const seen = new Set<number>();
+              for (const line of expandJournalLines(row)) {
+                const key = String(line.account);
+                const group = byKey.get(key) ?? { count: 0, amount: 0 };
+                if (!seen.has(line.account)) {
+                  group.count += 1;
+                  seen.add(line.account);
+                }
+                group.amount = round(group.amount + (line.debitCents - line.creditCents) / 100);
+                byKey.set(key, group);
+              }
+              continue;
+            }
             const keys =
               toolInput.groupBy === "month"
                 ? [isoDate(row.date)?.slice(0, 7) ?? "(okänt datum)"]
                 : toolInput.groupBy === "type"
                   ? [row.type || "(okänd typ)"]
-                  : toolInput.groupBy === "account"
-                    ? [...new Set([row.debitAccount, row.creditAccount])]
-                        .filter((value): value is number => value != null)
-                        .map(String)
-                    : [row.debitName || row.creditName || "(okänd motpart)"];
+                  : [row.debitName || row.creditName || "(okänd motpart)"];
             for (const key of keys) {
               const group = byKey.get(key) ?? { count: 0, amount: 0 };
               group.count += 1;
