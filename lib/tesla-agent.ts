@@ -223,16 +223,27 @@ async function fleetRequest(base: string, path: string, init: RequestInit = {}):
   let retried = false;
   for (;;) {
     const token = await accessToken(retried);
-    const response = await fetch(`${base.replace(/\/+$/, "")}${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...init.headers,
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${base.replace(/\/+$/, "")}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...init.headers,
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (error) {
+      const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+      const code = typeof cause?.code === "string" ? cause.code : (error as Error)?.name ?? "unknown";
+      throw new AccountingError(
+        `Could not reach the Tesla ${base === fleetBase() ? "Fleet API" : "command proxy"} (${code}).`,
+        502,
+        "tesla_upstream_unreachable",
+      );
+    }
     if (response.status === 401 && !retried) {
       retried = true;
       continue;
