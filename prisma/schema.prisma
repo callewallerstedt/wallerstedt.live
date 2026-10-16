@@ -31,6 +31,20 @@ model TeslaLiveState {
   updatedAt      DateTime @updatedAt
 }
 
+/**
+ * Server-side Tesla Fleet API login for agents (Grokbot). Single row "owner".
+ * Tokens are AES-256-GCM encrypted; mirrors TESLA_SCHEMA_SQL in lib/tesla-agent.ts.
+ */
+model TeslaFleetToken {
+  id              String    @id
+  refreshCipher   String
+  accessCipher    String    @default("")
+  accessExpiresAt DateTime?
+  lastError       String    @default("")
+  connectedAt     DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+}
+
 model TeslaTrip {
   id             String              @id @default(cuid())
   vin            String

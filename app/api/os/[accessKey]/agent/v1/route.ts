@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: Params) {
     const base = `/api/os/${encodeURIComponent(accessKey)}/agent/v1`;
     return privateJson({
       ok: true,
-      name: "Wallerstedt company OS agent API (tasks, TikTok, personal finance)",
+      name: "Wallerstedt company OS agent API (tasks, TikTok, personal finance, Tesla)",
       version: 1,
       authentication: {
         bearer: "Authorization: Bearer <ACCOUNTING_AGENT_API_TOKEN>",
@@ -57,6 +57,13 @@ export async function GET(request: Request, { params }: Params) {
           customCategories: `POST ${base}/finance/categories  { "label": "Presenter", "emoji": "🎁", "kind": "spending|neutral|income" }  ·  PATCH { id, ... }  ·  DELETE ?id=c-presenter`,
           import: `POST ${base}/finance/import  { "accountNumber": "577252151", "rows": [{ "date": "YYYY-MM-DD", "text": "...", "amountCents": -9700 }] }`,
           rules: `GET ${base}/finance/rules  ·  DELETE ${base}/finance/rules?merchant=<key>`,
+        },
+        tesla: {
+          status: `GET ${base}/tesla  — connected?, vehicles (vin, name, online|asleep|offline; never wakes the car), latest home-bridge telemetry, allowed commands`,
+          vehicle: `GET ${base}/tesla/vehicles/{vin|default}  — live battery, range, charging, climate, locks, location (metric). ?raw=1 adds Tesla's full payload. 409 tesla_vehicle_asleep → wake first`,
+          wake: `POST ${base}/tesla/vehicles/{vin|default}/wake  — wake the car; poll GET ${base}/tesla until state is online (10-30 s)`,
+          command: `POST ${base}/tesla/vehicles/{vin|default}/command  { "command": "set_temps", "params": { "driver_temp": 21, "passenger_temp": 21 } }  — Tesla Fleet API command names; returns { ok, result, reason }`,
+          disconnect: `DELETE ${base}/tesla  — forget the stored Tesla login`,
         },
       },
       fields: {
@@ -135,6 +142,8 @@ export async function GET(request: Request, { params }: Params) {
           "Each list is ordered independently. Video ideas that are in_progress (practicing) sit above other open rows, most recently started first. Other open rows keep the owner's sort. GET /tasks?status=open includes in_progress. GET /tasks?list=video returns only active video ideas — not Past/archived ones. PATCH /tasks reorders regular open rows only; practicing rows stay pinned.",
         caption:
           "PATCH that first moves a video idea into in_progress generates a caption server-side and stores it on the row. Title/song/notes edits while already practicing do not regenerate. A generate failure still applies the status change and leaves caption empty (or the previous caption).",
+        tesla:
+          "Only allowlisted commands run (see GET /tesla → commands.allowed): climate, seat/wheel heat, charging, charge port, lock, sentry, honk, flash, navigation and media. Unlock, trunk/frunk, windows, remote start, valet and PIN changes need the owner to add them to TESLA_AGENT_EXTRA_COMMANDS. Every vehicle-data read and command is billed by Tesla, so prefer GET /tesla (free list + bridge telemetry) and only wake the car when needed. Temperatures are °C; set_charge_limit takes { percent }; set_charging_amps takes { charging_amps }; navigation_request takes { type: \"share_ext_content_raw\", locale: \"sv-SE\", timestamp_ms, value: { \"android.intent.extra.TEXT\": \"address\" } }.",
         tiktokSeeds: `First load (and later list calls) ensure these watched handles exist: ${TIKTOK_SEED_HANDLES.join(", ")}.`,
         tiktokScan:
           "POST /tiktok/watch/scan starts an async job and returns immediately with { ok, status: started|running|done|failed, scanId, processed, total, next, scan, lastScan }. Background bursts scan one watched account per invocation (under Vercel's time limit), then one piano-category Treg search per later burst (piano cover / emotional piano cover / public piano cover), persist progress on CompanyTikTokScan, and finish by writing the ranked lastScan (watch* + pianoLast7/pianoLast30). Poll GET /tiktok/watch or GET /tiktok/watch/scans for scan.status and lastScan. POST { handle } or { accountId } processes that one watched account as a burst. POST { scanId } resumes the next burst if the chain stalled. GET also nudges an open job.",

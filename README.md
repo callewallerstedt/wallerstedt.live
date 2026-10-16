@@ -282,6 +282,10 @@ curl -X POST -H "$AUTH" -H "Content-Type: application/json" "$BASE/finance/coach
 
 Amounts ending in `Cents` are öre; ones ending in `Sek` are whole kronor.
 
+### Tesla agent API (Grokbot)
+
+Same bearer and base. `GET $BASE/tesla`, `GET $BASE/tesla/vehicles/default`, `POST …/wake` and `POST …/command { "command", "params" }`. Connect once at `/api/i/<TESLA_CONNECT_SECRET>/auth?for=agents`; setup, the command allowlist and signed commands are in [TESLA.md](TESLA.md#grokbot-access-agent-api).
+
 ## Bookkeeping web push (iPhone Home Screen)
 
 The accounting app can send a notification when a ledger post is created, edited, or deleted (from the vault, AI approval, the agent API, or desktop sync). Tapping the notice opens that post. If the post was deleted, the app shows a short “posten är raderad” state instead of a blank editor. iOS 16.4+ only delivers Web Push to a Home Screen PWA (`display: standalone`, a service worker, and permission from a tap). Safari tabs cannot subscribe. There is no permission prompt on first visit; the opt-in lives under **Mer**.
