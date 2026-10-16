@@ -104,7 +104,8 @@ function publicMessage(error: AccountingError) {
     !error.code.startsWith("caption_") &&
     !error.code.startsWith("bank_") &&
     !error.code.startsWith("finance_") &&
-    !error.code.startsWith("coach_")
+    !error.code.startsWith("coach_") &&
+    !error.code.startsWith("tesla_")
   ) {
     return "The accounting service is temporarily unavailable.";
   }
