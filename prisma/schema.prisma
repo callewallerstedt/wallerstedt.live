@@ -7,6 +7,26 @@ datasource db {
   provider = "postgresql"
 }
 
+// Company consents are isolated from FinanceBankSession (personal finance).
+model AccountingBankAuthState {
+  id        String   @id
+  bank      String
+  country   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model AccountingBankConnection {
+  id         String   @id
+  bank       String
+  country    String
+  accounts   Json
+  validUntil DateTime
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model AnalyticsEvent {
   id        String   @id @default(cuid())
   type      String

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from "react";
 
 import { AccountingApi, AccountingApiError } from "./api";
+import { AgentBank } from "./AgentBank";
 import type { AccountingDocument, AccountingEntry } from "./types";
 
 type Balance = {
@@ -304,6 +305,7 @@ export function AgentWorkspace({ accessKey }: { accessKey: string }) {
           </div>
         </section>
       </section>
+      <AgentBank base={base} />
     </main>
   );
 }

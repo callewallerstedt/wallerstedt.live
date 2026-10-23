@@ -30,6 +30,7 @@ export type EbSession = {
   accounts: EbAccount[];
   aspsp?: { name: string; country: string };
   access?: { valid_until?: string };
+  psu_type?: "personal" | "business";
 };
 
 export type EbBalance = {
@@ -174,8 +175,8 @@ async function call<T>(
   return data as T;
 }
 
-export async function listAspsps(country = "SE") {
-  const data = await call<{ aspsps: EbAspsp[] }>("GET", `/aspsps?country=${encodeURIComponent(country)}&psu_type=personal`);
+export async function listAspsps(country = "SE", psuType: "personal" | "business" = "personal") {
+  const data = await call<{ aspsps: EbAspsp[] }>("GET", `/aspsps?country=${encodeURIComponent(country)}&psu_type=${psuType}`);
   return data.aspsps ?? [];
 }
 
@@ -186,6 +187,7 @@ export async function startAuthorization(input: {
   redirectUrl: string;
   validUntil: Date;
   psu?: PsuContext;
+  psuType?: "personal" | "business";
 }) {
   return call<{ url: string; authorization_id?: string }>("POST", "/auth", {
     psu: input.psu,
@@ -194,7 +196,7 @@ export async function startAuthorization(input: {
       aspsp: { name: input.aspspName, country: input.aspspCountry },
       state: input.state,
       redirect_url: input.redirectUrl,
-      psu_type: "personal",
+      psu_type: input.psuType ?? "personal",
     },
   });
 }
@@ -223,12 +225,13 @@ export async function getBalances(uid: string, psu?: PsuContext) {
   return data.balances ?? [];
 }
 
-export async function getTransactions(uid: string, dateFrom: string, psu?: PsuContext) {
+export async function getTransactions(uid: string, dateFrom: string, psu?: PsuContext, dateTo?: string) {
   const all: EbTransaction[] = [];
   const seenKeys = new Set<string>();
   let continuation: string | undefined;
   for (let page = 0; page < 60; page += 1) {
     const query = new URLSearchParams({ date_from: dateFrom });
+    if (dateTo) query.set("date_to", dateTo);
     if (continuation) query.set("continuation_key", continuation);
     const data = await call<{ transactions: EbTransaction[]; continuation_key?: string | null }>(
       "GET",
@@ -237,11 +240,12 @@ export async function getTransactions(uid: string, dateFrom: string, psu?: PsuCo
     );
     all.push(...(data.transactions ?? []));
     const next = data.continuation_key ?? undefined;
-    if (!next || seenKeys.has(next)) break;
+    if (!next) return all;
+    if (seenKeys.has(next)) throw new AccountingError("Bank repeated a pagination cursor; history is incomplete.", 502, "bank_pagination_incomplete");
     seenKeys.add(next);
     continuation = next;
   }
-  return all;
+  throw new AccountingError("Bank history exceeds the pagination limit; request a shorter period.", 422, "bank_history_too_large");
 }
 
 /** Prefer what can actually be spent right now, then booked balances. */
