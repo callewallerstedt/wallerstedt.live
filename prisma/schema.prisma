@@ -14,6 +14,11 @@ model AccountingBankAuthState {
   country   String
   expiresAt DateTime
   createdAt DateTime @default(now())
+  status        String @default("pending")
+  errorCode     String?
+  errorStage    String?
+  session       Json?
+  connectionId  String?
 }
 
 model AccountingBankConnection {
@@ -38,6 +43,13 @@ model AnalyticsEvent {
 
   @@index([type, createdAt])
   @@index([path, createdAt])
+}
+
+/// Release-update email signups from the public site.
+model SiteSubscriber {
+  email     String   @id
+  source    String   @default("")
+  createdAt DateTime @default(now())
 }
 
 /** Latest Tesla Fleet Telemetry snapshot for aiOS dashboard. */

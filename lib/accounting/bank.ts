@@ -8,6 +8,7 @@ import {
   createSession, deleteSession, enableBankingConfigured, EnableBankingError,
   getBalances, getTransactions, listAspsps, startAuthorization, type EbAccount,
   type PsuContext,
+  type EbSession,
 } from "../finance/enable-banking";
 
 export const bankConnectSchema = z.object({ bank: z.string().trim().min(1).max(120), country: z.string().regex(/^[A-Z]{2}$/).default("SE") });
@@ -32,7 +33,11 @@ export async function businessBankState() {
   const connections = await getAccountingDb().accountingBankConnection.findMany({
     orderBy: { createdAt: "desc" },
   });
+  const lastAttempt = await getAccountingDb().accountingBankAuthState.findFirst({
+    orderBy: { createdAt: "desc" }, select: { status: true, errorCode: true, errorStage: true, createdAt: true },
+  });
   return { configured: enableBankingConfigured(), psuType: "business", callbackUrl: businessBankRedirectUrl(),
+    lastAttempt,
     connections: connections.map((connection) => ({
       id: connection.id, bank: connection.bank, country: connection.country,
       status: connection.status === "active" && connection.validUntil <= new Date() ? "expired" : connection.status,
@@ -65,26 +70,64 @@ export async function completeBusinessBankConnection(code: string, rawState: str
   if (!/^company\.[A-Za-z0-9_-]{43}$/.test(rawState) || !code || code.length > 4_000) throw new AccountingError("Invalid bank callback.", 400, "bank_state_invalid");
   const db = getAccountingDb();
   const state = await db.accountingBankAuthState.findUnique({ where: { id: hash(rawState) } });
-  if (!state) throw new AccountingError("Bank connection expired. Start again.", 400, "bank_state_invalid");
-  // Atomic consumption: concurrent callbacks cannot exchange the same state twice.
-  const claimed = await db.accountingBankAuthState.deleteMany({ where: { id: state.id, expiresAt: { gt: new Date() } } });
-  if (claimed.count !== 1) throw new AccountingError("Bank connection expired. Start again.", 400, "bank_state_invalid");
-  const session = await createSession(code, psu);
-  if (session.psu_type !== "business" || session.aspsp?.name !== state.bank || session.aspsp?.country !== state.country || !session.access?.valid_until || !session.accounts?.length) {
-    await deleteSession(session.session_id).catch(() => undefined);
-    throw new AccountingError("Provider did not return a matching business consent with accounts and expiry.", 422, "invalid_business_consent");
+  if (!state || state.expiresAt <= new Date()) throw new AccountingError("Bank connection expired. Start again.", 400, "bank_state_invalid");
+  if (state.status === "completed" && state.connectionId) {
+    const connection = await db.accountingBankConnection.findUnique({ where: { id: state.connectionId } });
+    if (connection?.status === "active") return { accounts: storedAccounts.parse(connection.accounts).length, bank: connection.bank };
   }
-  const validUntil = new Date(session.access.valid_until);
-  if (!Number.isFinite(validUntil.getTime()) || validUntil <= new Date()) {
-    await deleteSession(session.session_id).catch(() => undefined);
-    throw new AccountingError("Provider returned expired business consent.", 422, "invalid_business_consent");
+  // Keep the expected consent and failure stage; deleting it before exchange made
+  // every failure indistinguishable from an expired link and prevented recovery.
+  const resumable = state.status === "failed" && state.errorStage === "persist" && state.session !== null;
+  if (state.status === "failed" && !resumable) {
+    throw new AccountingError("This consent attempt failed. Start a fresh consent.", 400, "business_bank_completion_failed", { stage: state.errorStage, reason: state.errorCode });
   }
-  storedAccounts.parse(session.accounts);
-  await db.accountingBankConnection.upsert({ where: { id: session.session_id },
-    create: { id: session.session_id, bank: state.bank, country: state.country, validUntil, accounts: session.accounts as unknown as Prisma.InputJsonValue },
-    update: { status: "active", validUntil, accounts: session.accounts as unknown as Prisma.InputJsonValue },
+  const claimed = await db.accountingBankAuthState.updateMany({
+    where: { id: state.id, expiresAt: { gt: new Date() }, status: resumable ? "failed" : "pending" },
+    data: { status: "processing", errorCode: null, errorStage: null },
   });
-  return { accounts: session.accounts.length, bank: state.bank };
+  if (claimed.count !== 1) throw new AccountingError("This bank callback is already being processed. Check connection status before restarting.", 409, "bank_callback_in_progress");
+  let stage = "exchange";
+  try {
+    const session = resumable ? state.session as unknown as EbSession : await createSession(code, psu);
+    if (!resumable) {
+      stage = "persist_exchange";
+      await db.accountingBankAuthState.update({ where: { id: state.id }, data: { session: session as unknown as Prisma.InputJsonValue } });
+    }
+    stage = "validate";
+    const invalid = session.psu_type !== "business" ? "business_type_mismatch"
+      : session.aspsp?.name !== state.bank || session.aspsp?.country !== state.country ? "bank_mismatch"
+      : !session.accounts?.length ? "no_authorized_accounts"
+      : !session.access?.valid_until ? "missing_consent_expiry" : null;
+    if (invalid) {
+      await deleteSession(session.session_id).catch(() => undefined);
+      throw new AccountingError("Provider returned an invalid business consent.", 422, invalid);
+    }
+    const validUntil = new Date(session.access!.valid_until!);
+    if (!Number.isFinite(validUntil.getTime()) || validUntil <= new Date()) {
+      await deleteSession(session.session_id).catch(() => undefined);
+      throw new AccountingError("Provider returned expired business consent.", 422, "expired_business_consent");
+    }
+    storedAccounts.parse(session.accounts);
+    stage = "persist";
+    await db.$transaction(async (tx) => {
+      await tx.accountingBankConnection.upsert({ where: { id: session.session_id },
+        create: { id: session.session_id, bank: state.bank, country: state.country, validUntil, accounts: session.accounts as unknown as Prisma.InputJsonValue },
+        update: { status: "active", validUntil, accounts: session.accounts as unknown as Prisma.InputJsonValue },
+      });
+      await tx.accountingBankAuthState.update({ where: { id: state.id }, data: { status: "completed", connectionId: session.session_id, session: Prisma.DbNull } });
+    });
+    return { accounts: session.accounts.length, bank: state.bank };
+  } catch (error) {
+    const diagnostic = completionDiagnostic(error, stage);
+    await db.accountingBankAuthState.updateMany({ where: { id: state.id }, data: { status: "failed", errorCode: diagnostic.reason, errorStage: diagnostic.stage } }).catch(() => undefined);
+    throw new AccountingError("Company bank consent could not be completed.", error instanceof AccountingError ? error.status : 502, "business_bank_completion_failed", diagnostic);
+  }
+}
+
+/** Strictly bounded codes only: never upstream messages, account IDs, codes or tokens. */
+export function completionDiagnostic(error: unknown, stage = "callback") {
+  const code = error instanceof EnableBankingError ? error.ebCode : error instanceof AccountingError ? error.code : error instanceof z.ZodError ? "invalid_provider_response" : "internal_error";
+  return { stage, reason: /^[a-zA-Z0-9_\-]{1,80}$/.test(code) ? code : "upstream_error", ...(error instanceof EnableBankingError ? { bankStatus: error.httpStatus } : {}) };
 }
 
 export async function disconnectBusinessBank(id: string) {
