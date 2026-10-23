@@ -1,6 +1,7 @@
 import { configuredOsAccessKey } from "@/lib/os/route";
 import { osPath } from "@/lib/os/paths";
 import { completeBankConnection, psuFromRequest, syncFinance } from "@/lib/finance/store";
+import { GET as businessBankCallback } from "@/app/accounting/bank/callback/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ function escapeHtml(value: string) {
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  if (url.searchParams.get("state")?.startsWith("company.")) return businessBankCallback(request);
   const accessKey = configuredOsAccessKey();
   const back = accessKey ? `${osPath(accessKey)}/finance` : "/";
   let status = "connected";

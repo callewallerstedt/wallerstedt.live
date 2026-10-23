@@ -17,7 +17,9 @@ const storedAccounts = z.array(z.object({ uid: z.string().min(1), name: z.string
 export function businessBankRedirectUrl() {
   const origin = new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://wallerstedt.live");
   if (origin.protocol !== "https:") throw new AccountingError("Company bank callback requires HTTPS.", 503, "bank_callback_not_configured");
-  return `${origin.origin}/accounting/bank/callback`;
+  // Reuse the callback already registered for the existing personal integration.
+  // The namespaced, single-use state routes company consents independently.
+  return `${origin.origin}/finance/callback`;
 }
 
 export async function businessBanks() {
@@ -43,7 +45,7 @@ export async function beginBusinessBankConnection(input: z.output<typeof bankCon
   const banks = await listAspsps(input.country, "business");
   const bank = banks.find((bank) => bank.name === input.bank && bank.country === input.country && (!bank.psu_types || bank.psu_types.includes("business")));
   if (!bank) throw new AccountingError("Bank is not available for business access with this provider application.", 422, "business_bank_unavailable");
-  const state = randomBytes(32).toString("base64url");
+  const state = `company.${randomBytes(32).toString("base64url")}`;
   const now = Date.now();
   const validity = Math.min(bank.maximum_consent_validity ?? 86_400, 180 * 86_400);
   const validUntil = new Date(now + validity * 1_000 - 60_000);
@@ -60,7 +62,7 @@ export async function beginBusinessBankConnection(input: z.output<typeof bankCon
 }
 
 export async function completeBusinessBankConnection(code: string, rawState: string, psu?: PsuContext) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(rawState) || !code || code.length > 4_000) throw new AccountingError("Invalid bank callback.", 400, "bank_state_invalid");
+  if (!/^company\.[A-Za-z0-9_-]{43}$/.test(rawState) || !code || code.length > 4_000) throw new AccountingError("Invalid bank callback.", 400, "bank_state_invalid");
   const db = getAccountingDb();
   const state = await db.accountingBankAuthState.findUnique({ where: { id: hash(rawState) } });
   if (!state) throw new AccountingError("Bank connection expired. Start again.", 400, "bank_state_invalid");
