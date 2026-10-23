@@ -4,7 +4,14 @@ import type { PlayerTrack } from "@/components/site/player";
 import { getSiteContent, getSocialLinks } from "@/lib/site-content";
 import { getSiteCatalog } from "@/lib/site/catalog";
 
+import type { Viewport } from "next";
+
 import "../site.css";
+
+export const viewport: Viewport = {
+  themeColor: "#09090a",
+  colorScheme: "dark",
+};
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [catalog, siteContent] = await Promise.all([getSiteCatalog(), getSiteContent()]);

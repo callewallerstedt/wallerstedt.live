@@ -29,13 +29,6 @@ export default function PrivacyPage() {
               unsubscribe link.
             </p>
             <p>
-              <strong>Private budgeting app.</strong> The site also hosts a private, password-protected budgeting tool used
-              only by its owner. With the owner&apos;s own consent (BankID), it reads account balances and transactions from
-              the owner&apos;s bank through Enable Banking (a licensed PSD2 account information provider). No one else&apos;s
-              bank data is collected. The data is stored in an EU-hosted database, is never sold or shared, and access can
-              be revoked at any time by disconnecting the bank.
-            </p>
-            <p>
               <strong>Your rights.</strong> Under the GDPR you can ask what we hold about you, and have it corrected or
               deleted. Contact{" "}
               <a href="mailto:contact.wallerstedt@gmail.com">contact.wallerstedt@gmail.com</a>.

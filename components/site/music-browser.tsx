@@ -14,17 +14,35 @@ const filters: Array<{ key: Filter; label: string }> = [
   { key: "Version", label: "Slowed + sped up" },
 ];
 
-export function MusicBrowser({ releases }: { releases: SiteRelease[] }) {
+export function MusicBrowser({
+  releases,
+  all,
+  versions,
+}: {
+  releases: SiteRelease[];
+  all: SiteRelease[];
+  versions: SiteRelease[];
+}) {
   const [filter, setFilter] = useState<Filter>("all");
 
   const available = useMemo(
-    () => filters.filter((item) => item.key === "all" || releases.some((release) => release.format === item.key)),
-    [releases],
+    () =>
+      filters.filter((item) =>
+        item.key === "Version"
+          ? versions.length > 0
+          : item.key === "all" || releases.some((release) => release.format === item.key),
+      ),
+    [releases, versions],
   );
 
   const visible = useMemo(
-    () => (filter === "all" ? releases : releases.filter((release) => release.format === filter)),
-    [filter, releases],
+    () =>
+      filter === "all"
+        ? all
+        : filter === "Version"
+          ? versions
+          : releases.filter((release) => release.format === filter),
+    [all, filter, releases, versions],
   );
 
   return (

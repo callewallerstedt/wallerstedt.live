@@ -27,11 +27,6 @@ export default function TermsPage() {
               listen, share links and embed the official players; please do not re-upload the recordings.
             </p>
             <p>
-              The private areas of the site (company dashboard and budgeting app) are for the owner only. The budgeting
-              app has read-only access to the owner&apos;s own bank accounts through Enable Banking and cannot move money.
-              Figures and tips it shows are for personal overview, not financial advice.
-            </p>
-            <p>
               The site is provided as is. Questions:{" "}
               <a href="mailto:contact.wallerstedt@gmail.com">contact.wallerstedt@gmail.com</a>.
             </p>
