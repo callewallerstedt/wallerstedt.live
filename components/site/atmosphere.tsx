@@ -1,104 +1,62 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
-/** Film grain, the accent aura, and the vignette that frames the whole page. */
+/** The soft accent glow and grain that sit behind every page. */
 export function Atmosphere() {
   return (
     <>
       <div className="wl-aura" aria-hidden="true" />
-      <div className="wl-vignette" aria-hidden="true" />
       <div className="wl-grain" aria-hidden="true" />
     </>
   );
 }
 
 /**
- * A soft ring that trails the pointer and swells into a PLAY target over
- * anything playable. Desktop only — coarse pointers never see it.
+ * Fades and lifts anything marked `data-reveal` as it scrolls into view. The
+ * "seen" flag is a data attribute, not a class, because React rewrites
+ * `className` on re-render (e.g. a track row turning current) and would wipe it.
  */
-export function Cursor() {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-
-    let x = window.innerWidth / 2;
-    let y = window.innerHeight / 2;
-    let renderX = x;
-    let renderY = y;
-    let frame = 0;
-
-    const onMove = (event: PointerEvent) => {
-      x = event.clientX;
-      y = event.clientY;
-      node.classList.add("is-on");
-
-      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-cursor]");
-      node.classList.toggle("is-play", target?.dataset.cursor === "play");
-    };
-
-    const onLeave = () => node.classList.remove("is-on");
-
-    const tick = () => {
-      renderX += (x - renderX) * 0.18;
-      renderY += (y - renderY) * 0.18;
-      node.style.transform = `translate3d(${renderX}px, ${renderY}px, 0)`;
-      frame = requestAnimationFrame(tick);
-    };
-
-    window.addEventListener("pointermove", onMove, { passive: true });
-    document.addEventListener("pointerleave", onLeave);
-    frame = requestAnimationFrame(tick);
-
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerleave", onLeave);
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-
-  return (
-    <div className="wl-cursor" ref={ref} aria-hidden="true">
-      <span className="wl-cursor__label">Play</span>
-    </div>
-  );
-}
-
-/** Fades and lifts anything marked `data-wl-reveal` as it enters the viewport. */
 export function Reveal() {
   const pathname = usePathname();
 
   useEffect(() => {
-    const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-wl-reveal]"));
-    if (!targets.length) return;
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      targets.forEach((node) => node.classList.add("is-in"));
-      return;
-    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
-          entry.target.classList.add("is-in");
+          entry.target.setAttribute("data-in", "");
           observer.unobserve(entry.target);
         });
       },
-      { threshold: 0.06, rootMargin: "0px 0px -6% 0px" },
+      { threshold: 0.08, rootMargin: "0px 0px -8% 0px" },
     );
 
-    targets.forEach((node) => {
-      const stagger = Number(node.dataset.wlReveal) || 0;
-      node.style.setProperty("--wl-delay", `${Math.min(stagger * 70, 420)}ms`);
-      observer.observe(node);
-    });
+    const watch = (root: ParentNode) => {
+      root.querySelectorAll<HTMLElement>("[data-reveal]:not([data-in])").forEach((node) => {
+        if (reduce) {
+          node.setAttribute("data-in", "");
+          return;
+        }
+        const stagger = Number(node.dataset.reveal) || 0;
+        node.style.setProperty("--delay", `${Math.min(stagger * 80, 640)}ms`);
+        observer.observe(node);
+      });
+    };
 
-    return () => observer.disconnect();
+    watch(document);
+
+    // Filters and players swap content in after load; pick those up too.
+    const mutations = new MutationObserver(() => watch(document));
+    mutations.observe(document.querySelector(".wl-main") ?? document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      mutations.disconnect();
+    };
   }, [pathname]);
 
   return null;

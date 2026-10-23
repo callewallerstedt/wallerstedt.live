@@ -8,18 +8,17 @@ export interface SubscribeState {
 }
 
 export async function subscribeAction(_previousState: SubscribeState, formData: FormData): Promise<SubscribeState> {
-  const email = String(formData.get("email") ?? "");
-  const result = await addSubscriber(email);
-
-  if (!result.ok) {
-    return {
-      status: "error",
-      message: result.message,
-    };
+  // Hidden field real people never fill in.
+  if (String(formData.get("website") ?? "")) {
+    return { status: "success", message: "You're in. Thanks!" };
   }
 
+  const email = String(formData.get("email") ?? "");
+  const source = String(formData.get("source") ?? "");
+  const result = await addSubscriber(email, source);
+
   return {
-    status: "success",
+    status: result.ok ? "success" : "error",
     message: result.message,
   };
 }

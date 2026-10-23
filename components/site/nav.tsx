@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { useEffect, useState } from "react";
 
+import { PlatformIcon } from "@/components/icons";
 import { usePlayer } from "@/components/site/player";
+import { SignupButton } from "@/components/site/signup-modal";
 
 const items = [
-  { href: "/music", label: "Music", index: "01" },
-  { href: "/playlists", label: "Playlists", index: "02" },
-  { href: "/updates", label: "Updates", index: "03" },
-  { href: "/random", label: "Surprise me", index: "04" },
+  { href: "/music", label: "Music" },
+  { href: "/playlists", label: "Playlists" },
 ] as const;
 
 export function Nav({ spotifyHref }: { spotifyHref: string }) {
@@ -19,7 +19,6 @@ export function Nav({ spotifyHref }: { spotifyHref: string }) {
   const { isPlaying } = usePlayer();
   const [stuck, setStuck] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let last = window.scrollY;
@@ -27,89 +26,42 @@ export function Nav({ spotifyHref }: { spotifyHref: string }) {
     const onScroll = () => {
       const y = window.scrollY;
       setStuck(y > 24);
-      setHidden(y > 320 && y > last && !open);
+      setHidden(y > 400 && y > last + 2);
+      if (y < last - 2) setHidden(false);
       last = y;
     };
 
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [open]);
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    document.querySelector(".wl")?.classList.toggle("is-locked", open);
-  }, [open]);
+  }, []);
 
   return (
-    <>
-      <header
-        className={`wl-nav${stuck ? " is-stuck" : ""}${hidden ? " is-hidden" : ""}`}
-        data-wl-nav=""
-      >
-        <div className="wl-shell wl-nav__inner">
-          <Link className="wl-brand" href="/" aria-label="Wallerstedt — home">
-            <span className={`wl-brand__dot${isPlaying ? " is-live" : ""}`} />
-            Wallerstedt
-          </Link>
+    <header className={`wl-nav${stuck ? " is-stuck" : ""}${hidden ? " is-hidden" : ""}`}>
+      <div className="wl-shell wl-nav__inner">
+        <Link className="wl-brand" href="/" aria-label="Wallerstedt home">
+          <span className={`wl-brand__dot${isPlaying ? " is-live" : ""}`} />
+          Wallerstedt
+        </Link>
 
-          <nav className="wl-nav__links" aria-label="Primary">
-            {items.map((item) => (
-              <Link
-                key={item.href}
-                className="wl-nav__link"
-                href={item.href as Route}
-                aria-current={pathname === item.href ? "page" : undefined}
-              >
-                {item.label}
-              </Link>
-            ))}
-            <a className="wl-btn wl-btn--sm" href={spotifyHref} target="_blank" rel="noreferrer">
-              <span>Listen</span>
-            </a>
-          </nav>
-
-          <button
-            type="button"
-            className={`wl-nav__toggle${open ? " is-open" : ""}`}
-            aria-expanded={open}
-            aria-controls="wl-menu"
-            aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => setOpen((value) => !value)}
-          >
-            <span />
-          </button>
-        </div>
-      </header>
-
-      <div className={`wl-menu${open ? " is-open" : ""}`} id="wl-menu">
-        <nav className="wl-menu__list" aria-label="Mobile">
-          <Link className="wl-menu__link" href="/" style={{ ["--i" as string]: 0 }}>
-            <span>00</span>
-            Home
-          </Link>
-          {items.map((item, index) => (
+        <nav className="wl-nav__links" aria-label="Primary">
+          {items.map((item) => (
             <Link
               key={item.href}
-              className="wl-menu__link"
+              className="wl-nav__link"
               href={item.href as Route}
-              style={{ ["--i" as string]: index + 1 }}
+              aria-current={pathname.startsWith(item.href) ? "page" : undefined}
             >
-              <span>{item.index}</span>
               {item.label}
             </Link>
           ))}
-        </nav>
-        <div className="wl-menu__foot">
-          <p className="wl-meta">Gothenburg, Sweden</p>
-          <a className="wl-btn wl-btn--sm" href={spotifyHref} target="_blank" rel="noreferrer">
-            <span>Open Spotify</span>
+          <SignupButton source="nav" label="Updates" className="wl-mailbtn--nav" />
+          <a className="wl-btn wl-btn--sm wl-btn--light" href={spotifyHref} target="_blank" rel="noreferrer">
+            <PlatformIcon platform="spotify" />
+            <span>Follow</span>
           </a>
-        </div>
+        </nav>
       </div>
-    </>
+    </header>
   );
 }

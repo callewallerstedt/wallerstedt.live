@@ -6,34 +6,31 @@ import { subscribeAction, type SubscribeState } from "@/app/updates/actions";
 
 const initialState: SubscribeState = { status: "idle", message: "" };
 
-export function UpdatesForm() {
+export function UpdatesForm({ source = "" }: { source?: string }) {
   const [state, formAction, pending] = useActionState(subscribeAction, initialState);
+  const done = state.status === "success";
 
   return (
-    <form className="wl-signup" action={formAction}>
+    <form className={`wl-signup${done ? " is-done" : ""}`} action={formAction}>
       <div className="wl-field">
         <input
           name="email"
           type="email"
           autoComplete="email"
-          placeholder="you@email.com"
+          placeholder="your@email.com"
           aria-label="Email address"
           required
+          disabled={done}
         />
-        <button className="wl-btn wl-btn--solid" type="submit" disabled={pending}>
-          <span>{pending ? "Sending" : "Sign up"}</span>
+        <input type="hidden" name="source" value={source} />
+        <input className="wl-hp" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
+        <button className="wl-btn wl-btn--light" type="submit" disabled={pending || done}>
+          <span>{done ? "Done" : pending ? "…" : "Sign up"}</span>
         </button>
       </div>
-      {state.message ? (
-        <p
-          className={`wl-note ${state.status === "error" ? "wl-note--bad" : "wl-note--ok"}`}
-          aria-live="polite"
-        >
-          {state.message}
-        </p>
-      ) : (
-        <p className="wl-note">No spam. Unsubscribe whenever.</p>
-      )}
+      <p className={`wl-note${state.status === "error" ? " is-bad" : done ? " is-ok" : ""}`} aria-live="polite">
+        {state.message}
+      </p>
     </form>
   );
 }

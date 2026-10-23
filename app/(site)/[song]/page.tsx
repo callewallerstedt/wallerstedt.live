@@ -5,11 +5,10 @@ import type { Route } from "next";
 import { notFound } from "next/navigation";
 
 import { accentVars } from "@/components/site/accent";
-import { ArrowIcon } from "@/components/site/icons";
 import { PlayButton } from "@/components/site/player";
-import { PlatformGrid, SelectedWork, SpotifyEmbed } from "@/components/site/sections";
+import { PlatformGrid, Releases, SpotifyEmbed } from "@/components/site/sections";
 import { TrackList } from "@/components/site/track-list";
-import { formatDuration, getSiteCatalog } from "@/lib/site/catalog";
+import { getSiteCatalog } from "@/lib/site/catalog";
 
 export async function generateMetadata({
   params,
@@ -23,7 +22,7 @@ export async function generateMetadata({
     return {};
   }
 
-  const description = track.note || `${track.title} — piano by Wallerstedt, released ${track.releaseDate}.`;
+  const description = `${track.title} by Wallerstedt. Listen on Spotify, Apple Music and more.`;
 
   return {
     title: track.title,
@@ -59,115 +58,70 @@ export default async function SongPage({ params }: { params: Promise<{ song: str
   }
 
   const release = catalog.releases.find((entry) => entry.slug === track.releaseSlug);
-  const siblings = release?.tracks.filter((entry) => entry.slug !== track.slug) ?? [];
-  const globalQueue = catalog.tracks.filter((entry) => entry.preview).map((entry) => entry.slug);
-  const more = catalog.tracks
-    .filter((entry) => entry.releaseSlug !== track.releaseSlug)
+  const releaseQueue = release?.tracks.map((entry) => entry.slug) ?? [track.slug];
+  const more = catalog.releases
+    .filter((entry) => entry.slug !== track.releaseSlug && entry.format !== "Version")
     .slice(0, 4);
 
   return (
     <div className="wl-detail" style={accentVars(track.accent)}>
-      <div className="wl-detail__bleed" aria-hidden="true">
-        <Image src={track.art} alt="" width={640} height={640} priority sizes="100vw" />
+      <div className="wl-detail__backdrop" aria-hidden="true">
+        <Image src={track.art} alt="" width={480} height={480} priority sizes="100vw" />
       </div>
 
-      <div className="wl-shell">
-        <Link className="wl-back" href="/music">
-          <ArrowIcon direction="left" />
-          All music
-        </Link>
+      <div className="wl-shell wl-detail__head">
+        <div className="wl-detail__cover wl-intro" style={{ ["--i" as string]: 0 }}>
+          <Image
+            src={track.art}
+            alt={`${track.title} cover art`}
+            width={1000}
+            height={1000}
+            priority
+            sizes="(max-width: 900px) 80vw, 420px"
+          />
+        </div>
 
-        <div className="wl-detail__head">
-          <div data-wl-reveal="0">
-            <div className="wl-cover">
-              <Image
-                src={track.art}
-                alt={`${track.title} cover art`}
-                width={1000}
-                height={1000}
-                priority
-                sizes="(max-width: 900px) 92vw, 36vw"
-              />
-            </div>
-          </div>
-
-          <div className="wl-detail__body">
-            <p className="wl-eyebrow" data-wl-reveal="0">
-              {release && release.tracks.length > 1 ? (
-                <Link href={`/music/${release.slug}` as Route}>{release.title}</Link>
-              ) : (
-                "Single"
-              )}
+        <div className="wl-detail__body">
+          <p className="wl-detail__kicker wl-intro" style={{ ["--i" as string]: 1 }}>
+            {release && release.tracks.length > 1 ? (
+              <Link href={release.href as Route}>{release.title}</Link>
+            ) : (
+              "Single"
+            )}
+            {" · "}
+            {track.year}
+          </p>
+          <h1 className="wl-display wl-intro" style={{ ["--i" as string]: 2 }}>
+            {track.shortTitle}
+          </h1>
+          {track.variant ? (
+            <p className="wl-muted wl-intro" style={{ ["--i" as string]: 3 }}>
+              {track.variant}
             </p>
-            <h1 className="wl-display wl-detail__title" data-wl-reveal="1">
-              {track.shortTitle}
-            </h1>
-            {track.variant ? (
-              <p className="wl-meta" data-wl-reveal="1">
-                {track.variant} version
-              </p>
-            ) : null}
+          ) : null}
 
-            {track.note ? (
-              <p className="wl-quote" data-wl-reveal="2">
-                {track.note}
-              </p>
-            ) : null}
-
-            <div className="wl-btn-row" data-wl-reveal="2">
-              <PlayButton slug={track.slug} queue={globalQueue} label={track.title} large />
-              <dl className="wl-facts">
-                <div>
-                  <dt>Released</dt>
-                  <dd>{track.releaseDate}</dd>
-                </div>
-                <div>
-                  <dt>Length</dt>
-                  <dd>{formatDuration(track.durationMs)}</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div data-wl-reveal="3">
-              <PlatformGrid platforms={track.platforms} />
-            </div>
-
-            <a className="wl-link" href={track.allPlatforms} target="_blank" rel="noreferrer">
-              Every platform
-              <ArrowIcon />
-            </a>
+          <div className="wl-detail__actions wl-intro" style={{ ["--i" as string]: 4 }}>
+            <PlayButton slug={track.slug} queue={releaseQueue} label={track.title} large />
+            <PlatformGrid platforms={track.platforms} more={track.allPlatforms} />
           </div>
         </div>
       </div>
 
       <section className="wl-section wl-section--tight">
-        <div className="wl-shell wl-columns">
-          <div data-wl-reveal="0">
-            <p className="wl-eyebrow" style={{ marginBottom: 22 }}>
-              Full track
-            </p>
+        <div className="wl-shell wl-narrow">
+          <div data-reveal="0">
             <SpotifyEmbed url={track.platforms.spotify} kind="track" />
           </div>
-          {siblings.length ? (
-            <div data-wl-reveal="1">
-              <p className="wl-eyebrow" style={{ marginBottom: 22 }}>
-                Also on {release?.title}
-              </p>
-              <TrackList tracks={siblings} queue={release?.tracks.map((entry) => entry.slug)} />
+          {release && release.tracks.length > 1 ? (
+            <div className="wl-detail__more" data-reveal="1">
+              <h2 className="wl-h3">More from {release.title}</h2>
+              <TrackList tracks={release.tracks} queue={releaseQueue} />
             </div>
           ) : null}
         </div>
       </section>
 
-      {more.length ? (
-        <SelectedWork
-          tracks={more}
-          queue={globalQueue}
-          eyebrow="Next"
-          title="Something else."
-          action={{ href: "/music", label: "All music" }}
-        />
-      ) : null}
+      {more.length ? <Releases releases={more} title="More music" action={{ href: "/music", label: "See all" }} /> : null}
     </div>
   );
 }

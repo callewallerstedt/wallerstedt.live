@@ -9,20 +9,17 @@ export default function PrivacyPage() {
   return (
     <>
       <section className="wl-head">
-        <div className="wl-shell wl-head__inner">
-          <p className="wl-eyebrow" data-wl-reveal="0">
-            Privacy
-          </p>
-          <h1 className="wl-display wl-head__title" data-wl-reveal="1">
+        <div className="wl-shell">
+          <h1 className="wl-display">
             Privacy policy
           </h1>
         </div>
       </section>
 
-      <section className="wl-section wl-section--tight">
+      <section className="wl-section wl-section--flush wl-prose">
         <div className="wl-shell">
-          <div style={{ display: "grid", gap: 20, maxWidth: "62ch" }} data-wl-reveal="0">
-            <p className="wl-lede">
+          <div style={{ display: "grid", gap: 20, maxWidth: "62ch" }}>
+            <p className="wl-muted">
               wallerstedt.live is the artist site of Wallerstedt, run by Wallerstedt Productions AB (559559-7906),
               Kungsbacka, Sweden.
             </p>

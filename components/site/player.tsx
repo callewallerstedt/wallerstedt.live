@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { PlatformIcon } from "@/components/icons";
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from "@/components/site/icons";
 
 export interface PlayerTrack {
@@ -325,7 +326,7 @@ export function PlayerProvider({
 
   // --- keep the layout clear of the docked player ---------------------------
   useEffect(() => {
-    document.documentElement.style.setProperty("--wl-player-h", current ? "92px" : "0px");
+    document.documentElement.style.setProperty("--wl-player-h", current ? "96px" : "0px");
   }, [current]);
 
   const api = useMemo<PlayerApi>(
@@ -385,7 +386,6 @@ export function PlayButton({
         toggle(slug, queue);
       }}
       disabled={!enabled}
-      data-cursor={enabled ? "play" : undefined}
       aria-label={
         enabled
           ? `${showPause ? "Pause" : "Play"} ${label ?? "preview"}`
@@ -415,78 +415,6 @@ export function NowPlayingBars({ slug }: { slug: string }) {
 
 /* -------------------------------------------------------------------------- */
 
-function Waveform() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { level, isPlaying } = usePlayer();
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-
-    let frame = 0;
-    let phase = 0;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = canvas.offsetWidth * dpr;
-      canvas.height = canvas.offsetHeight * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-
-    const accent = () => {
-      const styles = getComputedStyle(document.documentElement);
-      const r = styles.getPropertyValue("--wl-accent-r").trim() || "212";
-      const g = styles.getPropertyValue("--wl-accent-g").trim() || "165";
-      const b = styles.getPropertyValue("--wl-accent-b").trim() || "108";
-      return `${Math.round(Number(r))} ${Math.round(Number(g))} ${Math.round(Number(b))}`;
-    };
-
-    const draw = () => {
-      const w = canvas.offsetWidth;
-      const h = canvas.offsetHeight;
-      ctx.clearRect(0, 0, w, h);
-
-      const rgb = accent();
-      const amp = isPlaying ? level() : 0.06;
-      phase += reduce ? 0 : isPlaying ? 0.035 : 0.008;
-
-      const mid = h / 2;
-      const step = 5;
-      ctx.lineWidth = 2;
-      ctx.lineCap = "round";
-
-      for (let x = 0; x <= w; x += step) {
-        const norm = x / w;
-        const envelope = Math.sin(norm * Math.PI) ** 0.7;
-        const wave =
-          Math.sin(norm * 22 + phase * 2.1) * 0.6 + Math.sin(norm * 9 - phase * 1.4) * 0.4;
-        const height = Math.max(1.5, Math.abs(wave) * envelope * amp * h * 0.92);
-        const alpha = 0.18 + envelope * amp * 0.8;
-        ctx.strokeStyle = `rgb(${rgb} / ${Math.min(0.9, alpha)})`;
-        ctx.beginPath();
-        ctx.moveTo(x, mid - height / 2);
-        ctx.lineTo(x, mid + height / 2);
-        ctx.stroke();
-      }
-
-      frame = requestAnimationFrame(draw);
-    };
-
-    resize();
-    window.addEventListener("resize", resize);
-    frame = requestAnimationFrame(draw);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", resize);
-    };
-  }, [isPlaying, level]);
-
-  return <canvas ref={canvasRef} className="wl-player__viz" aria-hidden="true" />;
-}
-
 function PlayerBar() {
   const { current, isPlaying, toggle, next, previous, seek, progress, elapsed, duration } = usePlayer();
   const barRef = useRef<HTMLDivElement>(null);
@@ -499,39 +427,18 @@ function PlayerBar() {
 
   return (
     <div className={`wl-player${current ? " is-on" : ""}`} aria-hidden={current ? undefined : true}>
-      <Waveform />
-      <div
-        className="wl-player__bar"
-        ref={barRef}
-        onClick={onScrub}
-        role="presentation"
-        style={{ ["--p" as string]: `${Math.min(100, progress * 100)}%` }}
-      >
-        <i />
-      </div>
-      <div className="wl-shell wl-player__inner">
+      <div className="wl-player__inner">
         <div className="wl-player__art">
-          {current ? (
-            <Image src={current.art} alt="" width={92} height={92} sizes="46px" />
-          ) : null}
+          {current ? <Image src={current.art} alt="" width={96} height={96} sizes="48px" /> : null}
         </div>
         <div className="wl-player__meta">
-          <strong>
-            {current ? (
-              <Link href={`/${current.slug}` as Route}>{current.title}</Link>
-            ) : (
-              "—"
-            )}
-          </strong>
+          <strong>{current ? <Link href={`/${current.slug}` as Route}>{current.title}</Link> : "—"}</strong>
           <span>
-            {current ? `${current.releaseTitle} · 30-second preview` : ""}
+            {formatClock(elapsed)} / {formatClock(duration || 30)} · Preview
           </span>
         </div>
         <div className="wl-player__controls">
-          <span className="wl-player__time">
-            {formatClock(elapsed)} / {formatClock(duration || 30)}
-          </span>
-          <button type="button" className="wl-player__btn" onClick={previous} aria-label="Previous track">
+          <button type="button" className="wl-player__btn wl-player__skip" onClick={previous} aria-label="Previous track">
             <PrevIcon />
           </button>
           <button
@@ -542,10 +449,31 @@ function PlayerBar() {
           >
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
           </button>
-          <button type="button" className="wl-player__btn" onClick={next} aria-label="Next track">
+          <button type="button" className="wl-player__btn wl-player__skip" onClick={next} aria-label="Next track">
             <NextIcon />
           </button>
+          {current?.spotify ? (
+            <a
+              className="wl-player__btn"
+              href={current.spotify}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Full song on Spotify"
+              title="Full song on Spotify"
+            >
+              <PlatformIcon platform="spotify" />
+            </a>
+          ) : null}
         </div>
+      </div>
+      <div
+        className="wl-player__bar"
+        ref={barRef}
+        onClick={onScrub}
+        role="presentation"
+        style={{ ["--p" as string]: `${Math.min(100, progress * 100)}%` }}
+      >
+        <i />
       </div>
     </div>
   );

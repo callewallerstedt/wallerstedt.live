@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { accentVars } from "@/components/site/accent";
 import { Countdown } from "@/components/site/countdown";
-import { ArrowIcon } from "@/components/site/icons";
-import { PlatformGrid, SelectedWork, SpotifyEmbed } from "@/components/site/sections";
+import { PlayButton } from "@/components/site/player";
+import { PlatformGrid, Releases, SpotifyEmbed } from "@/components/site/sections";
 import { TrackList } from "@/components/site/track-list";
 import { formatRuntime, getSiteCatalog } from "@/lib/site/catalog";
 
@@ -22,7 +21,7 @@ export async function generateMetadata({
     return {};
   }
 
-  const description = `${release.format} · ${release.releaseDate} · ${release.tracks.length} tracks by Wallerstedt.`;
+  const description = `${release.title} by Wallerstedt. ${release.tracks.length} ${release.tracks.length === 1 ? "track" : "tracks"}.`;
 
   return {
     title: release.title,
@@ -58,107 +57,61 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
   }
 
   const queue = release.tracks.map((track) => track.slug);
-  const others = catalog.releases
-    .filter((entry) => entry.slug !== release.slug)
-    .slice(0, 4)
-    .map((entry) => entry.tracks[0]);
-  const globalQueue = catalog.tracks.filter((track) => track.preview).map((track) => track.slug);
+  const more = catalog.releases
+    .filter((entry) => entry.slug !== release.slug && entry.format !== "Version")
+    .slice(0, 4);
 
   return (
     <div className="wl-detail" style={accentVars(release.accent)}>
-      <div className="wl-detail__bleed" aria-hidden="true">
-        <Image src={release.art} alt="" width={640} height={640} priority sizes="100vw" />
+      <div className="wl-detail__backdrop" aria-hidden="true">
+        <Image src={release.art} alt="" width={480} height={480} priority sizes="100vw" />
       </div>
 
-      <div className="wl-shell">
-        <Link className="wl-back" href="/music">
-          <ArrowIcon direction="left" />
-          All music
-        </Link>
+      <div className="wl-shell wl-detail__head">
+        <div className="wl-detail__cover wl-intro" style={{ ["--i" as string]: 0 }}>
+          <Image
+            src={release.art}
+            alt={`${release.title} cover art`}
+            width={1000}
+            height={1000}
+            priority
+            sizes="(max-width: 900px) 80vw, 420px"
+          />
+        </div>
 
-        <div className="wl-detail__head">
-          <div data-wl-reveal="0">
-            <div className="wl-cover">
-              <Image
-                src={release.art}
-                alt={`${release.title} cover art`}
-                width={1000}
-                height={1000}
-                priority
-                sizes="(max-width: 900px) 92vw, 36vw"
-              />
+        <div className="wl-detail__body">
+          <p className="wl-detail__kicker wl-intro" style={{ ["--i" as string]: 1 }}>
+            {release.format === "Version" ? "Single" : release.format} · {release.year} ·{" "}
+            {release.tracks.length} {release.tracks.length === 1 ? "track" : "tracks"}
+            {release.runtimeMs ? ` · ${formatRuntime(release.runtimeMs)}` : ""}
+          </p>
+          <h1 className="wl-display wl-intro" style={{ ["--i" as string]: 2 }}>
+            {release.title}
+          </h1>
+
+          {release.upcoming ? (
+            <div className="wl-intro" style={{ ["--i" as string]: 3 }}>
+              <Countdown targetIso={new Date(release.releaseDate).toISOString()} />
             </div>
-          </div>
+          ) : null}
 
-          <div className="wl-detail__body">
-            <p className="wl-eyebrow" data-wl-reveal="0">
-              {release.format}
-            </p>
-            <h1 className="wl-display wl-detail__title" data-wl-reveal="1">
-              {release.title}
-            </h1>
-
-            <dl className="wl-facts" data-wl-reveal="2">
-              <div>
-                <dt>{release.upcoming ? "Releases" : "Released"}</dt>
-                <dd>{release.releaseDate}</dd>
-              </div>
-              <div>
-                <dt>Tracks</dt>
-                <dd>{release.tracks.length}</dd>
-              </div>
-              {release.runtimeMs ? (
-                <div>
-                  <dt>Runtime</dt>
-                  <dd>{formatRuntime(release.runtimeMs)}</dd>
-                </div>
-              ) : null}
-            </dl>
-
-            {release.upcoming ? (
-              <div data-wl-reveal="2">
-                <Countdown targetIso={new Date(release.releaseDate).toISOString()} />
-              </div>
-            ) : null}
-
-            <div data-wl-reveal="3">
-              <PlatformGrid platforms={release.platforms} />
-            </div>
-
-            <a className="wl-link" href={release.allPlatforms} target="_blank" rel="noreferrer">
-              Every platform
-              <ArrowIcon />
-            </a>
+          <div className="wl-detail__actions wl-intro" style={{ ["--i" as string]: 4 }}>
+            <PlayButton slug={release.tracks[0].slug} queue={queue} label={release.title} large />
+            <PlatformGrid platforms={release.platforms} more={release.allPlatforms} />
           </div>
         </div>
       </div>
 
       <section className="wl-section wl-section--tight">
-        <div className="wl-shell wl-columns">
-          <div data-wl-reveal="0">
-            <p className="wl-eyebrow" style={{ marginBottom: 22 }}>
-              Tracklist
-            </p>
-            <TrackList tracks={release.tracks} queue={queue} />
-          </div>
-          <div data-wl-reveal="1">
-            <p className="wl-eyebrow" style={{ marginBottom: 22 }}>
-              Full versions
-            </p>
-            <SpotifyEmbed url={release.platforms.spotify} kind="album" tall />
+        <div className="wl-shell wl-narrow">
+          <TrackList tracks={release.tracks} queue={queue} />
+          <div className="wl-detail__more" data-reveal="0">
+            <SpotifyEmbed url={release.platforms.spotify} kind="album" tall={release.tracks.length > 2} />
           </div>
         </div>
       </section>
 
-      {others.length ? (
-        <SelectedWork
-          tracks={others}
-          queue={globalQueue}
-          eyebrow="Keep listening"
-          title="More from the catalogue."
-          action={{ href: "/music", label: "All releases" }}
-        />
-      ) : null}
+      {more.length ? <Releases releases={more} title="More music" action={{ href: "/music", label: "See all" }} /> : null}
     </div>
   );
 }

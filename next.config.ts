@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   typedRoutes: true,
+  images: {
+    // Playlist covers come straight from Spotify.
+    remotePatterns: [
+      { protocol: "https", hostname: "**.spotifycdn.com" },
+      { protocol: "https", hostname: "i.scdn.co" },
+    ],
+  },
   experimental: {
     // Tab switches reuse the last RSC payload instead of waiting on the ledger.
     staleTimes: {

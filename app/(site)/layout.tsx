@@ -24,6 +24,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <SiteShell
       tracks={tracks}
       spotifyHref={siteContent.links.spotify}
+      art={catalog.newest?.art}
       footer={
         <SiteFooter
           socials={getSocialLinks(siteContent)}

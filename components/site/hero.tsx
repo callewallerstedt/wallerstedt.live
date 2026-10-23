@@ -2,11 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import type { Route } from "next";
+import { useEffect, useRef, useState } from "react";
 
-import { PlatformIcon } from "@/components/icons";
+import { PlatformIcon, platformLabel } from "@/components/icons";
 import { PauseIcon, PlayIcon } from "@/components/site/icons";
 import { usePlayer } from "@/components/site/player";
+import { SignupButton } from "@/components/site/signup-modal";
+import type { PlatformKey } from "@/lib/site-data";
 
 /**
  * Eighty-eight hairlines along the floor of the hero — a piano keyboard seen
@@ -90,13 +93,13 @@ function Strings() {
           nearness * height * 0.2 +
           musical * height * 0.24 * arch;
 
-        const alpha = 0.07 + arch * 0.11 + nearness * 0.55 + musical * 0.4;
+        const alpha = 0.05 + arch * 0.08 + nearness * 0.45 + musical * 0.4;
         const gradient = ctx.createLinearGradient(0, floor - h, 0, floor);
         gradient.addColorStop(0, `rgb(${rgb} / 0)`);
-        gradient.addColorStop(1, `rgb(${rgb} / ${Math.min(0.85, alpha)})`);
+        gradient.addColorStop(1, `rgb(${rgb} / ${Math.min(0.8, alpha)})`);
 
         ctx.strokeStyle = gradient;
-        ctx.lineWidth = i % 12 === 0 ? 1.4 : 1;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, floor);
         ctx.lineTo(x, floor - h);
@@ -109,7 +112,6 @@ function Strings() {
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
-    window.addEventListener("resize", resize);
     window.addEventListener("pointermove", onPointer, { passive: true });
     window.addEventListener("pointerleave", onLeave);
     frame = requestAnimationFrame(draw);
@@ -117,7 +119,6 @@ function Strings() {
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", onPointer);
       window.removeEventListener("pointerleave", onLeave);
     };
@@ -126,142 +127,210 @@ function Strings() {
   return <canvas className="wl-hero__strings" ref={ref} aria-hidden="true" />;
 }
 
-/** The spinning label ring with the cover art and a play control at its centre. */
-function Disc({
-  art,
-  title,
-  slug,
-  queue,
-}: {
-  art: string;
-  title: string;
-  slug: string;
-  queue: string[];
-}) {
+/** Cover art in a sleeve that tilts toward the pointer, with a record that slides out and spins while it plays. */
+function Sleeve({ art, title, slug, queue }: { art: string; title: string; slug: string; queue: string[] }) {
+  const ref = useRef<HTMLDivElement>(null);
   const { toggle, isActive, isPlaying, playable } = usePlayer();
-  const active = isActive(slug);
-  const showPause = active && isPlaying;
-  const label = `${title} — latest release — `;
-  const ring = label.repeat(3).toUpperCase();
+  const live = isActive(slug) && isPlaying;
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let frame = 0;
+    let tx = 0;
+    let ty = 0;
+    let x = 0;
+    let y = 0;
+
+    const onMove = (event: PointerEvent) => {
+      tx = (event.clientX / window.innerWidth - 0.5) * 2;
+      ty = (event.clientY / window.innerHeight - 0.5) * 2;
+    };
+
+    const tick = () => {
+      x += (tx - x) * 0.06;
+      y += (ty - y) * 0.06;
+      node.style.setProperty("--ry", `${(x * 9).toFixed(2)}deg`);
+      node.style.setProperty("--rx", `${(-y * 7).toFixed(2)}deg`);
+      frame = requestAnimationFrame(tick);
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: true });
+    frame = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   return (
-    <div className={`wl-disc${showPause ? " is-playing" : ""}`}>
-      <svg className="wl-disc__ring" viewBox="0 0 100 100" aria-hidden="true">
-        <defs>
-          <path id="wl-disc-path" d="M50,50 m-41,0 a41,41 0 1,1 82,0 a41,41 0 1,1 -82,0" fill="none" />
-        </defs>
-        <text>
-          <textPath href="#wl-disc-path" startOffset="0" textLength="257" lengthAdjust="spacing">
-            {ring}
-          </textPath>
-        </text>
-      </svg>
-
-      <div className="wl-disc__art">
-        <Image src={art} alt={`${title} cover art`} width={520} height={520} priority sizes="380px" />
+    <div className={`wl-sleeve${live ? " is-playing" : ""}`} ref={ref}>
+      <div className="wl-sleeve__tilt">
+        <div className="wl-sleeve__record" aria-hidden="true">
+          <Image src={art} alt="" width={240} height={240} sizes="120px" />
+        </div>
+        <button
+          type="button"
+          className="wl-sleeve__cover"
+          onClick={() => toggle(slug, queue)}
+          disabled={!playable(slug)}
+          aria-label={`${live ? "Pause" : "Play"} ${title}`}
+        >
+          <Image src={art} alt={`${title} cover art`} width={720} height={720} priority sizes="(max-width: 900px) 70vw, 440px" />
+          <span className="wl-sleeve__play">{live ? <PauseIcon /> : <PlayIcon />}</span>
+        </button>
       </div>
+    </div>
+  );
+}
 
+const platformOrder: PlatformKey[] = ["spotify", "appleMusic", "youtube", "amazonMusic", "deezer", "tidal", "soundcloud"];
+
+/** A round plus that folds out every store the release is on. */
+function ListenMenu({ platforms, more, title }: { platforms: Partial<Record<PlatformKey, string>>; more: string; title: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const available = platformOrder.filter((key) => platforms[key]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className={`wl-listen${open ? " is-open" : ""}`} ref={ref}>
       <button
         type="button"
-        className="wl-disc__btn"
-        onClick={() => toggle(slug, queue)}
-        disabled={!playable(slug)}
-        data-cursor={playable(slug) ? "play" : undefined}
-        aria-label={`${showPause ? "Pause" : "Play"} ${title}`}
+        className="wl-plus"
+        aria-expanded={open}
+        aria-controls="wl-listen-list"
+        aria-label={open ? "Hide platforms" : `Listen to ${title} on other platforms`}
+        title="More platforms"
+        onClick={() => setOpen((value) => !value)}
       >
-        <span className="wl-disc__play">{showPause ? <PauseIcon /> : <PlayIcon />}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
       </button>
+      <div className="wl-listen__list" id="wl-listen-list" role="list">
+        {available.map((key, index) => (
+          <a
+            key={key}
+            role="listitem"
+            className="wl-platform"
+            href={platforms[key]}
+            target="_blank"
+            rel="noreferrer"
+            tabIndex={open ? 0 : -1}
+            style={{ ["--i" as string]: index }}
+          >
+            <PlatformIcon platform={key} />
+            <span>{platformLabel[key]}</span>
+          </a>
+        ))}
+        {more ? (
+          <a
+            role="listitem"
+            className="wl-platform"
+            href={more}
+            target="_blank"
+            rel="noreferrer"
+            tabIndex={open ? 0 : -1}
+            style={{ ["--i" as string]: available.length }}
+          >
+            <span>All platforms</span>
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 export function Hero({
-  heading,
-  lede,
   release,
   heroTrackSlug,
   queue,
-  stats,
+  listeners,
   spotifyHref,
-  appleHref,
 }: {
-  heading: string[];
-  lede: string;
-  release: { title: string; art: string; date: string };
+  release: {
+    title: string;
+    art: string;
+    href: string;
+    upcoming: boolean;
+    platforms: Partial<Record<PlatformKey, string>>;
+    allPlatforms: string;
+  };
   heroTrackSlug: string;
   queue: string[];
-  stats: Array<{ value: string; label: string }>;
+  listeners: string;
   spotifyHref: string;
-  appleHref: string;
 }) {
   const { toggle, isActive, isPlaying } = usePlayer();
   const live = isActive(heroTrackSlug) && isPlaying;
+  const name = "Wallerstedt";
 
   return (
     <section className="wl-hero">
+      <div className="wl-hero__backdrop" aria-hidden="true">
+        <Image src={release.art} alt="" width={480} height={480} priority sizes="100vw" />
+      </div>
       <Strings />
 
       <div className="wl-shell wl-hero__inner">
         <div className="wl-hero__copy">
-          <p className="wl-eyebrow" data-wl-reveal="0">
-            Piano · Gothenburg, Sweden
-          </p>
-          <h1 className="wl-display wl-hero__title" data-wl-reveal="1">
-            {heading.map((line, index) => (
-              <span key={line}>
-                {line}
-                {index === heading.length - 1 ? <i className="wl-hero__smile">:)</i> : null}
+          <Link className="wl-pill wl-intro" href={release.href as Route} style={{ ["--i" as string]: 0 }}>
+            <span className="wl-pill__dot" />
+            {release.upcoming ? "Coming soon" : "New"}: {release.title}
+          </Link>
+
+          <h1 className="wl-hero__title" aria-label={name}>
+            {name.split("").map((letter, index) => (
+              <span key={index} aria-hidden="true" style={{ ["--i" as string]: index }}>
+                {letter}
               </span>
             ))}
           </h1>
-          <p className="wl-lede" data-wl-reveal="2">
-            {lede}
+
+          <p className="wl-hero__lede wl-intro" style={{ ["--i" as string]: 6 }}>
+            Piano music from Sweden.
+            <span>{listeners} monthly listeners</span>
           </p>
-          <div className="wl-btn-row" data-wl-reveal="3">
-            <button
-              type="button"
-              className="wl-btn wl-btn--solid"
-              onClick={() => toggle(heroTrackSlug, queue)}
-            >
-              <span className="wl-btn__icon">{live ? <PauseIcon /> : <PlayIcon />}</span>
-              <span>{live ? "Pause" : "Press play"}</span>
+
+          <div className="wl-btn-row wl-intro" style={{ ["--i" as string]: 8 }}>
+            <button type="button" className="wl-btn wl-btn--light" onClick={() => toggle(heroTrackSlug, queue)}>
+              {live ? <PauseIcon /> : <PlayIcon />}
+              <span>{live ? "Pause" : "Play"}</span>
             </button>
-            <Link className="wl-btn" href="/music">
-              <span>All music</span>
-            </Link>
-            <a className="wl-btn wl-btn--ghost" href={spotifyHref} target="_blank" rel="noreferrer">
-              <span className="wl-btn__icon">
-                <PlatformIcon platform="spotify" />
-              </span>
-              <span>Spotify</span>
+            <a className="wl-btn wl-btn--spotify" href={spotifyHref} target="_blank" rel="noreferrer">
+              <PlatformIcon platform="spotify" />
+              <span>Follow on Spotify</span>
             </a>
-            <a className="wl-btn wl-btn--ghost" href={appleHref} target="_blank" rel="noreferrer">
-              <span className="wl-btn__icon">
-                <PlatformIcon platform="appleMusic" />
-              </span>
-              <span>Apple Music</span>
-            </a>
+            <ListenMenu platforms={release.platforms} more={release.allPlatforms} title={release.title} />
+          </div>
+
+          <div className="wl-intro" style={{ ["--i" as string]: 10 }}>
+            <SignupButton source="hero" label="Email updates" className="wl-mailbtn--quiet" />
           </div>
         </div>
 
-        <div data-wl-reveal="4">
-          <Disc art={release.art} title={release.title} slug={heroTrackSlug} queue={queue} />
+        <div className="wl-hero__art wl-intro" style={{ ["--i" as string]: 3 }}>
+          <Sleeve art={release.art} title={release.title} slug={heroTrackSlug} queue={queue} />
         </div>
-      </div>
-
-      <div className="wl-shell wl-hero__foot" data-wl-reveal="5">
-        <div className="wl-hero__stats">
-          {stats.map((stat) => (
-            <div className="wl-stat" key={stat.label}>
-              <strong>{stat.value}</strong>
-              <span>{stat.label}</span>
-            </div>
-          ))}
-        </div>
-        <a className="wl-scroll-cue" href="#latest">
-          <i />
-          Scroll
-        </a>
       </div>
     </section>
   );

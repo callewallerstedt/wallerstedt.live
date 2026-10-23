@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { addSongAction, loginAction, logoutAction, saveSettingsAction, saveSiteContentAction } from "./actions";
 
 import { getAnalyticsSnapshot } from "@/lib/analytics";
+import { getSubscribers } from "@/lib/subscribers";
 import { getSiteContent } from "@/lib/site-content";
 import { getCatalogSongs } from "@/lib/site-data";
 import { getSiteSettings, isAdminAuthenticated, isAdminConfigured } from "@/lib/site-settings";
@@ -103,11 +104,12 @@ export default async function AdminPage({
     );
   }
 
-  const [settings, siteContent, catalogSongs, analytics] = await Promise.all([
+  const [settings, siteContent, catalogSongs, analytics, subscribers] = await Promise.all([
     getSiteSettings(),
     getSiteContent(),
     getCatalogSongs(),
     getAnalyticsSnapshot(),
+    getSubscribers().catch(() => []),
   ]);
   const songs = Object.fromEntries(catalogSongs.map((song) => [song.slug, song]));
 
@@ -586,6 +588,36 @@ export default async function AdminPage({
                 </p>
               </article>
             </div>
+
+            <section className="admin-group">
+              <div className="admin-group__heading">
+                <h3>Mailing list ({subscribers.length})</h3>
+                <p>People who signed up for new-release emails on the site.</p>
+              </div>
+              {subscribers.length ? (
+                <>
+                  <textarea
+                    readOnly
+                    rows={Math.min(8, subscribers.length + 1)}
+                    value={subscribers.map((subscriber) => subscriber.email).join(", ")}
+                    style={{ width: "100%", fontFamily: "inherit" }}
+                    aria-label="All subscriber emails, comma separated"
+                  />
+                  <div className="analytics-list">
+                    {subscribers.slice(0, 50).map((subscriber) => (
+                      <article className="analytics-row" key={subscriber.email}>
+                        <div className="analytics-row__copy">
+                          <strong>{subscriber.email}</strong>
+                        </div>
+                        <span className="analytics-row__value">{formatTimestamp(subscriber.createdAt)}</span>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p>No signups yet.</p>
+              )}
+            </section>
 
             <section className="admin-group">
               <div className="admin-group__heading">
