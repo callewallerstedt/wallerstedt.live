@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: Params) {
   return route(async () => {
     const { accessKey } = await params;
     await requireAgentOrOwnerSession(request, accessKey, true);
-    const { bankText, ...rawInput } = parseWithSchema(
+    const { bankText, bankAccountId, bankTransactionId, ...rawInput } = parseWithSchema(
       agentEntryCreateSchema,
       await parseJson(request),
     );
@@ -37,6 +37,7 @@ export async function POST(request: Request, { params }: Params) {
       bankText,
       date: rawInput.date,
       amount: rawInput.amount,
+      bankAccountId, bankTransactionId,
     });
     return privateJson({ ok: true, ...result }, result.created ? 201 : 200);
   });

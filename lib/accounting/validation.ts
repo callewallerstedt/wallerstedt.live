@@ -109,16 +109,30 @@ const requiredAgentDate = z
     return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   }, "Date must be a real calendar date.");
 
-export const agentEntryCreateSchema = entryCreateSchema.and(z.object({
+const bankIdentityFields = {
+  bankAccountId: z.string().trim().min(1).max(200).optional(),
+  bankTransactionId: z.string().trim().min(1).max(200).optional(),
+};
+function completeBankIdentity(value: { bankAccountId?: string; bankTransactionId?: string }) {
+  return Boolean(value.bankAccountId) === Boolean(value.bankTransactionId);
+}
+
+export const agentEntryCreateSchema = z.object({
+  ...entryFields,
+  ...bankIdentityFields,
   bankText: z.string().trim().min(1).max(500),
   date: requiredAgentDate,
   amount: moneyValue,
-}));
+}).strict().refine(completeBankIdentity, "Supply both bankAccountId and bankTransactionId.");
 
-export const agentEntryPatchSchema = entryPatchSchema
-  .and(z.object({ bankText: z.string().trim().min(1).max(500).optional() }))
+export const agentEntryPatchSchema = z.object({
+  ...entryFields, ...bankIdentityFields,
+  version: z.number().int().positive(), date: requiredAgentDate.optional(),
+  bankText: z.string().trim().min(1).max(500).optional(),
+}).strict()
+  .refine(completeBankIdentity, "Supply both bankAccountId and bankTransactionId.")
   .superRefine((value, context) => {
-    if ((value.date !== undefined || value.amount !== undefined) && !value.bankText) {
+    if ((value.date !== undefined || value.amount !== undefined || value.bankTransactionId !== undefined) && !value.bankText) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "bankText is required when changing date or amount.",

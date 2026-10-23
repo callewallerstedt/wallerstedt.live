@@ -6,12 +6,38 @@ import { AccountingError } from "@/lib/accounting/errors";
 import { parseJson, privateJson, route } from "@/lib/accounting/http";
 import { fileFromPublicUrl } from "@/lib/accounting/remote-document";
 import { serializeDocument } from "@/lib/accounting/serialize";
+import { getAccountingDb } from "@/lib/accounting/db";
 import { parseUuid, parseWithSchema } from "@/lib/accounting/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ accessKey: string }> };
+
+export async function GET(request: Request, { params }: Params) {
+  return route(async () => {
+    const { accessKey } = await params;
+    await requireAgentOrOwnerSession(request, accessKey);
+    const query = parseWithSchema(z.object({
+      page: z.coerce.number().int().min(1).max(1_000_000).default(1),
+      limit: z.coerce.number().int().min(1).max(250).default(100),
+      entryId: z.string().uuid().optional(),
+      unassigned: z.enum(["true", "false"]).optional(),
+      q: z.string().max(200).optional(),
+    }).refine((value) => !(value.entryId && value.unassigned === "true"), "entryId and unassigned=true conflict."), Object.fromEntries(new URL(request.url).searchParams));
+    const where = {
+      deletedAt: null,
+      ...(query.entryId ? { entryId: query.entryId } : query.unassigned === "true" ? { entryId: null } : query.unassigned === "false" ? { entryId: { not: null } } : {}),
+      ...(query.q ? { originalName: { contains: query.q, mode: "insensitive" as const } } : {}),
+    };
+    const db = getAccountingDb();
+    const [rows, total] = await db.$transaction([
+      db.accountingDocument.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }),
+      db.accountingDocument.count({ where }),
+    ], { isolationLevel: "RepeatableRead" });
+    return privateJson({ ok: true, documents: rows.map((row) => ({ ...serializeDocument(row), downloadUrl: row.blobPathname ? `/api/accounting/${encodeURIComponent(accessKey)}/agent/v1/attachments/${row.id}/download` : null })), total, page: query.page, limit: query.limit, hasMore: query.page * query.limit < total });
+  });
+}
 
 const urlAttachmentSchema = z.object({
   url: z.string().trim().url().max(2_000),

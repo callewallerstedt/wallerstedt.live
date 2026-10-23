@@ -1,4 +1,4 @@
-type MoneyLike = number | string | { toString(): string };
+import { exactCents, formatCents, safeCentsNumber, type MoneyLike } from "./money";
 
 export type BalanceEntry = {
   amount: MoneyLike;
@@ -32,7 +32,7 @@ export function vatPostingSide(account: number): "debit" | "credit" | null {
 export function hasVatSplit(entry: BalanceEntry) {
   if (entry.vatAccount == null || entry.vatAmount == null) return false;
   if (vatPostingSide(entry.vatAccount) == null) return false;
-  return moneyToCents(entry.vatAmount) !== 0;
+  return exactCents(entry.vatAmount) !== 0n;
 }
 
 /**
@@ -42,38 +42,46 @@ export function hasVatSplit(entry: BalanceEntry) {
  * Dr 2645 / Cr 2614 has no vatAccount, so it is left as those two lines.
  */
 export function expandJournalLines(entry: BalanceEntry): JournalLine[] {
-  const gross = moneyToCents(entry.amount);
+  return expandJournalLinesExact(entry).map((line) => ({
+    account: line.account,
+    debitCents: safeCentsNumber(line.debitCents),
+    creditCents: safeCentsNumber(line.creditCents),
+  }));
+}
+
+export function expandJournalLinesExact(entry: BalanceEntry) {
+  const gross = exactCents(entry.amount);
   if (!hasVatSplit(entry)) {
-    const lines: JournalLine[] = [];
+    const lines: Array<{ account: number; debitCents: bigint; creditCents: bigint }> = [];
     if (entry.debitAccount != null) {
-      lines.push({ account: entry.debitAccount, debitCents: gross, creditCents: 0 });
+      lines.push({ account: entry.debitAccount, debitCents: gross, creditCents: 0n });
     }
     if (entry.creditAccount != null) {
-      lines.push({ account: entry.creditAccount, debitCents: 0, creditCents: gross });
+      lines.push({ account: entry.creditAccount, debitCents: 0n, creditCents: gross });
     }
     return lines;
   }
 
-  const vat = moneyToCents(entry.vatAmount);
-  const net = entry.amountExVat == null ? gross - vat : moneyToCents(entry.amountExVat);
+  const vat = exactCents(entry.vatAmount!);
+  const net = entry.amountExVat == null ? gross - vat : exactCents(entry.amountExVat);
   const side = vatPostingSide(entry.vatAccount!)!;
-  const lines: JournalLine[] = [];
+  const lines: Array<{ account: number; debitCents: bigint; creditCents: bigint }> = [];
   if (side === "debit") {
     if (entry.debitAccount != null) {
-      lines.push({ account: entry.debitAccount, debitCents: net, creditCents: 0 });
+      lines.push({ account: entry.debitAccount, debitCents: net, creditCents: 0n });
     }
-    lines.push({ account: entry.vatAccount!, debitCents: vat, creditCents: 0 });
+    lines.push({ account: entry.vatAccount!, debitCents: vat, creditCents: 0n });
     if (entry.creditAccount != null) {
-      lines.push({ account: entry.creditAccount, debitCents: 0, creditCents: gross });
+      lines.push({ account: entry.creditAccount, debitCents: 0n, creditCents: gross });
     }
   } else {
     if (entry.debitAccount != null) {
-      lines.push({ account: entry.debitAccount, debitCents: gross, creditCents: 0 });
+      lines.push({ account: entry.debitAccount, debitCents: gross, creditCents: 0n });
     }
     if (entry.creditAccount != null) {
-      lines.push({ account: entry.creditAccount, debitCents: 0, creditCents: net });
+      lines.push({ account: entry.creditAccount, debitCents: 0n, creditCents: net });
     }
-    lines.push({ account: entry.vatAccount!, debitCents: 0, creditCents: vat });
+    lines.push({ account: entry.vatAccount!, debitCents: 0n, creditCents: vat });
   }
   return lines;
 }
@@ -81,7 +89,7 @@ export function expandJournalLines(entry: BalanceEntry): JournalLine[] {
 /** Result-account amount: ex VAT when the entry carries a VAT split, otherwise the header amount. */
 export function resultLegCents(entry: BalanceEntry) {
   if (!hasVatSplit(entry)) return moneyToCents(entry.amount);
-  if (entry.amountExVat == null) return moneyToCents(entry.amount) - moneyToCents(entry.vatAmount);
+  if (entry.amountExVat == null) return safeCentsNumber(exactCents(entry.amount) - exactCents(entry.vatAmount!));
   return moneyToCents(entry.amountExVat);
 }
 
@@ -101,13 +109,13 @@ export function vatReportCents(entries: BalanceEntry[]): VatReportCents {
   for (const entry of entries) {
     for (const line of expandJournalLines(entry)) {
       if (line.account >= 2610 && line.account <= 2639) {
-        outputCents += line.creditCents - line.debitCents;
+        outputCents = addCents(outputCents, line.creditCents - line.debitCents);
       } else if (line.account >= 2640 && line.account <= 2649) {
-        inputCents += line.debitCents - line.creditCents;
+        inputCents = addCents(inputCents, line.debitCents - line.creditCents);
       }
     }
   }
-  return { outputCents, inputCents, payableCents: outputCents - inputCents };
+  return { outputCents, inputCents, payableCents: addCents(outputCents, -inputCents) };
 }
 
 export type AccountBalances = {
@@ -126,8 +134,11 @@ export type SelectedAccountBalance = {
 
 function moneyToCents(value: MoneyLike | null | undefined) {
   if (value == null) return 0;
-  const parsed = Number(typeof value === "object" ? value.toString() : value);
-  return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+  return safeCentsNumber(exactCents(value));
+}
+
+function addCents(left: number, right: number) {
+  return safeCentsNumber(BigInt(left) + BigInt(right));
 }
 
 function ledgerDate(value: Date | string | null | undefined) {
@@ -145,8 +156,8 @@ export function calculateAccountBalances(entries: BalanceEntry[]): AccountBalanc
   for (const entry of entries) {
     for (const line of expandJournalLines(entry)) {
       const signed = line.debitCents - line.creditCents;
-      if (line.account === 1930) companyAccountCents += signed;
-      if (line.account === 1385) capitalInsuranceCents += signed;
+      if (line.account === 1930) companyAccountCents = addCents(companyAccountCents, signed);
+      if (line.account === 1385) capitalInsuranceCents = addCents(capitalInsuranceCents, signed);
     }
 
     const date = ledgerDate(entry.date);
@@ -157,7 +168,7 @@ export function calculateAccountBalances(entries: BalanceEntry[]): AccountBalanc
 }
 
 export function centsToMoney(cents: number) {
-  return (cents / 100).toFixed(2);
+  return formatCents(BigInt(safeCentsNumber(BigInt(cents))));
 }
 
 export function calculateSelectedAccountBalances(
@@ -181,9 +192,9 @@ export function calculateSelectedAccountBalances(
     for (const line of expandJournalLines(entry)) {
       const balance = selected.get(line.account);
       if (!balance) continue;
-      balance.debitCents += line.debitCents;
-      balance.creditCents += line.creditCents;
-      balance.balanceCents += line.debitCents - line.creditCents;
+      balance.debitCents = addCents(balance.debitCents, line.debitCents);
+      balance.creditCents = addCents(balance.creditCents, line.creditCents);
+      balance.balanceCents = addCents(balance.balanceCents, line.debitCents - line.creditCents);
       touched.add(line.account);
     }
     for (const account of touched) selected.get(account)!.entryCount += 1;

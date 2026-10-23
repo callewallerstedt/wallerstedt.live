@@ -62,37 +62,48 @@ export function assertSameOrigin(request: Request) {
 }
 
 export async function parseOptionalJson(request: Request, maxBytes = 256_000) {
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-    throw new AccountingError("Request body is too large.", 413, "body_too_large");
-  }
-
-  const text = await request.text();
+  const text = await boundedBodyText(request, maxBytes);
   if (!text.trim()) return {};
-  if (text.length > maxBytes) {
-    throw new AccountingError("Request body is too large.", 413, "body_too_large");
-  }
-
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
+  try { return JSON.parse(text) as unknown; } catch {
     throw new AccountingError("Request body must be valid JSON.", 400, "invalid_json");
   }
 }
 
-export async function parseJson(request: Request, maxBytes = 256_000) {
+async function boundedBodyText(request: Request, maxBytes: number) {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw new AccountingError("Request body is too large.", 413, "body_too_large");
   }
 
-  let value: unknown;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
   try {
-    value = await request.json();
-  } catch {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw new AccountingError("Request body is too large.", 413, "body_too_large");
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const buffer = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength; }
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer); } catch {
+    throw new AccountingError("Request body must be UTF-8 JSON.", 400, "invalid_json");
+  }
+}
+
+export async function parseJson(request: Request, maxBytes = 256_000) {
+  const text = await boundedBodyText(request, maxBytes);
+  try { return JSON.parse(text) as unknown; } catch {
     throw new AccountingError("Request body must be valid JSON.", 400, "invalid_json");
   }
-  return value;
 }
 
 function publicMessage(error: AccountingError) {

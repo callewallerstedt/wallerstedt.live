@@ -23,6 +23,7 @@
     "test:trading": "tsx --test lib/trading.test.ts lib/trading-quotes.test.ts lib/trading-agent.test.ts",
     "accounting:import": "node scripts/import-accounting.mjs",
     "music:sync": "node scripts/build-music-data.mjs",
+    "music:catalog": "node scripts/sync-catalog.mjs",
     "accounting:restore": "tsx scripts/restore-accounting.ts"
   },
   "dependencies": {
@@ -65,8 +66,6 @@
     "@prisma/dev": {
       "@hono/node-server": "1.19.13"
     },
-    "next": {
-      "postcss": "8.5.10"
-    }
+    "postcss": "8.5.31"
   }
 }

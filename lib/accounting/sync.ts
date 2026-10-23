@@ -24,6 +24,7 @@ import {
   createEntryInTransaction,
   deleteEntryInTransaction,
   updateEntryInTransaction,
+  assertAccountUnused,
 } from "./service";
 import {
   entryCreateSchema,
@@ -373,6 +374,9 @@ async function applyAccount(
   }
   const nextData =
     operation.operation === "upsert" ? accountData(operation.data) : null;
+  if (operation.operation === "delete" || (nextData && nextData.account !== current.account)) {
+    await assertAccountUnused(tx, current.account);
+  }
   if (nextData && !isCompatibleLegacyId(current.legacyId, nextData.legacyId)) {
     throw new AccountingConflictError("Account local ID conflict.", {
       server: serializeAccount(current),

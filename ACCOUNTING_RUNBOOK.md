@@ -69,7 +69,45 @@ The attachment endpoint accepts multipart files or JSON containing a public HTTP
 `url`. Remote downloads reject private/internal addresses, re-check redirects,
 allow only PDF/JPEG/PNG/TXT/CSV, and enforce the same 10 MB file limit as the vault.
 
-## iPhone notifications
+## Grokbot, reports and company-bank access (2026-10-23)
+
+Give the bot `public/GROKBOT_ACCOUNTING_GUIDE.md` and optionally the dependency-free
+`public/grokbot_accounting.py`. Authenticated `/agent/v1/openapi` exposes the tool
+contract; `/reports` returns a consistent period snapshot and chart data,
+`/reconcile` compares a statement without writing the ledger, and `/changes`
+provides incremental audit events. See `ACCOUNTING_REVIEW.md` for remaining gaps.
+Agent vault displays reports/charts, CSV downloads and separate company-bank status.
+
+Journal writes now require a date, description, both header accounts and balanced
+gross/net/VAT. Incomplete extraction should stay an AI draft. Preserve evidence
+and investigate existing readiness findings instead of bypassing these checks.
+Stable bankAccountId + bankTransactionId are recommended for new bank events;
+bind existing historical rows deliberately before importing with stable IDs.
+
+The company bank uses `psu_type=business` and separate `AccountingBank*` models.
+For restricted Enable Banking apps, first whitelist the business account under
+Linked accounts (Sweden → Handelsbanken → Business → Link), then complete the
+separate application consent via `/agent/v1/bank`. The existing registered
+`/finance/callback` is reused and routes `company.` state independently of Privat.
+`GET /bank` includes the latest attempt's safe stage/code; successful callbacks
+are repeatable without re-exchanging the bank code. Actual bank balance and
+transaction access was checked live; provider timestamps/limits still apply.
+
+The two company-bank migrations were applied individually and marked applied
+with Prisma because older unrelated personal-finance/Tesla migrations were
+already pending. Do not run a broad production `migrate deploy` without inspecting
+those existing tables/history first; this release did not reconcile that older drift.
+
+Run the repeatable read-only audit with:
+
+```powershell
+node --env-file=.env.local --import tsx scripts/audit-accounting.ts
+```
+
+It writes the detailed report only to ignored `private-data/accounting-audit.json`.
+It does not post, delete or reclassify ledger data.
+
+## iPhone notification setup
 
 Ledger post create, edit, and delete can ping the Home Screen PWA. Tapping the notice opens that post (`?post=<id>`); a deleted post shows “Posten är raderad”. Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (generate with `npx web-push generate-vapid-keys`), then apply migrations. In the app: **Mer → Slå på aviseringar**. iOS 16.4+ only, and only after Add to Home Screen. See `README.md` for the test steps.
 

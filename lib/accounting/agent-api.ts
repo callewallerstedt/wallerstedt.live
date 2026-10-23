@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { calculateSelectedAccountBalances, centsToMoney } from "./balances";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError } from "./errors";
+import { invalidateOsLedgerCache } from "../os/cache";
 import { serializeEntry } from "./serialize";
 import { classifyEntryPatch, safeNotifyAccountingPosts } from "../push";
 import {
@@ -24,11 +25,18 @@ function canonicalMoney(value: string | number) {
   return new Prisma.Decimal(value).toFixed(2);
 }
 
-export function bankRowIdempotencyKey(input: {
+export type BankRow = {
   bankText: string;
   date: string;
   amount: string | number;
-}) {
+  bankAccountId?: string;
+  bankTransactionId?: string;
+};
+
+export function bankRowIdempotencyKey(input: BankRow) {
+  if (input.bankAccountId && input.bankTransactionId) {
+    return `bank:v2:${createHash("sha256").update(JSON.stringify([input.bankAccountId, input.bankTransactionId]), "utf8").digest("hex")}`;
+  }
   const fingerprint = [
     "bank-row-v1",
     canonicalBankText(input.bankText),
@@ -50,23 +58,27 @@ async function entryForOperation(operationId: string) {
   const entry = await getAccountingDb().accountingEntry.findUnique({
     where: { id: operation.entityId },
   });
-  return entry && !entry.deletedAt ? entry : null;
+  if (entry?.deletedAt) throw new AccountingConflictError("That bank row belongs to a deleted entry. Review its history before rebooking.", { entryId: entry.id, deletedAt: entry.deletedAt.toISOString() });
+  return entry;
 }
 
 export async function createIdempotentAgentEntry(
   input: NormalizedEntryInput,
-  bankRow: { bankText: string; date: string; amount: string },
+  bankRow: BankRow,
 ) {
   const db = getAccountingDb();
   const idempotencyKey = bankRowIdempotencyKey(bankRow);
   const existingByKey = await entryForOperation(idempotencyKey);
   if (existingByKey) {
+    if (existingByKey.date?.toISOString().slice(0, 10) !== bankRow.date || canonicalMoney(existingByKey.amount.toString()) !== canonicalMoney(bankRow.amount)) {
+      throw new AccountingConflictError("This bank identity already exists with a different dated amount. Read the existing entry before retrying.", { server: serializeEntry(existingByKey), serverVersion: existingByKey.version });
+    }
     return { entry: serializeEntry(existingByKey), created: false, deduplicatedBy: "idempotency-key" as const };
   }
 
   // Entries created before this API have no fingerprint. Match those once so
   // adopting the endpoint cannot duplicate an already-booked bank row.
-  const existingLedgerRow = await db.accountingEntry.findFirst({
+  const legacyMatches = bankRow.bankTransactionId ? [] : await db.accountingEntry.findMany({
     where: {
       deletedAt: null,
       date: new Date(`${bankRow.date}T00:00:00.000Z`),
@@ -77,7 +89,10 @@ export async function createIdempotentAgentEntry(
       ],
     },
     orderBy: { createdAt: "asc" },
+    take: 2,
   });
+  if (legacyMatches.length > 1) throw new AccountingConflictError("Several ledger rows match. Inspect them and use a stable bank transaction identity.");
+  const existingLedgerRow = legacyMatches[0];
   if (existingLedgerRow) {
     await db.accountingSyncOperation.create({
       data: {
@@ -94,7 +109,9 @@ export async function createIdempotentAgentEntry(
     }).catch(async (error) => {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     });
-    return { entry: serializeEntry(existingLedgerRow), created: false, deduplicatedBy: "ledger-match" as const };
+    const bound = await entryForOperation(idempotencyKey);
+    if (!bound) throw new AccountingConflictError("The bank identity changed during matching. Read the ledger again.");
+    return { entry: serializeEntry(bound), created: false, deduplicatedBy: "ledger-match" as const };
   }
 
   try {
@@ -115,12 +132,16 @@ export async function createIdempotentAgentEntry(
       });
       return created;
     });
+    invalidateOsLedgerCache();
     await safeNotifyAccountingPosts("create", [entry]);
     return { entry: serializeEntry(entry), created: true, deduplicatedBy: null };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const raced = await entryForOperation(idempotencyKey);
       if (raced) {
+        if (raced.date?.toISOString().slice(0, 10) !== bankRow.date || canonicalMoney(raced.amount.toString()) !== canonicalMoney(bankRow.amount)) {
+          throw new AccountingConflictError("Concurrent requests reused one bank identity for different dated amounts.", { server: serializeEntry(raced), serverVersion: raced.version });
+        }
         return { entry: serializeEntry(raced), created: false, deduplicatedBy: "idempotency-key" as const };
       }
     }
@@ -132,7 +153,7 @@ export async function updateAgentEntry(
   id: string,
   expectedVersion: number,
   input: NormalizedEntryInput,
-  bankRow?: { bankText: string; date: string; amount: string },
+  bankRow?: BankRow,
 ) {
   const idempotencyKey = bankRow ? bankRowIdempotencyKey(bankRow) : undefined;
   if (!idempotencyKey || !bankRow) {
@@ -176,6 +197,7 @@ export async function updateAgentEntry(
       }
       return updated;
     });
+    invalidateOsLedgerCache();
     await safeNotifyAccountingPosts(classifyEntryPatch(input), [entry]);
     return serializeEntry(entry);
   } catch (error) {

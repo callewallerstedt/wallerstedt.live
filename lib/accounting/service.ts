@@ -1,6 +1,7 @@
 import { Prisma, type AccountingEntry } from "@prisma/client";
 import { writeReceiptAudit } from "./audit";
-import { calculateAccountBalances, centsToMoney, resultLegCents, vatReportCents } from "./balances";
+import { calculateAccountBalances, centsToMoney, resultLegCents, vatReportCents, expandJournalLinesExact, vatPostingSide, type BalanceEntry } from "./balances";
+import { exactCents } from "./money";
 import { getAccountingDb } from "./db";
 import { AccountingConflictError, AccountingError } from "./errors";
 import {
@@ -11,6 +12,7 @@ import {
 } from "./serialize";
 import { classifyEntryPatch, safeNotifyAccountingPosts } from "../push";
 import { invalidateOsLedgerCache } from "../os/cache";
+import { entryQuery } from "./query";
 import type { NormalizedEntryInput } from "./validation";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -133,8 +135,10 @@ export async function createEntryInTransaction(
   actor: string,
   options: { id?: string; legacyId?: number | null; action?: string } = {},
 ) {
+  const data = entryCreateData(input, options);
+  assertJournalIntegrity({ ...input, amount: input.amount!, debitAccount: input.debitAccount ?? null, creditAccount: input.creditAccount ?? null });
   const entry = await tx.accountingEntry.create({
-    data: entryCreateData(input, options),
+    data,
   });
   await recordEntryVersion(tx, entry, options.action ?? "create", actor);
   return entry;
@@ -173,6 +177,11 @@ export async function updateEntryInTransaction(
       server: serializeEntry(current),
       serverVersion: current.version,
     });
+  }
+
+  if (["date", "description", "amount", "amountExVat", "vatAmount", "vatAccount", "debitAccount", "creditAccount"].some((field) => input[field as keyof NormalizedEntryInput] !== undefined)) {
+    const proposed = { ...current, ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) };
+    assertJournalIntegrity(proposed);
   }
 
   const result = await tx.accountingEntry.updateMany({
@@ -278,34 +287,11 @@ export async function listEntryRevisions(id: string) {
 
 export async function listEntries(searchParams: URLSearchParams) {
   const db = getAccountingDb();
-  const limit = Math.min(
-    Math.max(Number(searchParams.get("limit") ?? 100) || 100, 1),
-    250,
-  );
-  const page = Math.max(Number(searchParams.get("page") ?? 1) || 1, 1);
-  const q = searchParams.get("q")?.trim().slice(0, 200);
-  const type = searchParams.get("type")?.trim().slice(0, 100);
-  const status = searchParams.get("status")?.trim().slice(0, 100);
-  const where: Prisma.AccountingEntryWhereInput = {
-    deletedAt: null,
-    ...(type ? { type } : {}),
-    ...(status ? { status } : {}),
-    ...(q
-      ? {
-          OR: [
-            { description: { contains: q, mode: "insensitive" } },
-            { source: { contains: q, mode: "insensitive" } },
-            { notes: { contains: q, mode: "insensitive" } },
-            { debitName: { contains: q, mode: "insensitive" } },
-            { creditName: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {}),
-  };
-  const [rows, total] = await Promise.all([
+  const { limit, page, where } = entryQuery(searchParams);
+  const [rows, total] = await db.$transaction([
     db.accountingEntry.findMany({
       where,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * limit,
       take: limit,
       include: {
@@ -313,8 +299,8 @@ export async function listEntries(searchParams: URLSearchParams) {
       },
     }),
     db.accountingEntry.count({ where }),
-  ]);
-  return { entries: rows.map(serializeEntry), total, page, limit };
+  ], { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+  return { entries: rows.map(serializeEntry), total, page, limit, hasMore: page * limit < total };
 }
 
 async function auditAccount(
@@ -414,6 +400,9 @@ export async function updateAccount(
       );
     }
     const { legacyId, ...fields } = input;
+    if (input.account !== undefined && input.account !== current.account) {
+      await assertAccountUnused(tx, current.account);
+    }
     const result = await tx.accountingAccount.updateMany({
       where: { id, version: expectedVersion, deletedAt: null },
       data: {
@@ -454,6 +443,7 @@ export async function deleteAccount(
         },
       );
     }
+    await assertAccountUnused(tx, current.account);
     const result = await tx.accountingAccount.updateMany({
       where: { id, version: expectedVersion, deletedAt: null },
       data: { deletedAt: new Date(), version: { increment: 1 } },
@@ -474,6 +464,25 @@ export async function listAccounts() {
     orderBy: { account: "asc" },
   });
   return rows.map(serializeAccount);
+}
+
+export async function assertAccountUnused(tx: TransactionClient, account: number) {
+  const count = await tx.accountingEntry.count({ where: {
+    deletedAt: null, OR: [{ debitAccount: account }, { creditAccount: account }, { vatAccount: account }],
+  } });
+  if (count) throw new AccountingError("An account used by ledger entries cannot be renumbered or deleted.", 409, "account_in_use", { account, entryCount: count });
+}
+
+/** Every ledger write path, including desktop sync and AI approval, uses this guard. */
+export function assertJournalIntegrity(entry: BalanceEntry & { description?: string | null }) {
+  const issues: string[] = [];
+  if (!entry.date) issues.push("missing_date");
+  if (!entry.description?.trim()) issues.push("missing_description");
+  if (entry.debitAccount == null || entry.creditAccount == null) issues.push("missing_account");
+  if (entry.vatAmount != null && exactCents(entry.vatAmount) !== 0n && (entry.vatAccount == null || vatPostingSide(entry.vatAccount) == null)) issues.push("unposted_vat");
+  const lines = expandJournalLinesExact(entry);
+  if (lines.reduce((sum, line) => sum + line.debitCents - line.creditCents, 0n) !== 0n) issues.push("unbalanced_entry");
+  if (issues.length) throw new AccountingError("Ledger entries require a date, description, both accounts and a balanced journal including VAT. Keep incomplete work as an AI draft.", 400, "invalid_journal", { issues });
 }
 
 export async function dashboard() {

@@ -336,3 +336,11 @@ After deploy, apply the migration (`npm run prisma:deploy`) if it has not alread
 2. Open **Bolag** from the Home Screen and sign in.
 3. Go to **Settings** and tap **Enable notifications**.
 4. Optionally tap **Send a test**.
+# Accounting agent tools
+
+Give Grokbot [the operating guide](public/GROKBOT_ACCOUNTING_GUIDE.md) and optionally
+[the Python client/report exporter](public/grokbot_accounting.py). The authenticated
+agent API advertises OpenAPI, exact period reports, evidence downloads, audit changes,
+statement reconciliation and separate company-bank reads. Agent vault displays
+reports/charts and bank status. See [the capability review](ACCOUNTING_REVIEW.md)
+for declaration-readiness gaps and [the runbook](ACCOUNTING_RUNBOOK.md) for operations.

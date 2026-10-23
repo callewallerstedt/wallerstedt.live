@@ -13,9 +13,12 @@ export async function GET(request: Request, { params }: Params) {
     return privateJson({
       ok: true,
       createEntry: {
-        required: ["bankText", "date", "amount"],
+        required: ["bankText", "date", "amount", "description", "debitAccount", "creditAccount"],
+        journal: "New ledger postings must be complete and balanced including VAT. Incomplete work belongs in an AI draft. Unknown input fields are rejected.",
         fields: {
           bankText: "string (idempotency input)",
+          bankAccountId: "optional string; supply together with bankTransactionId",
+          bankTransactionId: "optional stable bank reference; unique within bankAccountId; recommended for identical payments",
           date: "YYYY-MM-DD",
           amount: "number|string, max 2 decimals",
           description: "string",

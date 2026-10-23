@@ -36,5 +36,7 @@ migration-artifacts/
 accounting-imports/
 accounting-backups/
 *.tsbuildinfo
+__pycache__/
+*.pyc
 
 .env*

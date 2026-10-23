@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent,
 
 import { AccountingApi, AccountingApiError } from "./api";
 import { AgentBank } from "./AgentBank";
+import { AgentReports } from "./AgentReports";
 import type { AccountingDocument, AccountingEntry } from "./types";
 
 type Balance = {
@@ -206,7 +207,7 @@ export function AgentWorkspace({ accessKey }: { accessKey: string }) {
     <main className="agent-shell" onPaste={onPaste}>
       <header className="agent-header">
         <div><span className="agent-mark">A</span><h1>Agent vault</h1></div>
-        <a href={`${base}/schema`}>JSON schema</a>
+        <nav><a href={`${base}/schema`}>Schema</a>{" · "}<a href={`${base}/openapi`}>OpenAPI</a>{" · "}<a href={`${base}/guide`}>Grokbot-guide</a></nav>
       </header>
 
       <section className="agent-balances" aria-label="Kontosaldon">
@@ -305,6 +306,7 @@ export function AgentWorkspace({ accessKey }: { accessKey: string }) {
           </div>
         </section>
       </section>
+      <AgentReports base={base} accessKey={accessKey} />
       <AgentBank base={base} />
     </main>
   );
