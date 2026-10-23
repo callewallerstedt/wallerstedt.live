@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { accountingOpenApi } from "./agent-contract";
+import type { PrismaClient } from "@prisma/client";
 import { GET as reports } from "../../app/api/accounting/[accessKey]/agent/v1/reports/route";
 import { POST as reconcile } from "../../app/api/accounting/[accessKey]/agent/v1/reconcile/route";
 import { GET as attachments } from "../../app/api/accounting/[accessKey]/agent/v1/attachments/route";
@@ -66,4 +67,25 @@ test("OpenAPI describes every implemented v1 route and HTTP method with unique o
     }
   }
   await visit(root);
+});
+
+test("audit cursors accept zero and preserve IDs beyond numeric precision through pagination", async () => {
+  process.env.DATABASE_URL = "postgresql://test:test@localhost/test";
+  const previous = global.__accountingPrisma;
+  const seen: bigint[] = [];
+  global.__accountingPrisma = { accountingAuditEvent: { findMany: async ({ where }: { where: { id: { gt: bigint } } }) => {
+    seen.push(where.id.gt);
+    return [9007199254740994n, 9007199254740995n].map((id) => ({ id, entityType: "transaction", entityId: "entry", operation: "upsert", version: 1, actor: "test", payload: {}, createdAt: new Date("2026-10-23T00:00:00Z") }));
+  } } } as unknown as PrismaClient;
+  try {
+    for (const after of ["0", "9007199254740993"]) {
+      const request = new Request(`https://example.test/api?after=${after}&limit=1`, { headers: { Authorization: `Bearer ${process.env.ACCOUNTING_AGENT_API_TOKEN}` } });
+      const response = await changes(request, params);
+      assert.equal(response.status, 200);
+      const result = await response.json();
+      assert.equal(result.nextCursor, "9007199254740994");
+      assert.equal(result.hasMore, true);
+    }
+    assert.deepEqual(seen, [0n, 9007199254740993n]);
+  } finally { global.__accountingPrisma = previous; }
 });

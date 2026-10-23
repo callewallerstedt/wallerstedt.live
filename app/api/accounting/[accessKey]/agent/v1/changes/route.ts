@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ acce
   return route(async () => {
     await requireAgentOrOwnerSession(request, (await params).accessKey);
     const query = parseWithSchema(z.object({
-      after: z.string().regex(/^\\d{1,18}$/).default("0"),
+      after: z.string().regex(/^[0-9]{1,18}$/).default("0"),
       limit: z.coerce.number().int().min(1).max(250).default(100),
     }), Object.fromEntries(new URL(request.url).searchParams));
     const rows = await getAccountingDb().accountingAuditEvent.findMany({
